@@ -1,4 +1,5 @@
 "use client";
+import { AlertTriangle } from "lucide-react";
 
 /**
  * Tabla de rentabilidad por canal de venta (Minorista / Mayorista / Distribuidor).
@@ -56,7 +57,7 @@ export function MargenPorCanal({
     <div className="mt-4 space-y-3">
       {hayPerdida && (
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-xs text-red-600">
-          <span className="mt-0.5 text-base leading-none">⚠</span>
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span>
             Uno o más canales tienen un precio <strong>menor al costo</strong>. Esas ventas generarían pérdida neta.
           </span>

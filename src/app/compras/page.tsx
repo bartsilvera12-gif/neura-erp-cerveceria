@@ -11,6 +11,8 @@ import MobileFab from "@/components/ui/MobileFab";
 import AnularCompraModal from "./AnularCompraModal";
 import type { Compra, TipoPago } from "@/lib/compras/types";
 
+import { ChevronDown, ChevronRight, Paperclip } from "lucide-react";
+
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none bg-white";
 
@@ -317,7 +319,9 @@ export default function ComprasPage() {
                       >
                         <td className={`py-4 pr-4 ${g.anulada ? "opacity-60" : ""}`}>
                           <div className="flex items-center gap-1">
-                            {multi && <span className="inline-block text-gray-400">{abierto ? "▾" : "▸"}</span>}
+                            {multi && (abierto
+                  ? <ChevronDown className="inline h-3.5 w-3.5 text-gray-400" aria-hidden />
+                  : <ChevronRight className="inline h-3.5 w-3.5 text-gray-400" aria-hidden />)}
                             <span className={`text-sm font-medium ${g.anulada ? "line-through text-gray-400" : "text-gray-800"}`}>
                               {g.numero_factura_proveedor || <span className="font-normal italic text-gray-400">Sin número cargado</span>}
                             </span>
@@ -344,7 +348,7 @@ export default function ComprasPage() {
                               onClick={(e) => e.stopPropagation()}
                               className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-[#4FAEB2] hover:text-[#3F8E91] hover:underline"
                             >
-                              📎 Ver comprobante
+                              <Paperclip className="h-3.5 w-3.5" aria-hidden />Ver comprobante
                             </a>
                           )}
                         </td>

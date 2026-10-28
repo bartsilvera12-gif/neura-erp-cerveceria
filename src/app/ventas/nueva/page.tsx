@@ -11,6 +11,8 @@ import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
 import type { Producto } from "@/lib/inventario/types";
 
+import { AlertTriangle, CheckCircle2, X } from "lucide-react";
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatGs(valor: number) {
@@ -1149,7 +1151,7 @@ export default function NuevaVentaPage() {
           {/* Error confirmar */}
           {errorVenta && (
             <div className="mt-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-xs text-red-700">
-              <span className="text-base leading-none mt-0.5">⚠</span>
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <span className="font-medium">{errorVenta}</span>
             </div>
           )}
@@ -1197,7 +1199,7 @@ export default function NuevaVentaPage() {
               <h3 className="text-sm font-semibold text-slate-800">
                 {metodoPago === "transferencia" ? "Datos de transferencia" : "Datos de tarjeta / débito"}
               </h3>
-              <button type="button" onClick={() => setCobroModalOpen(false)} className="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
+              <button type="button" onClick={() => setCobroModalOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="Cerrar"><X className="h-5 w-5" aria-hidden /></button>
             </div>
 
             <div>
@@ -1256,7 +1258,7 @@ export default function NuevaVentaPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmSinStockOpen(false)}>
           <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-2">
-              <span className="text-amber-500 text-xl leading-none">⚠</span>
+              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" aria-hidden />
               <div>
                 <h3 className="text-sm font-semibold text-slate-800">Hay productos/insumos sin stock suficiente</h3>
                 <p className="text-xs text-slate-500 mt-0.5">Revisá el detalle. Podés vender igual: el stock quedará negativo y se registrará el movimiento de salida.</p>
@@ -1307,7 +1309,7 @@ export default function NuevaVentaPage() {
       {postVenta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl space-y-4 text-center">
-            <div className="text-3xl">✅</div>
+            <CheckCircle2 className="h-9 w-9 text-emerald-600" aria-hidden />
             <div>
               <h3 className="text-base font-semibold text-slate-800">Venta {postVenta.numero} registrada</h3>
               {postVenta.credito && (

@@ -60,6 +60,8 @@ import {
 import { ClienteDatosSifenReceptorForm } from "@/components/clientes/ClienteDatosSifenReceptorForm";
 import { NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
 
+import { AlertTriangle, Clock, FolderOpen } from "lucide-react";
+
 /** Instancia monocliente Reserva: formulario/detalle de clientes simplificado (sin campos SaaS/Neura). */
 const SIMPLE_CLIENTE = NEURA_CLIENT_SCHEMA === "cerveceriaerp";
 // ── Estilos ────────────────────────────────────────────────────────────────────
@@ -108,10 +110,10 @@ function formatFechaHora(iso: string) {
 
 // ── Placeholder para pestañas futuras ─────────────────────────────────────────
 
-function PlaceholderTab({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+function PlaceholderTab({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
-      <span className="text-5xl mb-4">{icon}</span>
+      <span className="mb-4 inline-flex text-slate-300" aria-hidden>{icon}</span>
       <h3 className="text-base font-semibold text-gray-600 mb-2">{title}</h3>
       <p className="text-sm text-gray-400 max-w-xs">{desc}</p>
       <span className="mt-5 text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full">Próximamente</span>
@@ -2044,7 +2046,7 @@ export default function ClienteDetailPage() {
 
               {formError && (
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-                  <span>⚠</span><span className="font-medium">{formError}</span>
+                  <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /><span className="font-medium">{formError}</span>
                 </div>
               )}
 
@@ -2286,7 +2288,7 @@ export default function ClienteDetailPage() {
           {/* ── PROYECTOS ────────────────────────────────────────────────── */}
           {activeTab === "proyectos" && (
             <PlaceholderTab
-              icon="📁"
+              icon={<FolderOpen className="h-12 w-12" />}
               title="Proyectos"
               desc="Proyectos en curso y finalizados asociados a este cliente, con etapas y responsables."
             />
@@ -2295,7 +2297,7 @@ export default function ClienteDetailPage() {
           {/* ── ACTIVIDAD ────────────────────────────────────────────────── */}
           {activeTab === "actividad" && (
             <PlaceholderTab
-              icon="🕐"
+              icon={<Clock className="h-12 w-12" />}
               title="Actividad"
               desc="Timeline completo de interacciones, cambios de estado, ventas y eventos del cliente."
             />

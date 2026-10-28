@@ -8,6 +8,8 @@ import { useAutoClearFlag } from "@/hooks/useAutoClearFlag";
 import type { Cliente } from "@/lib/clientes/types";
 import type { Tipificacion, TipoGestion, ResultadoTipificacion } from "@/lib/gestion-clientes/types";
 
+import { AlertTriangle, Check, User } from "lucide-react";
+
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const TIPOS_GESTION: TipoGestion[] = [
@@ -176,7 +178,10 @@ export default function TipificacionPage() {
           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
             cliente.estado === "activo" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
           }`}>
-            {cliente.estado === "activo" ? "● Activo" : "● Inactivo"}
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 8 8" className="h-2 w-2" aria-hidden><circle cx="4" cy="4" r="4" fill="currentColor" /></svg>
+              {cliente.estado === "activo" ? "Activo" : "Inactivo"}
+            </span>
           </span>
         </div>
       </div>
@@ -244,19 +249,19 @@ export default function TipificacionPage() {
 
           {/* Aviso usuario */}
           <p className="text-xs text-gray-400 mb-4">
-            👤 Se registrará como: <span className="font-semibold text-gray-600">{USUARIO_DEFAULT}</span>
+            <User className="mr-1 inline h-3.5 w-3.5" aria-hidden />Se registrará como: <span className="font-semibold text-gray-600">{USUARIO_DEFAULT}</span>
           </p>
 
           {/* Error / Éxito */}
           {error && (
             <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-4">
-              <span>⚠</span><span className="font-medium">{error}</span>
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /><span className="font-medium">{error}</span>
             </div>
           )}
 
           {exito && (
             <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2.5 text-sm text-green-700 font-medium mb-4">
-              ✓ Tipificación registrada correctamente.
+              <Check className="mr-1 inline h-4 w-4" aria-hidden />Tipificación registrada correctamente.
             </div>
           )}
 

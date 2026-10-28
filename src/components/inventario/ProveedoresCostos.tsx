@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { Paperclip } from "lucide-react";
+
 type HistorialItem = {
   compra_id: string;
   numero_control: string;
@@ -273,7 +275,7 @@ export default function ProveedoresCostos({ productoId }: { productoId: string }
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 text-xs font-medium text-[#4FAEB2] hover:text-[#3F8E91] hover:underline"
                                   >
-                                    📎 Ver comprobante
+                                    <Paperclip className="h-3.5 w-3.5" aria-hidden />Ver comprobante
                                   </a>
                                 ) : (
                                   <span className="text-xs text-gray-300">—</span>

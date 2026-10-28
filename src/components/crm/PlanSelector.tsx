@@ -3,6 +3,8 @@
 import { useRef, useEffect, useState } from "react";
 import type { Plan } from "@/lib/planes/types";
 
+import { ChevronDown } from "lucide-react";
+
 type Props = {
   planes: Plan[];
   selectedIds: string[];
@@ -86,9 +88,7 @@ export default function PlanSelector({
           disabled={disabled}
           className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-9 outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none bg-white text-sm disabled:bg-slate-50 disabled:cursor-not-allowed"
         />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-          ▼
-        </span>
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
       </div>
 
       {/* Lista desplegable */}

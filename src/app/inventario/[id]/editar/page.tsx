@@ -10,7 +10,7 @@ import ProductImageUploader from "@/components/inventario/ProductImageUploader";
 import SelectFromList from "@/components/inventario/SelectFromList";
 import ProveedoresCostos from "@/components/inventario/ProveedoresCostos";
 import { MargenPorCanal } from "@/components/inventario/MargenPorCanal";
-import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Boxes, ClipboardList, ShoppingBag, type LucideIcon } from "lucide-react";
 
 // Opciones estándar de unidad de medida (UX simplificada gastro)
 const UNIDADES_OPCIONES = [
@@ -435,7 +435,7 @@ export default function EditarProductoPage() {
         {/* Advertencia: el producto tiene receta y se lo saca de Menú */}
         {tieneReceta && tipoGastro !== "menu" && (
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            <span className="mt-0.5">⚠</span>
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <span>
               Este producto tiene una <strong>receta asociada</strong>. Al cambiarlo a
               <strong> {tipoGastro === "reventa" ? "Reventa" : "Materia prima"}</strong>, la receta deja de aplicarse al vender

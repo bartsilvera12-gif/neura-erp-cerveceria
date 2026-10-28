@@ -2,6 +2,7 @@
 
 import MontoInput from "@/components/ui/MontoInput";
 import type { AreaUsuario, NivelUsuario, TipoContrato } from "@/lib/usuarios/types";
+import { Briefcase, KeyRound, ShieldCheck, User } from "lucide-react";
 
 export const usuarioFormLabel =
   "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
@@ -18,13 +19,14 @@ export function SectionCard({
   children,
 }: {
   title: string;
-  icon: string;
+  /** Icono SVG (lucide). */
+  icon: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
       <div className="flex items-center gap-2 mb-5 pb-2 border-b border-gray-100">
-        <span className="text-base">{icon}</span>
+        <span className="inline-flex text-slate-500" aria-hidden>{icon}</span>
         <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">{title}</h3>
       </div>
       {children}
@@ -126,7 +128,7 @@ export function UsuarioFormFields({
 
   return (
     <>
-      <SectionCard title="Datos personales" icon="👤">
+      <SectionCard title="Datos personales" icon={<User className="h-4 w-4" />}>
         <div className="space-y-4">
           <div>
             <label className={fLabel}>Nombre completo *</label>
@@ -174,7 +176,7 @@ export function UsuarioFormFields({
         </div>
       </SectionCard>
 
-      <SectionCard title="Datos laborales" icon="💼">
+      <SectionCard title="Datos laborales" icon={<Briefcase className="h-4 w-4" />}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -240,7 +242,7 @@ export function UsuarioFormFields({
         </div>
       </SectionCard>
 
-      <SectionCard title="Accesos del sistema" icon="🔐">
+      <SectionCard title="Accesos del sistema" icon={<ShieldCheck className="h-4 w-4" />}>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={fLabel}>Nivel de acceso</label>
@@ -289,7 +291,7 @@ export function UsuarioFormFields({
       {extraSections}
 
       {variant === "create" ? (
-        <SectionCard title="Seguridad" icon="🔑">
+        <SectionCard title="Seguridad" icon={<KeyRound className="h-4 w-4" />}>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={fLabel}>Contraseña *</label>

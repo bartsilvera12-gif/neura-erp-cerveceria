@@ -16,6 +16,8 @@ import { FacturaCorreccionFiscalNC } from "@/components/facturas/FacturaCorrecci
 import { useRolErp } from "@/lib/auth/use-rol-erp";
 import { esAdminErp } from "@/lib/roles/erp-role-access";
 
+import { ChevronRight } from "lucide-react";
+
 type Resumen = {
   sifen_config_exists: boolean;
   sifen_config_activa: boolean;
@@ -1069,7 +1071,7 @@ export function FacturaElectronicaPanel({
               {esAdmin && fe ? (
                 <details className="group rounded-lg border border-dashed border-slate-300 bg-slate-50/70">
                   <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600 select-none list-none flex items-center gap-2 [&::-webkit-details-marker]:hidden">
-                    <span className="text-slate-400 transition-transform group-open:rotate-90 inline-block">▸</span>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform group-open:rotate-90" aria-hidden />
                     Recuperar documento aprobado (SET)
                   </summary>
                   <div className="px-3 pb-3 pt-1 space-y-2 border-t border-slate-200/80">
@@ -1104,7 +1106,7 @@ export function FacturaElectronicaPanel({
               {debugUi ? (
                 <details className="group rounded-lg border border-dashed border-amber-200 bg-amber-50/30">
                   <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-amber-900 select-none list-none flex items-center gap-2 [&::-webkit-details-marker]:hidden">
-                    <span className="text-amber-600 transition-transform group-open:rotate-90 inline-block">▸</span>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-amber-600 transition-transform group-open:rotate-90" aria-hidden />
                     Debug: pasos SIFEN sueltos
                   </summary>
                   <div className="px-3 pb-3 pt-0 flex flex-wrap gap-2 border-t border-amber-100/80">

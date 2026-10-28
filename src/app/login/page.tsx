@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { signIn } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -99,7 +99,7 @@ export default function LoginPage() {
 
             {error && (
               <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 sm:px-4 sm:py-3">
-                <span aria-hidden>⚠</span>
+                <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
                 <span>{error}</span>
               </div>
             )}

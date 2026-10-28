@@ -12,6 +12,8 @@ import type { Nota, Prospecto } from "@/lib/crm/types";
 import type { Plan } from "@/lib/planes/types";
 import { getBrowserSupabaseForEmpresaData } from "@/lib/supabase/browser-data-client";
 
+import { AlertTriangle, Check } from "lucide-react";
+
 // ── Estilos ────────────────────────────────────────────────────────────────────
 
 const inputClass =
@@ -390,7 +392,7 @@ export default function EditProspectoPage() {
         </div>
         {prospecto.etapa === "GANADO" && (
           <div className="mt-3 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5 flex items-center justify-between">
-            <p className="text-sm text-green-700 font-medium">✓ Oportunidad ganada</p>
+            <p className="flex items-center gap-1.5 text-sm text-green-700 font-medium"><Check className="h-4 w-4 shrink-0" aria-hidden />Oportunidad ganada</p>
             <a
               href={`/clientes/nuevo?from_crm=${prospecto?.id ?? id}`}
               className="text-sm text-green-600 hover:text-green-900 font-semibold underline"
@@ -580,7 +582,7 @@ export default function EditProspectoPage() {
 
           {errorForm && (
             <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-              <span>⚠</span><span className="font-medium">{errorForm}</span>
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /><span className="font-medium">{errorForm}</span>
             </div>
           )}
 

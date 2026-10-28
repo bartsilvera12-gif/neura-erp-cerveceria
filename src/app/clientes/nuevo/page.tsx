@@ -28,6 +28,8 @@ import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/cli
 import type { Plan } from "@/lib/planes/types";
 import { NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
 
+import { AlertTriangle, Link2 } from "lucide-react";
+
 /** Instancia monocliente Reserva: formulario de clientes simplificado (sin campos SaaS/Neura). */
 const SIMPLE_CLIENTE = NEURA_CLIENT_SCHEMA === "cerveceriaerp";
 
@@ -430,7 +432,7 @@ function NuevoClienteForm() {
       {/* Banner CRM */}
       {crmBanner && (
         <div className="flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-xl px-5 py-3">
-          <span className="text-violet-500 text-lg">🔗</span>
+          <Link2 className="h-5 w-5 shrink-0 text-violet-500" aria-hidden />
           <div>
             <p className="text-sm font-semibold text-violet-800">Creando desde CRM</p>
             <p className="text-xs text-violet-600">{crmBanner}</p>
@@ -1058,7 +1060,7 @@ function NuevoClienteForm() {
           {/* Error */}
           {error && (
             <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-              <span>⚠</span><span className="font-medium">{error}</span>
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /><span className="font-medium">{error}</span>
             </div>
           )}
 

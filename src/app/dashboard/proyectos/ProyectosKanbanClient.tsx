@@ -18,6 +18,8 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { readSaasBriefData } from "@/lib/proyectos/brief-data";
 import ProyectoDetalleModal from "./components/ProyectoDetalleModal";
 
+import { MapPin, Phone, User } from "lucide-react";
+
 type EstadoRow = {
   id: string;
   nombre: string;
@@ -798,20 +800,20 @@ function PedidoCardBody({
       {pedido.modalidad === "delivery" && (
         <div className="flex flex-col gap-0.5">
           {pedido.cliente_telefono ? (
-            <div className="font-semibold text-slate-800">📞 {pedido.cliente_telefono}</div>
+            <div className="flex items-center gap-1 font-semibold text-slate-800"><Phone className="h-3 w-3 shrink-0" aria-hidden />{pedido.cliente_telefono}</div>
           ) : null}
           {pedido.direccion_entrega ? (
-            <div className="text-slate-600">📍 {pedido.direccion_entrega}</div>
+            <div className="flex items-center gap-1 text-slate-600"><MapPin className="h-3 w-3 shrink-0" aria-hidden />{pedido.direccion_entrega}</div>
           ) : null}
         </div>
       )}
       {pedido.modalidad === "carry_out" && (pedido.cliente_nombre || pedido.cliente_telefono) ? (
         <div className="flex flex-col gap-0.5">
           {pedido.cliente_nombre ? (
-            <div className="font-semibold text-slate-800">👤 {pedido.cliente_nombre}</div>
+            <div className="flex items-center gap-1 font-semibold text-slate-800"><User className="h-3 w-3 shrink-0" aria-hidden />{pedido.cliente_nombre}</div>
           ) : null}
           {pedido.cliente_telefono ? (
-            <div className="text-slate-600">📞 {pedido.cliente_telefono}</div>
+            <div className="flex items-center gap-1 text-slate-600"><Phone className="h-3 w-3 shrink-0" aria-hidden />{pedido.cliente_telefono}</div>
           ) : null}
         </div>
       ) : null}

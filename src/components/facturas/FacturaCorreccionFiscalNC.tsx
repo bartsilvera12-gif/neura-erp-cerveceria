@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { NotaCreditoListItemDTO, SifenPrevueloFacturaNcDTO } from "@/lib/nota-credito/types";
 
+import { ChevronRight } from "lucide-react";
+
 const MSG_BLOQUEO_TIMBRADO_ORIGEN =
   "No se puede generar la NC porque el timbrado de la factura origen es inválido o inconsistente.";
 
@@ -994,7 +996,7 @@ export function FacturaCorreccionFiscalNC({
                       </div>
                       <details className="px-3 sm:px-4 py-2 bg-white text-[11px] group">
                         <summary className="cursor-pointer font-semibold text-slate-600 select-none list-none flex items-center gap-2 [&::-webkit-details-marker]:hidden">
-                          <span className="text-slate-400 group-open:rotate-90 transition-transform inline-block">▸</span>
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform group-open:rotate-90" aria-hidden />
                           SIFEN (detalle técnico y respuestas SET)
                         </summary>
                         <p className="mt-2 text-slate-500 leading-snug">

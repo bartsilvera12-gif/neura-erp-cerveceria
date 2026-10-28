@@ -117,7 +117,7 @@ export default function FaltantesRecepcionPage() {
               <PackageX className="h-6 w-6" />
             </span>
             <p className="text-sm font-semibold text-slate-700">
-              {rows.length === 0 ? "No hay faltantes registrados 👌" : "Ningún faltante coincide con la búsqueda"}
+              {rows.length === 0 ? "No hay faltantes registrados" : "Ningún faltante coincide con la búsqueda"}
             </p>
             <p className="text-sm text-slate-400">Las recepciones donde recibiste menos de lo despachado aparecen acá.</p>
           </div>

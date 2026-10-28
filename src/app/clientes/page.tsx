@@ -11,6 +11,8 @@ import type { Cliente } from "@/lib/clientes/types";
 import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
 import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
 
+import { Check, Users } from "lucide-react";
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatFecha(iso: string) {
@@ -393,7 +395,7 @@ export default function ClientesPage() {
       {/* Mensaje de éxito baja operativa */}
       {bajaOk && (
         <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-green-800">
-          <span className="text-xl">✓</span>
+          <Check className="h-5 w-5 shrink-0" aria-hidden />
           <p className="text-sm font-medium">Baja procesada correctamente</p>
         </div>
       )}
@@ -570,7 +572,7 @@ export default function ClientesPage() {
           <div className="py-16 text-center text-gray-400 text-sm animate-pulse">Cargando clientes…</div>
         ) : filtrados.length === 0 ? (
           <div className="py-16 text-center text-gray-400">
-            <p className="text-4xl mb-3">👥</p>
+            <Users className="mx-auto mb-3 h-10 w-10 text-slate-300" aria-hidden />
             <p className="font-medium text-gray-600">
               {clientes.length === 0 ? "No hay clientes registrados" : "Sin resultados para los filtros aplicados"}
             </p>

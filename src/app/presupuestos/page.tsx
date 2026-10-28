@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileText, Plus, Loader2, Lock, ChevronDown, Search, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, FileText, Loader2, Lock, Plus, Search, X } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { ESTADO_LABEL, type EstadoPresupuesto } from "@/lib/presupuestos/types";
 
@@ -157,7 +157,9 @@ export default function PresupuestosPage() {
           }`}
           role="status"
         >
-          {toast.tipo === "ok" ? "✓ " : "⚠ "}
+          {toast.tipo === "ok"
+            ? <Check className="mr-1.5 inline h-4 w-4" aria-hidden />
+            : <AlertTriangle className="mr-1.5 inline h-4 w-4" aria-hidden />}
           {toast.msg}
         </div>
       )}

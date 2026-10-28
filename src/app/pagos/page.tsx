@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Banknote, Loader2, Layers, CalendarClock } from "lucide-react";
+import { Banknote, CalendarClock, Check, Layers, Loader2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import { RegistrarCobroModalCxc } from "@/components/cobros/RegistrarCobroModalCxc";
@@ -145,7 +145,7 @@ export default function PagosPage() {
   return (
     <div className="w-full min-w-0 max-w-full space-y-6">
       {toast && (
-        <div className="fixed top-4 right-4 z-50 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg">✓ {toast}</div>
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg"><Check className="h-4 w-4 shrink-0" aria-hidden />{toast}</div>
       )}
 
       <div className="flex flex-wrap items-start justify-between gap-3">

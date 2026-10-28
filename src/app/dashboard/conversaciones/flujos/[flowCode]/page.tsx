@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { GripVertical, Trash2 } from "lucide-react";
+import { ChevronRight, GripVertical, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -2748,7 +2748,7 @@ export default function FlowEditorPage() {
       <details className="bg-white border border-slate-200 rounded-xl shadow-sm group">
         <summary className="cursor-pointer list-none px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-slate-800 hover:bg-slate-50/80 rounded-xl [&::-webkit-details-marker]:hidden">
           <span className="inline-flex items-center gap-2">
-            <span className="text-slate-400 group-open:rotate-90 transition-transform">▸</span>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform group-open:rotate-90" aria-hidden />
             Integración con sorteos
             <span className="font-normal text-slate-500">(opcional)</span>
           </span>

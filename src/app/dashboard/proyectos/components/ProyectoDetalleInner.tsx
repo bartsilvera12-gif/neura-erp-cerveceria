@@ -20,6 +20,8 @@ import {
   type ProyectoSaasBriefForm,
 } from "@/lib/proyectos/brief-data";
 
+import { Check, Hourglass } from "lucide-react";
+
 export type DetalleResp = {
   proyecto: Record<string, unknown> & {
     id: string;
@@ -419,7 +421,7 @@ export default function ProyectoDetalleInner({
         <div className="flex flex-wrap items-center gap-2">
           {esPedido && facturacionEstado === "facturado" && (
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-100 px-3 py-2 text-sm font-medium text-emerald-700">
-              ✓ Facturado
+              <Check className="h-4 w-4 shrink-0" aria-hidden />Facturado
               {ventaIdPedido && (
                 <Link href={`/ventas?venta=${ventaIdPedido}`} className="underline hover:text-emerald-900">
                   {ventaNumeroPedido ?? "Ver venta"}
@@ -429,7 +431,7 @@ export default function ProyectoDetalleInner({
           )}
           {esPedido && facturacionEstado === "pendiente_caja" && (
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-100 px-3 py-2 text-sm font-medium text-amber-700">
-              ⏳ Pendiente en Caja
+              <Hourglass className="h-4 w-4 shrink-0" aria-hidden />Pendiente en Caja
             </span>
           )}
           {esPedido && (facturacionEstado === null || facturacionEstado === "cancelado_caja") && (

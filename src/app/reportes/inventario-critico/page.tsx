@@ -98,7 +98,7 @@ export default function InventarioCriticoPage() {
           </div>
         ) : filtrados.length === 0 ? (
           <div className="px-4 py-16 text-center text-sm text-slate-400">
-            {criticos.length === 0 ? "No hay productos por debajo del mínimo. 👌" : "Ningún producto coincide con la búsqueda."}
+            {criticos.length === 0 ? "No hay productos por debajo del mínimo." : "Ningún producto coincide con la búsqueda."}
           </div>
         ) : (
           <>

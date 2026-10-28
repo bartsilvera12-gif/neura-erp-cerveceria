@@ -9,6 +9,7 @@ import {
   type DashboardViewCatalog,
 } from "@/lib/empresas/actions";
 import type { Modulo } from "@/lib/empresas/actions";
+import { BarChart3, Building2, Package, User } from "lucide-react";
 
 const fLabel = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
 const fInput = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0EA5E9] bg-white";
@@ -132,7 +133,7 @@ export default function EmpresaForm() {
       {/* Datos empresa */}
       <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-center gap-2 mb-5 pb-2 border-b border-gray-100">
-          <span className="text-base">🏢</span>
+          <Building2 className="h-4 w-4" aria-hidden />
           <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Datos de la empresa</h3>
         </div>
         <div className="space-y-4">
@@ -190,7 +191,7 @@ export default function EmpresaForm() {
       {/* Usuario administrador */}
       <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-center gap-2 mb-5 pb-2 border-b border-gray-100">
-          <span className="text-base">👤</span>
+          <User className="h-4 w-4" aria-hidden />
           <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Usuario administrador</h3>
         </div>
         <div className="space-y-4">
@@ -237,7 +238,7 @@ export default function EmpresaForm() {
       {/* Módulos habilitados */}
       <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-center gap-2 mb-5 pb-2 border-b border-gray-100">
-          <span className="text-base">📦</span>
+          <Package className="h-4 w-4" aria-hidden />
           <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Módulos habilitados</h3>
         </div>
         {cargandoModulos ? (
@@ -267,7 +268,7 @@ export default function EmpresaForm() {
 
       <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-center gap-2 mb-5 pb-2 border-b border-gray-100">
-          <span className="text-base">📊</span>
+          <BarChart3 className="h-4 w-4" aria-hidden />
           <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
             Vistas del dashboard
           </h3>

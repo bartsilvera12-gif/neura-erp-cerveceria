@@ -4,7 +4,7 @@ import { use as usePromise, useCallback, useEffect, useMemo, useState } from "re
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { ArrowLeft, Truck, PackageCheck, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, PackageCheck, Pencil, Truck } from "lucide-react";
 
 type Cabecera = {
   id: string;
@@ -195,7 +195,7 @@ export default function RecepcionDetallePage({ params }: { params: Promise<{ id:
         <>
           {cab.observacion_solicitud && (
             <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
-              <span className="mt-0.5 shrink-0 text-slate-400">✎</span>
+              <Pencil className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
               <span>{cab.observacion_solicitud}</span>
             </div>
           )}

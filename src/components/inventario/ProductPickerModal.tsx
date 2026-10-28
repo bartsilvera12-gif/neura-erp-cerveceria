@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Check } from "lucide-react";
+
 export interface ProductoPickerItem {
   id: string;
   nombre: string;
@@ -106,6 +108,8 @@ export default function ProductPickerModal({
   const [iva, setIva] = useState<"EXENTA" | "5%" | "10%">(ivaDefault);
   const [tipoPrecio, setTipoPrecio] = useState<"minorista" | "mayorista" | "distribuidor">(tipoPrecioDefault);
   const [feedback, setFeedback] = useState<string | null>(null);
+  /** El feedback llevaba el tilde embebido y el render lo buscaba con includes(). */
+  const [feedbackOk, setFeedbackOk] = useState(false);
 
   /** Precio en la moneda activa de la venta (string para el input). */
   function precioEnMonedaStr(precioGs: number): string {
@@ -168,14 +172,15 @@ export default function ProductPickerModal({
     if (!sel) return;
     const cantNum = parseInt(cantidad, 10) || 0;
     const precioNum = parseFloat(precio) || 0;
-    if (cantNum <= 0) { setFeedback("Cantidad debe ser > 0"); return; }
-    if (precioNum <= 0) { setFeedback("Precio debe ser > 0"); return; }
-    if (moneda === "USD" && tipoCambio <= 0) { setFeedback("Falta tipo de cambio en la venta"); return; }
+    if (cantNum <= 0) { setFeedbackOk(false); setFeedback("Cantidad debe ser > 0"); return; }
+    if (precioNum <= 0) { setFeedbackOk(false); setFeedback("Precio debe ser > 0"); return; }
+    if (moneda === "USD" && tipoCambio <= 0) { setFeedbackOk(false); setFeedback("Falta tipo de cambio en la venta"); return; }
     // Venta sin stock (Fase 5): NO se bloquea por falta de stock; se permite agregar
     // y la confirmación se pide al registrar la venta.
     const ok = onAgregar({ producto: sel, cantidad: cantNum, precio_input: precioNum, iva, tipo_precio: tipoPrecio });
     if (ok !== false) {
-      setFeedback("Producto agregado ✓");
+      setFeedbackOk(true);
+      setFeedback("Producto agregado");
       setCantidad("1");
       // foco al buscador para seguir cargando
       setTimeout(() => inputRef.current?.focus(), 0);
@@ -362,7 +367,8 @@ export default function ProductPickerModal({
                 </div>
 
                 {feedback && (
-                  <div className={`text-xs px-3 py-2 rounded-lg ${feedback.includes("✓") ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-red-50 border border-red-200 text-red-700"}`}>
+                  <div className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg ${feedbackOk ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-red-50 border border-red-200 text-red-700"}`}>
+                    {feedbackOk && <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />}
                     {feedback}
                   </div>
                 )}

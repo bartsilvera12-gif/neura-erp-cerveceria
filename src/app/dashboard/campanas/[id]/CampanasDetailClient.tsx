@@ -12,6 +12,8 @@ import {
   type TemplateQuickReplyButton,
 } from "@/lib/campaigns/template-quick-reply-buttons";
 
+import { ChevronDown, ChevronRight } from "lucide-react";
+
 type SavedButtonActionRow = {
   button_id: string;
   button_label?: string | null;
@@ -826,7 +828,9 @@ export default function CampanasDetailClient({ campaignId }: { campaignId: strin
           onClick={() => setShowEvents((v) => !v)}
         >
           Eventos ({events.length})
-          <span className="text-slate-400">{showEvents ? "▼" : "▶"}</span>
+          {showEvents
+                    ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" aria-hidden />
+                    : <ChevronRight className="h-3.5 w-3.5 text-slate-400" aria-hidden />}
         </button>
         {showEvents ? (
           <ul className="divide-y divide-slate-100 border-t border-slate-100 px-4 py-2 text-xs text-slate-700">

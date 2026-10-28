@@ -11,6 +11,8 @@ import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
 import type { Proveedor } from "@/lib/proveedores/types";
 import type { MetodoValuacion, Producto } from "@/lib/inventario/types";
 
+import { Check } from "lucide-react";
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatGs(valor: number) {
@@ -446,7 +448,7 @@ export default function NuevaCompraPage() {
                   className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-[#4FAEB2] file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-[#3F8E91]"
                 />
                 {comprobanteFile && !comprobanteError && (
-                  <p className="mt-1.5 text-xs text-green-600">✓ {comprobanteFile.name} listo para subir al guardar.</p>
+                  <p className="mt-1.5 text-xs text-green-600"><Check className="mr-1 inline h-3.5 w-3.5" aria-hidden />{comprobanteFile.name} listo para subir al guardar.</p>
                 )}
                 {comprobanteError && <p className="mt-1.5 text-xs text-red-600">{comprobanteError}</p>}
                 <p className="mt-1 text-xs text-gray-400">JPG, PNG, WebP o PDF — máx. 10 MB. Se asocia a toda la compra.</p>
@@ -454,7 +456,7 @@ export default function NuevaCompraPage() {
             </div>
 
             {proveedorCreado && (
-              <p className="text-xs text-green-600">✓ Proveedor &quot;{proveedorCreado}&quot; creado y seleccionado.</p>
+              <p className="text-xs text-green-600"><Check className="mr-1 inline h-3.5 w-3.5" aria-hidden />Proveedor &quot;{proveedorCreado}&quot; creado y seleccionado.</p>
             )}
             {!mostrarFormProveedor ? (
               <button type="button" onClick={() => { setMostrarFormProveedor(true); setProveedorCreado(null); }}
@@ -640,7 +642,7 @@ export default function NuevaCompraPage() {
                   </p>
                 )}
                 {productoCreado && (
-                  <p className="mt-1.5 text-xs text-green-600">✓ Producto &quot;{productoCreado}&quot; creado y seleccionado.</p>
+                  <p className="mt-1.5 text-xs text-green-600"><Check className="mr-1 inline h-3.5 w-3.5" aria-hidden />Producto &quot;{productoCreado}&quot; creado y seleccionado.</p>
                 )}
                 {!mostrarFormProducto ? (
                   <button type="button" onClick={() => { setMostrarFormProducto(true); setProductoCreado(null); }}

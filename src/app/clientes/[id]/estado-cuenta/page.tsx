@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Banknote, Download } from "lucide-react";
+import { ArrowLeft, Banknote, Check, Download, Loader2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import { RegistrarCobroModalCxc } from "@/components/cobros/RegistrarCobroModalCxc";
@@ -128,7 +128,7 @@ export default function EstadoCuentaPage() {
   return (
     <div className="space-y-6 max-w-5xl">
       {toast && (
-        <div className="fixed top-4 right-4 z-50 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg">✓ {toast}</div>
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg"><Check className="h-4 w-4 shrink-0" aria-hidden />{toast}</div>
       )}
 
       <Link href="/clientes" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">

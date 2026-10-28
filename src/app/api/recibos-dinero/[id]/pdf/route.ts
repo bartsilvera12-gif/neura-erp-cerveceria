@@ -465,7 +465,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 <div class="toolbar">
   <button onclick="window.print()">Imprimir / Guardar PDF</button>
   ${r.anulado
-    ? `<span class="anulado-tag">⛔ Recibo anulado</span>`
+    ? `<span class="anulado-tag"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg> Recibo anulado</span>`
     : puedeAnular
       ? `<button class="danger" id="btnAnular" onclick="anularRecibo()">Anular recibo</button>`
       : ""}
