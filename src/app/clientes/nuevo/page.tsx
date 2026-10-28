@@ -3,6 +3,14 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  errorDocumento,
+  errorEmail,
+  errorNombre,
+  errorRuc,
+  errorTelefono,
+  primerError,
+} from "@/lib/validacion/documentos";
+import {
   apiCreateCliente,
   apiCreateFactura,
   apiCreateSuscripcion,
@@ -224,7 +232,6 @@ function NuevoClienteForm() {
   }, [fromCrmId]);
 
   const upper = ["empresa", "nombre_contacto", "nombre_facturacion", "ciudad", "pais", "vendedor_asignado", "condicion_pago", "direccion", "sifen_codigo_pais"];
-  const lower = ["email", "email_secundario"];
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -232,10 +239,23 @@ function NuevoClienteForm() {
     setError(null);
     const { name, value } = e.target;
     const type = (e.target as HTMLInputElement).type;
-    let normalized = value;
-    if (lower.includes(name) || type === "email") normalized = value.toLowerCase();
-    else if (upper.includes(name)) normalized = value.toUpperCase();
+    /**
+     * Los correos NO se transforman mientras se tipea. Un `input type="email"`
+     * no expone `selectionStart`, así que cuando el onChange devuelve un valor
+     * distinto del que tiene el DOM React no puede restaurar la posición del
+     * cursor y el caret salta al final: escribir "prueba@gmail.com" terminaba
+     * en "p@gmail.comrueba". Se pasa a minúsculas al salir del campo.
+     */
+    const normalized =
+      type !== "email" && upper.includes(name) ? value.toUpperCase() : value;
     setForm((prev) => ({ ...prev, [name]: normalized }));
+  }
+
+  /** Normaliza el correo recién cuando el campo pierde el foco. */
+  function handleEmailBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const { name, value } = e.target;
+    const limpio = value.trim().toLowerCase();
+    if (limpio !== value) setForm((prev) => ({ ...prev, [name]: limpio }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -244,6 +264,25 @@ function NuevoClienteForm() {
 
     if (!form.nombre_contacto.trim())                              return setError("El nombre de contacto es obligatorio.");
     if (form.tipo_cliente === "empresa" && !form.empresa.trim())   return setError("La razón social es obligatoria para empresas.");
+
+    /**
+     * Formato de los datos tipeados. Antes se guardaba cualquier cosa: un RUC
+     * que decía "MARIA" y un nombre que decía "123456" entraban igual, y el
+     * dato recién fallaba en SIFEN o en la cobranza, cuando ya no se sabía
+     * cuál era el valor correcto.
+     */
+    const eFormato = primerError(
+      errorNombre(form.nombre_contacto, "El nombre de contacto", { obligatorio: true }),
+      form.tipo_cliente === "empresa" ? errorNombre(form.empresa, "La razón social", { obligatorio: true }) : null,
+      errorNombre(form.nombre_facturacion, "El nombre de facturación"),
+      errorRuc(form.ruc),
+      errorDocumento(form.documento),
+      errorTelefono(form.telefono),
+      errorTelefono(form.telefono_secundario),
+      errorEmail(form.email),
+      errorEmail(form.email_secundario),
+    );
+    if (eFormato) return setError(eFormato);
 
     if (form.condicion_pago === "MENSUAL" && form.estado === "activo") {
       const dur = parseInt(formSusc.duracion_meses, 10) || 0;
@@ -344,7 +383,11 @@ function NuevoClienteForm() {
       documento: form.documento.trim() || undefined,
       es_contribuyente: form.tipo_cliente === "persona" ? form.es_contribuyente : false,
       telefono: form.telefono.trim() || undefined,
-      email: form.email.trim() || undefined,
+      // Los campos secundarios estaban en pantalla pero no se enviaban: el
+      // operador los cargaba y se perdían sin aviso al guardar.
+      telefono_secundario: form.telefono_secundario.trim() || undefined,
+      email: form.email.trim().toLowerCase() || undefined,
+      email_secundario: form.email_secundario.trim().toLowerCase() || undefined,
       direccion: form.direccion.trim() || undefined,
       ciudad: form.ciudad.trim().toUpperCase() || undefined,
       pais: form.pais.trim().toUpperCase() || undefined,
@@ -666,8 +709,10 @@ function NuevoClienteForm() {
                   name="email"
                   value={form.email}
                   onChange={handleChange}
+                  onBlur={handleEmailBlur}
                   placeholder="contacto@empresa.com"
                   className={inputClass}
+                  autoComplete="off"
                 />
               </div>
               <div>
@@ -677,8 +722,10 @@ function NuevoClienteForm() {
                   name="email_secundario"
                   value={form.email_secundario}
                   onChange={handleChange}
+                  onBlur={handleEmailBlur}
                   placeholder="otro@empresa.com"
                   className={inputClass}
+                  autoComplete="off"
                 />
               </div>
             </div>

@@ -363,7 +363,6 @@ export async function saveMovimiento(
   }
 
   const delta = calcularDelta(mov.tipo, mov.cantidad);
-  const nuevoStock = Math.max(0, producto.stock_actual + delta);
   const debeActualizarStock = mov.origen !== "inventario_inicial"; // inventario_inicial ya viene del insert
 
   // 2. Insertar movimiento
@@ -392,15 +391,45 @@ export async function saveMovimiento(
     return null;
   }
 
-  // 3. Actualizar stock del producto (salvo inventario_inicial, que ya está en el insert)
+  /**
+   * 3. Actualizar stock del producto (salvo inventario_inicial, que ya viene en
+   *    el insert).
+   *
+   * El update es condicional sobre el stock que se leyó: si entre la lectura y
+   * la escritura otro movimiento tocó el producto, no matchea ninguna fila y se
+   * reintenta sobre el valor nuevo. Antes se escribía el valor absoluto sin
+   * condición, así que dos movimientos simultáneos se pisaban y uno de los dos
+   * se perdía sin dejar rastro.
+   */
   if (debeActualizarStock) {
-    const { error: updError } = await supabase
-      .from("productos")
-      .update({ stock_actual: nuevoStock })
-      .eq("id", mov.producto_id);
-
-    if (updError) {
-      console.error("[inventario] saveMovimiento (update stock):", updError.message);
+    let stockLeido = producto.stock_actual;
+    let aplicado = false;
+    for (let intento = 0; intento < 4 && !aplicado; intento++) {
+      const objetivo = Math.max(0, stockLeido + delta);
+      const { data: updData, error: updError } = await supabase
+        .from("productos")
+        .update({ stock_actual: objetivo })
+        .eq("id", mov.producto_id)
+        .eq("stock_actual", stockLeido)
+        .select("id");
+      if (updError) {
+        console.error("[inventario] saveMovimiento (update stock):", updError.message);
+        break;
+      }
+      if (updData && updData.length > 0) {
+        aplicado = true;
+        break;
+      }
+      // Nadie matcheó: releer y volver a intentar con el stock actual.
+      const refrescado = await getProducto(mov.producto_id);
+      if (!refrescado) break;
+      stockLeido = refrescado.stock_actual;
+    }
+    if (!aplicado) {
+      console.error(
+        "[inventario] saveMovimiento: no se pudo aplicar el stock de",
+        mov.producto_id
+      );
     }
   }
 

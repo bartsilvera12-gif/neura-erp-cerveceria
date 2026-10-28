@@ -13,6 +13,13 @@ import type { MetodoValuacion, Producto } from "@/lib/inventario/types";
 
 import { Check } from "lucide-react";
 
+import {
+  errorEmail as validarEmail,
+  errorNombre as validarNombre,
+  errorRuc as validarRuc,
+  errorTelefono as validarTelefono,
+  primerError,
+} from "@/lib/validacion/documentos";
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatGs(valor: number) {
@@ -313,19 +320,30 @@ export default function NuevaCompraPage() {
   function handleProveedorInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.name === "ruc") setErrorRuc(null);
     const { name, value, type } = e.target;
-    let normalized = value;
-    if (name === "email" || type === "email") normalized = value.toLowerCase();
-    else if (["nombre", "contacto"].includes(name)) normalized = value.toUpperCase();
+    /**
+     * El correo no se transforma por tecla: `type="email"` no expone la
+     * posición del cursor, así que React no la puede restaurar y el caret
+     * salta al final. Se normaliza al salir del campo y al guardar.
+     */
+    const normalized =
+      type !== "email" && ["nombre", "contacto"].includes(name) ? value.toUpperCase() : value;
     setFormProveedor((prev) => ({ ...prev, [name]: normalized }));
   }
   async function handleAgregarProveedor() {
-    if (!formProveedor.nombre.trim() || !formProveedor.ruc.trim()) return;
     setErrorRuc(null);
+    const eFormato = primerError(
+      validarNombre(formProveedor.nombre, "El nombre", { obligatorio: true }),
+      validarRuc(formProveedor.ruc, { obligatorio: true }),
+      validarNombre(formProveedor.contacto, "El contacto"),
+      validarTelefono(formProveedor.telefono),
+      validarEmail(formProveedor.email),
+    );
+    if (eFormato) { setErrorRuc(eFormato); return; }
     const dup = await proveedorExiste(formProveedor.ruc);
     if (dup) { setErrorRuc(`RUC ya registrado para "${dup.nombre}".`); return; }
     const resultado = await createProveedor({
       nombre: formProveedor.nombre.trim().toUpperCase(), ruc: formProveedor.ruc.trim(),
-      telefono: formProveedor.telefono.trim(), email: formProveedor.email.trim(),
+      telefono: formProveedor.telefono.trim(), email: formProveedor.email.trim().toLowerCase(),
       contacto: formProveedor.contacto.trim().toUpperCase(), direccion: "", estado: "activo",
     });
     if (!resultado.ok) { setErrorRuc(resultado.error); return; }
@@ -486,7 +504,11 @@ export default function NuevaCompraPage() {
                   <div>
                     <label className={labelSmClass}>Email</label>
                     <input type="email" name="email" value={formProveedor.email} onChange={handleProveedorInputChange}
-                      placeholder="Ej: ventas@empresa.com" className={inputSmClass} />
+                      onBlur={(e) => {
+                        const limpio = e.target.value.trim().toLowerCase();
+                        if (limpio !== formProveedor.email) setFormProveedor((prev) => ({ ...prev, email: limpio }));
+                      }}
+                      placeholder="Ej: ventas@empresa.com" className={inputSmClass} autoComplete="off" />
                   </div>
                   <div className="col-span-2">
                     <label className={labelSmClass}>Persona de contacto</label>

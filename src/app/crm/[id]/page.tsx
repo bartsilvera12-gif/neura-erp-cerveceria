@@ -207,8 +207,13 @@ export default function EditProspectoPage() {
     const type = (e.target as HTMLInputElement).type;
     const upper = ["empresa", "contacto", "responsable"];
     let normalized = value;
-    if (name === "email" || type === "email") normalized = value.toLowerCase();
-    else if (upper.includes(name)) normalized = value.toUpperCase();
+    /**
+     * El correo no se transforma mientras se tipea: un `input type="email"` no
+     * expone `selectionStart`, así que cuando el onChange devuelve un valor
+     * distinto React no puede restaurar la posición del cursor y el caret
+     * salta al final del campo. Se normaliza al salir (handleEmailBlur).
+     */
+    if (type !== "email" && upper.includes(name)) normalized = value.toUpperCase();
     setForm((prev) => ({ ...prev, [name]: normalized }));
   }
 
@@ -226,6 +231,13 @@ export default function EditProspectoPage() {
     (sum, pid) => sum + (planesActivos.find((p) => p.id === pid)?.precio ?? 0),
     0
   );
+
+  /** Normaliza el correo al salir del campo (no por tecla: ver handleChange). */
+  function handleEmailBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const { name, value } = e.target;
+    const limpio = value.trim().toLowerCase();
+    if (limpio !== value) setForm((prev) => ({ ...prev, [name]: limpio }));
+  }
 
   async function handleGuardar(e: React.FormEvent) {
     e.preventDefault();
@@ -470,6 +482,8 @@ export default function EditProspectoPage() {
               name="email"
               value={form.email}
               onChange={handleChange}
+              onBlur={handleEmailBlur}
+              autoComplete="off"
               className={inputClass}
             />
           </div>

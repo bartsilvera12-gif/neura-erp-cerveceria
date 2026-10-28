@@ -13,7 +13,20 @@ interface Ubicacion {
   tipo: string;
   parent_id: string | null;
   activo: boolean;
+  /**
+   * Lo que hay guardado acá. El stock no se lleva por depósito: cada producto
+   * apunta a una ubicación principal, así que estos números son la suma de los
+   * productos asignados a esta ubicación en la sucursal activa.
+   */
+  productos: number;
+  unidades: number;
+  valorizado: number;
+  productos_sin_stock: number;
 }
+
+const fmtNum = (n: number) =>
+  Number(n).toLocaleString("es-PY", { maximumFractionDigits: 2 });
+const fmtGs = (n: number) => `Gs. ${Math.round(Number(n)).toLocaleString("es-PY")}`;
 
 const TIPOS = ["deposito","salon","pasillo","gondola","estante","zona","otro"] as const;
 
@@ -187,6 +200,9 @@ export default function UbicacionesPage() {
                 <th className="text-left px-4 py-2">Tipo</th>
                 <th className="text-left px-4 py-2">Código</th>
                 <th className="text-left px-4 py-2">Padre</th>
+                <th className="text-right px-4 py-2">Productos</th>
+                <th className="text-right px-4 py-2">Unidades</th>
+                <th className="text-right px-4 py-2">Valorizado</th>
                 <th className="text-left px-4 py-2">Estado</th>
                 <th className="px-4 py-2"></th>
               </tr>
@@ -200,6 +216,23 @@ export default function UbicacionesPage() {
                     <td className="px-4 py-2 text-gray-500">{u.tipo}</td>
                     <td className="px-4 py-2 text-gray-500">{u.codigo ?? "—"}</td>
                     <td className="px-4 py-2 text-gray-500">{parent?.nombre ?? "—"}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-gray-700">
+                      {u.productos > 0 ? fmtNum(u.productos) : "—"}
+                      {u.productos_sin_stock > 0 && (
+                        <span
+                          className="ml-1.5 text-xs text-amber-700"
+                          title={`${u.productos_sin_stock} sin stock`}
+                        >
+                          ({fmtNum(u.productos_sin_stock)} en 0)
+                        </span>
+                      )}
+                    </td>
+                    <td className={`px-4 py-2 text-right tabular-nums font-medium ${u.unidades > 0 ? "text-slate-800" : "text-gray-400"}`}>
+                      {fmtNum(u.unidades)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-gray-600">
+                      {u.valorizado > 0 ? fmtGs(u.valorizado) : "—"}
+                    </td>
                     <td className="px-4 py-2">
                       {u.activo ? (
                         <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Activo</span>
@@ -219,7 +252,30 @@ export default function UbicacionesPage() {
                 );
               })}
             </tbody>
+            <tfoot className="border-t-2 border-slate-200 bg-slate-50 text-xs">
+              <tr>
+                <td className="px-4 py-2 font-semibold text-slate-700" colSpan={4}>
+                  Total asignado a ubicaciones
+                </td>
+                <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800">
+                  {fmtNum(items.reduce((a, u) => a + u.productos, 0))}
+                </td>
+                <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800">
+                  {fmtNum(items.reduce((a, u) => a + u.unidades, 0))}
+                </td>
+                <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800">
+                  {fmtGs(items.reduce((a, u) => a + u.valorizado, 0))}
+                </td>
+                <td className="px-4 py-2" colSpan={2} />
+              </tr>
+            </tfoot>
           </table>
+        )}
+        {!loading && items.length > 0 && (
+          <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+            El stock sale de la ubicación principal de cada producto. Un producto sin ubicación
+            asignada no aparece en ningún depósito: se le asigna desde Inventario → editar producto.
+          </p>
         )}
       </div>
     </div>

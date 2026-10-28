@@ -82,7 +82,9 @@ export async function apiCreateCliente(data: {
   documento?: string;
   es_contribuyente?: boolean;
   telefono?: string;
+  telefono_secundario?: string;
   email?: string;
+  email_secundario?: string;
   direccion?: string;
   ciudad?: string;
   pais?: string;

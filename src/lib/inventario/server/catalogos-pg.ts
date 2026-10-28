@@ -10,6 +10,7 @@
  */
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
+import { andSucursales } from "@/lib/sucursales/sql";
 import type { Pool } from "pg";
 
 function pool(): Pool {
@@ -159,6 +160,11 @@ function normTipo(t: unknown): TipoUbicacion {
 }
 
 export interface UbicacionRow {
+  /** Agregados de stock (ver `listUbicaciones`). Ausentes en inserts/updates. */
+  productos?: number;
+  unidades?: number;
+  valorizado?: number;
+  productos_sin_stock?: number;
   id: string;
   empresa_id: string;
   nombre: string;
@@ -171,21 +177,62 @@ export interface UbicacionRow {
   updated_at: string;
 }
 
+/**
+ * Ubicaciones con lo que tienen guardado.
+ *
+ * El stock no vive por depósito: cada producto apunta a una
+ * `ubicacion_principal_id`, así que lo que hay en un depósito es la suma de los
+ * productos asignados a él. Se devuelve además la valorización (al costo
+ * promedio) y cuántos productos están sin stock, que es lo que se mira antes de
+ * salir a reponer.
+ *
+ * `sucursalIds` acota la suma a las sucursales que el usuario está viendo: las
+ * ubicaciones son de la empresa, pero los productos son de una sucursal, y sin
+ * el filtro la Cervecería y el Bar aparecían sumados en el mismo depósito.
+ */
 export async function listUbicaciones(
   schemaRaw: string,
   empresaId: string,
-  opts: { soloActivas?: boolean } = {}
+  opts: { soloActivas?: boolean; sucursalIds?: readonly string[] } = {}
 ): Promise<UbicacionRow[]> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const t = quoteSchemaTable(schema, "inventario_ubicaciones");
-  const where = ["empresa_id = $1::uuid"];
-  if (opts.soloActivas !== false) where.push("activo = true");
+  const tProd = quoteSchemaTable(schema, "productos");
+  const where = ["u.empresa_id = $1::uuid"];
+  if (opts.soloActivas !== false) where.push("u.activo = true");
+  const filtroSucursal =
+    opts.sucursalIds && opts.sucursalIds.length > 0 ? andSucursales(opts.sucursalIds, "p.") : "";
   const { rows } = await pool().query<UbicacionRow>(
-    `SELECT id, empresa_id, nombre, codigo, tipo, parent_id, descripcion, activo, created_at, updated_at
-       FROM ${t} WHERE ${where.join(" AND ")} ORDER BY nombre`,
+    `SELECT u.id, u.empresa_id, u.nombre, u.codigo, u.tipo, u.parent_id, u.descripcion,
+            u.activo, u.created_at, u.updated_at,
+            COALESCE(s.productos, 0)        AS productos,
+            COALESCE(s.unidades, 0)         AS unidades,
+            COALESCE(s.valorizado, 0)       AS valorizado,
+            COALESCE(s.productos_sin_stock, 0) AS productos_sin_stock
+       FROM ${t} u
+       LEFT JOIN (
+         SELECT p.ubicacion_principal_id AS ubicacion_id,
+                COUNT(*)                                   AS productos,
+                SUM(COALESCE(p.stock_actual, 0))           AS unidades,
+                SUM(COALESCE(p.stock_actual, 0) * COALESCE(p.costo_promedio, 0)) AS valorizado,
+                COUNT(*) FILTER (WHERE COALESCE(p.stock_actual, 0) <= 0)         AS productos_sin_stock
+           FROM ${tProd} p
+          WHERE p.empresa_id = $1::uuid
+            AND p.activo = true
+            AND p.ubicacion_principal_id IS NOT NULL${filtroSucursal}
+          GROUP BY p.ubicacion_principal_id
+       ) s ON s.ubicacion_id = u.id
+      WHERE ${where.join(" AND ")}
+      ORDER BY u.nombre`,
     [empresaId]
   );
-  return rows;
+  return rows.map((r) => ({
+    ...r,
+    productos: Number(r.productos ?? 0),
+    unidades: Number(r.unidades ?? 0),
+    valorizado: Number(r.valorizado ?? 0),
+    productos_sin_stock: Number(r.productos_sin_stock ?? 0),
+  }));
 }
 
 export async function insertUbicacion(

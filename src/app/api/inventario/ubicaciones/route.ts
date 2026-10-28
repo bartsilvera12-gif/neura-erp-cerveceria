@@ -5,6 +5,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { listUbicaciones, insertUbicacion } from "@/lib/inventario/server/catalogos-pg";
 import { normalizeUpperText, normalizeUpperNullable } from "@/lib/text/normalize";
+import { exigirSucursales, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,9 +14,14 @@ export async function GET(request: NextRequest) {
     const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
     const url = new URL(request.url);
     const todas = url.searchParams.get("todas") === "1";
-    const rows = await listUbicaciones(schema, ctx.auth.empresa_id, { soloActivas: !todas });
+    const rows = await listUbicaciones(schema, ctx.auth.empresa_id, {
+      soloActivas: !todas,
+      sucursalIds: exigirSucursales(ctx.auth),
+    });
     return NextResponse.json(successResponse({ ubicaciones: rows }));
   } catch (err) {
+    const rSuc = respuestaSucursalNoAsignada(err);
+    if (rSuc) return rSuc;
     console.error("[/api/inventario/ubicaciones GET]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudieron cargar las ubicaciones."), { status: 500 });
   }

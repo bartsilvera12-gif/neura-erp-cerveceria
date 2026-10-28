@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import ProveedorForm, { emptyProveedorForm, type ProveedorFormValues } from "@/app/proveedores/ProveedorForm";
+import ProveedorForm, {
+  emptyProveedorForm,
+  errorProveedorForm,
+  type ProveedorFormValues,
+} from "@/app/proveedores/ProveedorForm";
 import { createProveedor, getCategoriasProveedor } from "@/lib/proveedores/storage";
 import type { ProveedorCategoria } from "@/lib/proveedores/types";
 
@@ -21,8 +25,9 @@ export default function NuevoProveedorPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!form.nombre.trim()) {
-      setError("Completá el nombre.");
+    const eFormato = errorProveedorForm(form);
+    if (eFormato) {
+      setError(eFormato);
       return;
     }
     setSaving(true);
@@ -32,7 +37,7 @@ export default function NuevoProveedorPage() {
       razon_social: form.razon_social.trim() || null,
       ruc: form.ruc.trim() || null,
       telefono: form.telefono.trim() || null,
-      email: form.email.trim() || null,
+      email: form.email.trim().toLowerCase() || null,
       direccion: form.direccion.trim() || null,
       contacto: form.contacto.trim() || null,
       estado: form.estado,

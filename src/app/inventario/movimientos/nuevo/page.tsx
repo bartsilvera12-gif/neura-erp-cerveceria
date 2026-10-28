@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import { getProductos, saveMovimiento } from "@/lib/inventario/storage";
@@ -17,6 +17,16 @@ export default function NuevoMovimientoPage() {
     costo_unitario: "",
     origen: "compra" as OrigenMovimiento,
   });
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  /**
+   * Guard contra el doble registro. El botón no daba ninguna señal de estar
+   * trabajando, y sobre una base remota el guardado tarda lo suficiente para
+   * que el usuario vuelva a apretar: el movimiento se registraba dos veces y
+   * el stock sumaba el doble. El ref corta el segundo envío en el mismo tick,
+   * antes de que `guardando` llegue a re-renderizar el botón.
+   */
+  const enviandoRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,27 +61,47 @@ export default function NuevoMovimientoPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (enviandoRef.current) return;
 
     const productoSeleccionado = productos.find((p) => p.id === form.producto_id);
-    if (!productoSeleccionado) return;
+    if (!productoSeleccionado) return setError("Elegí un producto.");
 
     const cantidadNum =
       form.tipo === "AJUSTE"
         ? parseFloat(form.cantidad)
         : Math.abs(parseFloat(form.cantidad));
+    if (!Number.isFinite(cantidadNum) || cantidadNum === 0) {
+      return setError("Indicá una cantidad distinta de 0.");
+    }
 
-    const guardado = await saveMovimiento({
-      producto_id: productoSeleccionado.id,
-      producto_nombre: productoSeleccionado.nombre,
-      producto_sku: productoSeleccionado.sku,
-      tipo: form.tipo,
-      cantidad: cantidadNum,
-      costo_unitario: parseFloat(form.costo_unitario) || 0,
-      origen: form.origen,
-      fecha: new Date().toISOString(),
-    });
-
-    if (guardado) router.push("/inventario/movimientos");
+    enviandoRef.current = true;
+    setGuardando(true);
+    setError(null);
+    try {
+      const guardado = await saveMovimiento({
+        producto_id: productoSeleccionado.id,
+        producto_nombre: productoSeleccionado.nombre,
+        producto_sku: productoSeleccionado.sku,
+        tipo: form.tipo,
+        cantidad: cantidadNum,
+        costo_unitario: parseFloat(form.costo_unitario) || 0,
+        origen: form.origen,
+        fecha: new Date().toISOString(),
+      });
+      if (!guardado) {
+        throw new Error("No se pudo registrar el movimiento. Volvé a intentar.");
+      }
+      /**
+       * En el camino feliz el guard NO se libera: la navegación tarda y, si se
+       * libera acá, el usuario alcanza a apretar otra vez y queda un segundo
+       * movimiento registrado.
+       */
+      router.push("/inventario/movimientos");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo registrar el movimiento.");
+      enviandoRef.current = false;
+      setGuardando(false);
+    }
   }
 
   const productoSeleccionado = productos.find((p) => p.id === form.producto_id);
@@ -225,16 +255,24 @@ export default function NuevoMovimientoPage() {
             </div>
           )}
 
+          {error && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          )}
+
           {/* Acciones */}
           <div className="flex gap-4 pt-2">
             <button
               type="submit"
-              className="bg-gray-900 text-white px-5 py-3 rounded-lg text-sm hover:bg-gray-700 transition-colors"
+              disabled={guardando}
+              className="bg-gray-900 text-white px-5 py-3 rounded-lg text-sm hover:bg-gray-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Guardar movimiento
+              {guardando ? "Guardando…" : "Guardar movimiento"}
             </button>
             <button
               type="button"
+              disabled={guardando}
               onClick={() => router.push("/inventario/movimientos")}
               className="border border-gray-300 px-5 py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors"
             >

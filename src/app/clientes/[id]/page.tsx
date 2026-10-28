@@ -2,6 +2,14 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import {
+  errorDocumento,
+  errorEmail,
+  errorNombre,
+  errorRuc,
+  errorTelefono,
+  primerError,
+} from "@/lib/validacion/documentos";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   addNotaCliente,
@@ -518,16 +526,26 @@ export default function ClienteDetailPage() {
   }, [form.condicion_pago, id]);
 
   const upper = ["empresa", "nombre_contacto", "nombre_facturacion", "ciudad", "pais", "vendedor_asignado", "condicion_pago", "direccion", "sifen_codigo_pais"];
-  const lower = ["email", "email_secundario"];
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     setFormError(null);
     const { name, value } = e.target;
     const type = (e.target as HTMLInputElement).type;
-    let normalized = value;
-    if (lower.includes(name) || type === "email") normalized = value.toLowerCase();
-    else if (upper.includes(name)) normalized = value.toUpperCase();
+    /**
+     * Los correos no se transforman mientras se tipea: un `input type="email"`
+     * no expone `selectionStart`, así que React no puede devolver el cursor a
+     * su lugar y el caret salta al final del campo. Se normaliza al salir.
+     */
+    const normalized =
+      type !== "email" && upper.includes(name) ? value.toUpperCase() : value;
     setForm((prev) => ({ ...prev, [name]: normalized }));
+  }
+
+  /** Pasa el correo a minúsculas recién cuando el campo pierde el foco. */
+  function handleEmailBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const { name, value } = e.target;
+    const limpio = value.trim().toLowerCase();
+    if (limpio !== value) setForm((prev) => ({ ...prev, [name]: limpio }));
   }
 
   async function handleGuardar(e: React.FormEvent) {
@@ -535,6 +553,20 @@ export default function ClienteDetailPage() {
     setFormError(null);
     if (!form.nombre_contacto.trim())                             return setFormError("El contacto es obligatorio.");
     if (form.tipo_cliente === "empresa" && !form.empresa.trim())  return setFormError("La razón social es obligatoria para empresas.");
+
+    /** Formato de los datos tipeados (ver `@/lib/validacion/documentos`). */
+    const eFormato = primerError(
+      errorNombre(form.nombre_contacto, "El contacto", { obligatorio: true }),
+      form.tipo_cliente === "empresa" ? errorNombre(form.empresa, "La razón social", { obligatorio: true }) : null,
+      errorNombre(form.nombre_facturacion, "El nombre de facturación"),
+      errorRuc(form.ruc),
+      errorDocumento(form.documento),
+      errorTelefono(form.telefono),
+      errorTelefono(form.telefono_secundario),
+      errorEmail(form.email),
+      errorEmail(form.email_secundario),
+    );
+    if (eFormato) return setFormError(eFormato);
 
     // Solo validar creación de suscripción cuando: MENSUAL + activo + NO tiene suscripciones
     if (form.condicion_pago === "MENSUAL" && form.estado === "activo" && suscripciones.length === 0) {
@@ -1651,11 +1683,11 @@ export default function ClienteDetailPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={labelClass}>Email principal</label>
-                    <input type="email" name="email" value={form.email} onChange={handleChange} className={inputClass} />
+                    <input type="email" name="email" value={form.email} onChange={handleChange} onBlur={handleEmailBlur} className={inputClass} autoComplete="off" />
                   </div>
                   <div>
                     <label className={labelClass}>Email secundario</label>
-                    <input type="email" name="email_secundario" value={form.email_secundario} onChange={handleChange} className={inputClass} />
+                    <input type="email" name="email_secundario" value={form.email_secundario} onChange={handleChange} onBlur={handleEmailBlur} className={inputClass} autoComplete="off" />
                   </div>
                 </div>
 

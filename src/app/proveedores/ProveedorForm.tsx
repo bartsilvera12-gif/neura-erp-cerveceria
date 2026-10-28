@@ -5,6 +5,13 @@ import type {
   EstadoProveedor,
   ProveedorCategoria,
 } from "@/lib/proveedores/types";
+import {
+  errorEmail,
+  errorNombre,
+  errorRuc,
+  errorTelefono,
+  primerError,
+} from "@/lib/validacion/documentos";
 
 const inputClass =
   "w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#0EA5E9] bg-white text-sm";
@@ -44,6 +51,22 @@ export function emptyProveedorForm(): ProveedorFormValues {
     observaciones: "",
     categoria_ids: [],
   };
+}
+
+/**
+ * Validación de formato del proveedor, compartida por "nuevo" y "editar": sin
+ * esto se guardaba un RUC que decía "MARIA" y un nombre que eran solo dígitos.
+ */
+export function errorProveedorForm(v: ProveedorFormValues): string | null {
+  return primerError(
+    errorNombre(v.nombre, "El nombre", { obligatorio: true }),
+    errorNombre(v.nombre_comercial, "El nombre comercial"),
+    errorNombre(v.razon_social, "La razón social"),
+    errorNombre(v.contacto, "El contacto"),
+    errorRuc(v.ruc),
+    errorTelefono(v.telefono),
+    errorEmail(v.email),
+  );
 }
 
 export default function ProveedorForm({
@@ -116,12 +139,20 @@ export default function ProveedorForm({
         </div>
         <div>
           <label className={labelClass}>Email</label>
+          {/* El correo no se transforma mientras se tipea: `type="email"` no
+              expone la posición del cursor, así que al reemplazar el valor
+              React no la puede restaurar y el caret salta al final. */}
           <input
             type="email"
             className={inputClass}
             value={values.email}
-            onChange={(e) => patch("email", e.target.value.toLowerCase())}
+            onChange={(e) => patch("email", e.target.value)}
+            onBlur={(e) => {
+              const limpio = e.target.value.trim().toLowerCase();
+              if (limpio !== values.email) patch("email", limpio);
+            }}
             disabled={disabled}
+            autoComplete="off"
           />
         </div>
         <div className="sm:col-span-2">
