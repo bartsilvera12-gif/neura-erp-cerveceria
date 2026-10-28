@@ -9,6 +9,11 @@ Ejecutar con un rol administrador (`postgres` / `supabase_admin`).
 | 2 | `02_seed_cerveceriaerp.sql` | Empresa propia, sucursal, catálogo de módulos y usuario `admin@cerveceria.com`. |
 | 3 | `03_usuario_auth.sql` | Crea el login en Supabase Auth y lo enlaza con el usuario del ERP. |
 | 4 | `04_sucursales_cerveceria_bar.sql` | Dos administraciones: recrea `usuario_sucursales`, crea las sucursales Cervecería y Bar, un usuario por cada una, y el dueño con acceso a las dos. |
+| 5 | `05_usuarios_auth_sucursales.sql` | Logins en Supabase Auth de los dos usuarios del paso 4. **Cambiá las contraseñas antes de correrlo.** |
+
+El paso 4 crea la **ficha** de cada usuario en el ERP; el **login** lo crean el
+3 (para el dueño) y el 5 (para los dos operativos). Sin el login, el usuario
+existe pero no puede entrar.
 
 Después, **a mano** en Supabase: `Settings → API → Exposed schemas` → agregar
 `cerveceriaerp` (PostgREST no ve el schema hasta que esté expuesto).

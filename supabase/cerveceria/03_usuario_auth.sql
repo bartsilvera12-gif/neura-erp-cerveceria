@@ -14,6 +14,8 @@
 --   Después corré sólo el PASO 2 de abajo para enlazarlo.
 --
 -- OPCIÓN B: correr este archivo entero. Cambiá la contraseña en `v_password`.
+--
+-- Para los usuarios de Cervecería y Bar que crea el paso 04, usá el paso 05.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -61,6 +63,47 @@ BEGIN
   RAISE NOTICE 'Usuario % creado en auth.users con id %', v_email, v_id;
 END
 $auth$;
+
+-- -----------------------------------------------------------------------------
+-- PASO 1b — Normalizar las columnas de token
+-- -----------------------------------------------------------------------------
+-- GoTrue lee varias columnas de `auth.users` como texto no-nulo. Un usuario
+-- insertado a mano las deja en NULL y el login falla con el poco claro
+-- "Database error querying schema".
+--
+-- Sólo toca las columnas que existan en esta versión de GoTrue, y sólo la fila
+-- de este usuario.
+-- -----------------------------------------------------------------------------
+DO $fix$
+DECLARE
+  v_cols CONSTANT text[] := ARRAY[
+    'confirmation_token', 'recovery_token', 'email_change',
+    'email_change_token_new', 'email_change_token_current',
+    'phone_change', 'phone_change_token', 'reauthentication_token'
+  ];
+  c     text;
+  v_set text := '';
+BEGIN
+  FOREACH c IN ARRAY v_cols LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_attribute a
+        JOIN pg_class t ON t.oid = a.attrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+       WHERE n.nspname = 'auth' AND t.relname = 'users'
+         AND a.attname = c AND a.attnum > 0 AND NOT a.attisdropped);
+    v_set := v_set || CASE WHEN v_set = '' THEN '' ELSE ', ' END
+             || format('%I = coalesce(%I, '''')', c, c);
+  END LOOP;
+
+  IF v_set = '' THEN
+    RAISE NOTICE 'Esta versión de GoTrue no tiene columnas de token que normalizar.';
+    RETURN;
+  END IF;
+
+  EXECUTE format('UPDATE auth.users SET %s WHERE lower(email) = %L',
+                 v_set, 'admin@cerveceria.com');
+END
+$fix$;
 
 -- -----------------------------------------------------------------------------
 -- PASO 2 — Enlazar el login con la fila de `cerveceriaerp.usuarios`
