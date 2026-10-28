@@ -164,12 +164,30 @@ export default function NotasCreditoListClient() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Notas de crédito</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Auditoría operativa: listado global, estados ERP/SIFEN y vínculo a factura y cliente.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Notas de crédito</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Auditoría operativa: listado global, estados ERP/SIFEN y vínculo a factura y cliente.
+          </p>
+        </div>
+        <Link
+          href="/facturas"
+          className="shrink-0 rounded-lg bg-[#0EA5E9] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#0284C7]"
+        >
+          Emitir nota de crédito
+        </Link>
       </div>
+
+      {/* No hay "nueva nota de crédito" suelta a propósito: SIFEN exige el
+          documento asociado, así que la NC se emite siempre desde la factura
+          que corrige. Sin este cartel la pantalla parecía incompleta. */}
+      <p className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+        Una nota de crédito corrige una factura concreta, así que se emite <strong>desde la factura</strong>:
+        abrí <Link href="/facturas" className="font-medium underline">Facturas</Link>, entrá a la factura a
+        corregir y usá <strong>Corrección fiscal / Nota de crédito</strong>. Acá se ven todas las emitidas con
+        su estado en SIFEN.
+      </p>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3">

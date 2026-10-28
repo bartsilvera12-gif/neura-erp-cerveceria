@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   getCategoriasProveedor,
   createCategoriaProveedor,
+  deleteCategoriaProveedor,
   updateCategoriaProveedor,
 } from "@/lib/proveedores/storage";
 import type { ProveedorCategoria } from "@/lib/proveedores/types";
@@ -20,6 +21,7 @@ export default function ProveedorCategoriasPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [borrandoId, setBorrandoId] = useState<string | null>(null);
 
   async function reload() {
     const rows = await getCategoriasProveedor({ todas: true });
@@ -71,6 +73,17 @@ export default function ProveedorCategoriasPage() {
 
   async function toggleActivo(c: ProveedorCategoria) {
     const res = await updateCategoriaProveedor(c.id, { activo: !c.activo });
+    if (!res.ok) setError(res.error);
+    else await reload();
+  }
+
+  async function handleBorrar(c: ProveedorCategoria) {
+    if (borrandoId) return;
+    if (!confirm(`¿Borrar el rubro "${c.nombre}"?`)) return;
+    setBorrandoId(c.id);
+    setError(null);
+    const res = await deleteCategoriaProveedor(c.id);
+    setBorrandoId(null);
     if (!res.ok) setError(res.error);
     else await reload();
   }
@@ -152,10 +165,19 @@ export default function ProveedorCategoriasPage() {
                   <button
                     type="button"
                     onClick={() => toggleActivo(c)}
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      c.activo ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+                    title={c.activo ? "Desactivar este rubro" : "Activar este rubro"}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      c.activo
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        : "border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200"
                     }`}
                   >
+                    <span
+                      aria-hidden
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${
+                        c.activo ? "bg-emerald-500" : "bg-slate-400"
+                      }`}
+                    />
                     {c.activo ? "Sí" : "No"}
                   </button>
                 </td>
@@ -178,13 +200,23 @@ export default function ProveedorCategoriasPage() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => startEdit(c)}
-                      className="text-sky-600 font-medium hover:underline"
-                    >
-                      Editar
-                    </button>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(c)}
+                        className="font-medium text-sky-600 hover:underline"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleBorrar(c)}
+                        disabled={borrandoId === c.id}
+                        className="font-medium text-red-600 hover:underline disabled:opacity-40"
+                      >
+                        {borrandoId === c.id ? "Borrando…" : "Borrar"}
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>

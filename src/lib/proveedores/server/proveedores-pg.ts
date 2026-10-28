@@ -87,6 +87,40 @@ export async function updateProveedorCategoria(
   return rows[0] ?? null;
 }
 
+/**
+ * Borra una categoría de proveedor.
+ *
+ * Se niega si algún proveedor la tiene asignada: borrarla igual dejaría al
+ * proveedor sin la clasificación con la que se lo venía agrupando, y en los
+ * reportes aparecería como "sin categoría" sin que nadie haya decidido eso.
+ * El contador va en el error para que la pantalla pueda decir cuántos son.
+ */
+export async function deleteProveedorCategoria(
+  schemaRaw: string,
+  empresaId: string,
+  id: string
+): Promise<{ ok: true } | { ok: false; enUso: number }> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const t = quoteSchemaTable(schema, "proveedor_categorias");
+  const tRel = quoteSchemaTable(schema, "proveedor_categoria_rel");
+  const p = pool();
+
+  const { rows: uso } = await p.query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM ${tRel}
+      WHERE empresa_id = $1::uuid AND categoria_id = $2::uuid`,
+    [empresaId, id]
+  );
+  const enUso = Number(uso[0]?.n ?? 0);
+  if (enUso > 0) return { ok: false, enUso };
+
+  const { rowCount } = await p.query(
+    `DELETE FROM ${t} WHERE id = $1::uuid AND empresa_id = $2::uuid`,
+    [id, empresaId]
+  );
+  if (!rowCount) return { ok: false, enUso: 0 };
+  return { ok: true };
+}
+
 // ─── Proveedores ──────────────────────────────────────────────────────────
 
 export interface ProveedorRow {

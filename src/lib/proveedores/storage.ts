@@ -138,6 +138,25 @@ export async function createCategoriaProveedor(input: {
   }
 }
 
+/** Borra un rubro de proveedor. El backend se niega si está en uso. */
+export async function deleteCategoriaProveedor(
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetchWithSupabaseSession(
+      `/api/proveedores/categorias/${encodeURIComponent(id)}`,
+      { method: "DELETE" }
+    );
+    const json = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string };
+    if (!res.ok || !json.success) {
+      return { ok: false, error: json.error ?? `Error ${res.status}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de red." };
+  }
+}
+
 export async function updateCategoriaProveedor(
   id: string,
   patch: Partial<{ nombre: string; descripcion: string | null; activo: boolean }>
