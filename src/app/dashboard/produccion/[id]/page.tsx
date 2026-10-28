@@ -9,6 +9,7 @@ import { useRolErp } from "@/lib/auth/use-rol-erp";
 import { puedeEditarRecetas } from "@/lib/roles/erp-role-access";
 import { ETAPA_LABEL, siguienteEtapa } from "@/lib/produccion/lotes-pg";
 
+import NumeroInput from "@/components/ui/NumeroInput";
 type Lote = {
   id: string;
   codigo: string;
@@ -229,12 +230,12 @@ export default function LoteDetallePage() {
               <label className="mb-1 block text-xs font-medium text-orange-900">
                 Litros obtenidos (knockout)
               </label>
-              <input
-                type="number"
-                min="1"
+              <NumeroInput
                 value={volumenKnockout}
-                onChange={(e) => setVolumenKnockout(Number(e.target.value) || 0)}
+                onChange={setVolumenKnockout}
+                min={0}
                 className="w-full rounded-md border border-orange-300 px-3 py-2 text-sm"
+                aria-label="Volumen obtenido en el knockout"
               />
             </div>
             <button
@@ -286,12 +287,13 @@ export default function LoteDetallePage() {
               </div>
               <div className="w-28">
                 <label className="mb-1 block text-xs font-medium text-emerald-900">Cantidad</label>
-                <input
-                  type="number"
-                  min="1"
+                <NumeroInput
                   value={envCantidad}
-                  onChange={(e) => setEnvCantidad(Number(e.target.value) || 0)}
+                  onChange={setEnvCantidad}
+                  min={0}
+                  decimales={false}
                   className="w-full rounded-md border border-emerald-300 px-3 py-2 text-sm"
+                  aria-label="Cantidad a envasar"
                 />
               </div>
               <button

@@ -7,6 +7,7 @@ import { Search, Trash2, Loader2, Plus, ImageIcon } from "lucide-react";
 import ProveedorPicker from "@/components/proveedores/ProveedorPicker";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
+import NumeroInput from "@/components/ui/NumeroInput";
 type ComboHit = {
   id: string; nombre: string; sku: string; precio_venta: number;
   stock_actual: number; controla_stock: boolean; unidad_medida: string; imagen_url: string | null;
@@ -296,16 +297,20 @@ export default function NuevaOrdenCompraPage() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="mx-auto flex w-fit items-center gap-1.5">
-                          <input type="number" min={0} step="any" value={l.cantidad}
-                            onChange={(e) => updateLinea(l.producto_id, { cantidad: Math.max(0, Number(e.target.value) || 0) })}
-                            className="h-8 w-20 rounded-md border border-slate-200 px-2 text-center text-sm tabular-nums" />
+                          <NumeroInput value={l.cantidad}
+                            onChange={(n) => updateLinea(l.producto_id, { cantidad: n })}
+                            min={0}
+                            className="h-8 w-20 rounded-md border border-slate-200 px-2 text-center text-sm tabular-nums"
+                            aria-label={`Cantidad de ${l.producto_nombre}`} />
                           <span className="text-[10px] uppercase text-slate-400">{l.unidad_medida}</span>
                         </div>
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <input type="number" min={0} value={l.costo_input}
-                          onChange={(e) => updateLinea(l.producto_id, { costo_input: Math.max(0, Number(e.target.value) || 0) })}
-                          className="h-8 w-28 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums" />
+                        <NumeroInput value={l.costo_input}
+                          onChange={(n) => updateLinea(l.producto_id, { costo_input: n })}
+                          min={0}
+                          className="h-8 w-28 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums"
+                          aria-label={`Costo de ${l.producto_nombre}`} />
                       </td>
                       <td className="px-3 py-3">
                         <div className="mx-auto inline-flex overflow-hidden rounded-lg border border-slate-200">

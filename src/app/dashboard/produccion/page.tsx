@@ -8,6 +8,7 @@ import { useRolErp } from "@/lib/auth/use-rol-erp";
 import { puedeEditarRecetas } from "@/lib/roles/erp-role-access";
 import { ETAPA_LABEL } from "@/lib/produccion/lotes-pg";
 
+import NumeroInput from "@/components/ui/NumeroInput";
 type Lote = {
   id: string;
   codigo: string;
@@ -235,12 +236,12 @@ export default function ProduccionPage() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">Volumen previsto (L)</label>
-              <input
-                type="number"
-                min="0"
+              <NumeroInput
                 value={volumen}
-                onChange={(e) => setVolumen(Number(e.target.value) || 0)}
+                onChange={setVolumen}
+                min={0}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                aria-label="Volumen previsto en litros"
               />
             </div>
             <div>
@@ -394,12 +395,12 @@ export default function ProduccionPage() {
             </div>
             <div className="w-32">
               <label className="mb-1 block text-xs font-medium text-gray-600">Capacidad (L)</label>
-              <input
-                type="number"
-                min="1"
+              <NumeroInput
                 value={fCapacidad}
-                onChange={(e) => setFCapacidad(Number(e.target.value) || 0)}
+                onChange={setFCapacidad}
+                min={0}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                aria-label="Capacidad del fermentador en litros"
               />
             </div>
             <button

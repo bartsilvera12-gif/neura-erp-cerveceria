@@ -99,17 +99,28 @@ export async function POST(
     // Cuenta por pagar asociada (solo compras a crédito la tienen). Si ya registró
     // pagos, no anulamos automáticamente: el operador debe revertir esos pagos
     // primero para no dejar pagos sin deuda asociada.
+    /**
+     * Se leen TODAS las CxP del numero_control, no una sola. Con `maybeSingle()`
+     * una compra que por cualquier motivo tenía dos filas de cuenta por pagar
+     * hacía fallar la anulación con el error crudo de PostgREST ("multiple rows
+     * returned"), que no le dice nada al operador y no se puede resolver desde
+     * la pantalla.
+     */
     const cxpQ = await sb
       .from("cuentas_por_pagar")
       .select("id, pagado, estado")
       .eq("empresa_id", empresaId)
-      .eq("compra_numero_control", numero)
-      .maybeSingle();
+      .eq("compra_numero_control", numero);
     if (cxpQ.error) {
-      return NextResponse.json(errorResponse(cxpQ.error.message), { status: 400 });
+      console.error("[compras/anular] cuentas_por_pagar", { numero, msg: cxpQ.error.message });
+      return NextResponse.json(
+        errorResponse("No se pudo leer la cuenta por pagar de esta compra."),
+        { status: 400 }
+      );
     }
-    const cxp = cxpQ.data as { id: string; pagado: number | string; estado: string } | null;
-    if (cxp && cxp.estado !== "anulada" && Number(cxp.pagado) > 0) {
+    const cxps = (cxpQ.data ?? []) as Array<{ id: string; pagado: number | string; estado: string }>;
+    const cxpsVivas = cxps.filter((c) => c.estado !== "anulada");
+    if (cxpsVivas.some((c) => Number(c.pagado) > 0)) {
       return NextResponse.json(
         errorResponse(
           "La compra tiene una cuenta por pagar con pagos registrados. Revertí los pagos al proveedor antes de anular la compra."
@@ -192,12 +203,12 @@ export async function POST(
       //    deja de figurar como pendiente y sale del saldo total. saldo=0 + estado
       //    anulada es lo que la UI de Cuentas por pagar usa para ocultarla.
       let cxpAnulada = false;
-      if (cxp && cxp.estado !== "anulada") {
+      if (cxpsVivas.length > 0) {
         const updCxp = await sb
           .from("cuentas_por_pagar")
           .update({ estado: "anulada", saldo: 0, updated_at: nowIso })
           .eq("empresa_id", empresaId)
-          .eq("id", cxp.id);
+          .in("id", cxpsVivas.map((c) => c.id));
         if (updCxp.error) throw new Error(updCxp.error.message);
         cxpAnulada = true;
       }
@@ -230,6 +241,11 @@ export async function POST(
             .eq("empresa_id", empresaId);
         } catch {}
       }
+      // El mensaje crudo de Postgres no le sirve al operador, pero sí al log.
+      console.error("[compras/anular]", {
+        numero,
+        msg: e instanceof Error ? e.message : String(e),
+      });
       const msg = e instanceof Error ? e.message : "Error al anular la compra.";
       return NextResponse.json(errorResponse(msg), { status: 500 });
     }

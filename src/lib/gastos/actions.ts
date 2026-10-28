@@ -159,12 +159,25 @@ export async function deleteGasto(id: string): Promise<void> {
   const supabase = await getBrowserSupabaseForEmpresaData();
   // Antes era .delete().eq("id", id) a secas: podia borrar el gasto de otra
   // empresa o sucursal si se conocia el UUID.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("gastos")
     .delete()
     .eq("empresa_id", await getEmpresaId())
     .eq("sucursal_id", await getSucursalId())
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
 
   if (error) throw new Error(error.message);
+  /**
+   * Un delete que no matchea ninguna fila no es un error para PostgREST, así
+   * que el gasto desaparecía de la lista y volvía al recargar. Pasa con los
+   * gastos viejos cargados antes de multi-sucursal, que quedaron con
+   * `sucursal_id` nulo y no matchean el filtro de la sucursal activa.
+   */
+  if (!data || data.length === 0) {
+    throw new Error(
+      "No se pudo eliminar el gasto: no pertenece a la sucursal activa. " +
+        "Cambiá de sucursal desde el encabezado y volvé a intentar."
+    );
+  }
 }

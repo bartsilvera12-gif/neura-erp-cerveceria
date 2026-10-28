@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { X, AlertTriangle, Loader2, Plus, Trash2, CalendarClock } from "lucide-react";
+import NumeroInput from "@/components/ui/NumeroInput";
 import {
   validarPlanCuotas,
   generarCuotasIguales,
@@ -164,13 +165,13 @@ export default function ProgramarCuotasModal({ tipo, cuentaId, montoTotal, moned
               {/* Atajo dividir en N iguales */}
               <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 p-3">
                 <label className="flex flex-col gap-1 text-xs text-slate-600">Cuotas
-                  <input type="number" min={1} max={60} value={nCuotas} onChange={(e) => setNCuotas(Number(e.target.value) || 1)} className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+                  <NumeroInput value={nCuotas} onChange={setNCuotas} min={1} max={60} fallback={1} decimales={false} className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" aria-label="Cantidad de cuotas" />
                 </label>
                 <label className="flex flex-col gap-1 text-xs text-slate-600">1er vencimiento
                   <input type="date" value={primerVenc} onChange={(e) => setPrimerVenc(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
                 </label>
                 <label className="flex flex-col gap-1 text-xs text-slate-600">Cada (días)
-                  <input type="number" min={1} max={365} value={periodicidad} onChange={(e) => setPeriodicidad(Number(e.target.value) || 30)} className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+                  <NumeroInput value={periodicidad} onChange={setPeriodicidad} min={1} max={365} fallback={30} decimales={false} className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" aria-label="Periodicidad en días" />
                 </label>
                 <button onClick={generarIguales} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Dividir en iguales</button>
               </div>

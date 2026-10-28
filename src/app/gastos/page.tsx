@@ -42,6 +42,7 @@ const metodoPagoBadge: Record<string, { label: string; className: string }> = {
 
 export default function GastosPage() {
   const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [errorAccion, setErrorAccion] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [eliminando, setEliminando] = useState<string | null>(null);
 
@@ -92,11 +93,13 @@ export default function GastosPage() {
   async function handleEliminar(g: Gasto) {
     if (!confirm(`¿Eliminar el gasto "${g.descripcion || g.categoria || "sin descripción"}"?`)) return;
     setEliminando(g.id);
+    setErrorAccion(null);
     try {
       await deleteGasto(g.id);
       setGastos((prev) => prev.filter((x) => x.id !== g.id));
-    } catch {
-      setEliminando(null);
+    } catch (e) {
+      // El catch vacío dejaba al usuario sin saber por qué no se borraba.
+      setErrorAccion(e instanceof Error ? e.message : "No se pudo eliminar el gasto.");
     } finally {
       setEliminando(null);
     }
@@ -104,6 +107,11 @@ export default function GastosPage() {
 
   return (
     <div className="space-y-6">
+      {errorAccion && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {errorAccion}
+        </p>
+      )}
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">

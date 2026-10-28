@@ -12,6 +12,7 @@ import SearchableSelect from "@/components/ui/SearchableSelect";
 import { useRolErp } from "@/lib/auth/use-rol-erp";
 import { puedeEditarRecetas } from "@/lib/roles/erp-role-access";
 
+import NumeroInput from "@/components/ui/NumeroInput";
 /** Reserva monocliente: receta pertenece al producto; nombre interno oculto (autogenera). */
 const RECETA_SIMPLE = NEURA_CLIENT_SCHEMA === "cerveceriaerp";
 
@@ -66,6 +67,7 @@ type Costeo = {
   formatos: FormatoCosteo[];
   items: Array<{
     item_id: string;
+    insumo_producto_id: string;
     insumo_nombre: string;
     cantidad: number;
     unidad_medida: string | null;
@@ -199,6 +201,22 @@ export default function EditarRecetaPage() {
     })();
   }, [refresh]);
 
+  /**
+   * Unidad en la que se controla cada insumo en el inventario.
+   *
+   * `costo_promedio` y `stock_actual` vienen del producto, así que están en SU
+   * unidad (KG), no en la unidad de consumo de la receta (G). La tabla los
+   * etiquetaba con la unidad del ítem y mostraba "Gs. 20.000/G" para una harina
+   * que cuesta 20.000/KG: con ese cartel es imposible darse cuenta de si el
+   * costo se cargó por kilo o por gramo, que es justo lo que hace que el
+   * subcosto salga mil veces más grande.
+   */
+  const unidadDeInsumo = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const p of insumos) m.set(p.id, p.unidad_medida ?? null);
+    return m;
+  }, [insumos]);
+
   const insumosDisponibles = useMemo(() => {
     const usados = new Set(items.map((i) => i.insumo_producto_id));
     return insumos.filter((p) => !usados.has(p.id));
@@ -243,7 +261,10 @@ export default function EditarRecetaPage() {
   }
 
   async function addItem() {
-    if (!newInsumoId || newCantidad <= 0) return;
+    if (addingItem) return;
+    if (!newInsumoId) return setError("Elegí la materia prima que querés agregar.");
+    if (!(newCantidad > 0)) return setError("Indicá la cantidad usada (mayor a 0).");
+    setError(null);
     // Validar compatibilidad de unidad con el insumo (no inventamos densidades).
     const insumoSel = insumosDisponibles.find((x) => x.id === newInsumoId);
     const unidadInsumo = insumoSel?.unidad_medida ?? null;
@@ -739,13 +760,12 @@ export default function EditarRecetaPage() {
               </div>
               <div className="w-28">
                 <label className="mb-1 block text-xs font-medium text-gray-600">Capacidad</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
+                <NumeroInput
                   value={fmtCapacidad}
-                  onChange={(e) => setFmtCapacidad(Number(e.target.value) || 0)}
+                  onChange={setFmtCapacidad}
+                  min={0}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  aria-label="Capacidad del formato"
                 />
               </div>
               <div className="w-28">
@@ -828,13 +848,13 @@ export default function EditarRecetaPage() {
           )}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Rendimiento (cantidad)</label>
-            <input
-              type="number"
-              step="1"
-              min="0.01"
+            <NumeroInput
               value={receta.rendimiento_cantidad}
-              onChange={(e) => setReceta({ ...receta, rendimiento_cantidad: Number(e.target.value) || 1 })}
+              onChange={(n) => setReceta({ ...receta, rendimiento_cantidad: n })}
+              min={0}
+              fallback={1}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              aria-label="Rendimiento (cantidad)"
             />
             <p className="mt-1 text-[11px] text-gray-400">¿Cuántas unidades produce?</p>
           </div>
@@ -906,6 +926,12 @@ export default function EditarRecetaPage() {
           y la <b>merma %</b> (desperdicio). La merma aumenta el consumo real del insumo. El costo se calcula con el
           costo promedio de cada insumo; las <b>unidades posibles</b> salen del stock disponible de materia prima.
         </p>
+        <p className="mb-3 text-xs text-gray-500">
+          El <b>costo/u. insumo</b> y el <b>stock</b> están en la unidad con la que se controla el insumo en
+          Inventario, que puede no ser la unidad de consumo de la receta. Si el subcosto sale mil veces más
+          grande de lo esperado, casi siempre es que el costo del insumo se cargó por kilo en un producto que
+          se controla en gramos (o al revés): se corrige en Inventario, no acá.
+        </p>
 
         {items.length === 0 && (
           <div className="text-sm text-gray-500 mb-3">
@@ -926,6 +952,7 @@ export default function EditarRecetaPage() {
                 <th className="py-2 hidden md:table-cell">U. consumo</th>
                 <th className="py-2 hidden lg:table-cell">Merma</th>
                 <th className="py-2 hidden md:table-cell">Costo/u. insumo</th>
+                <th className="py-2 hidden xl:table-cell">Consumo real</th>
                 <th className="py-2">Subcosto</th>
                 <th className="py-2 hidden lg:table-cell">Stock</th>
                 <th className="py-2 hidden lg:table-cell">Alcanza para</th>
@@ -939,13 +966,30 @@ export default function EditarRecetaPage() {
                   <td className="py-2 tabular-nums">{Number(row.cantidad).toLocaleString("es-PY")} <span className="text-xs text-gray-400">{formatUnidad(row.unidad_medida)}</span></td>
                   <td className="py-2 text-gray-600 hidden md:table-cell">{formatUnidad(row.unidad_medida) || "—"}</td>
                   <td className="py-2 text-gray-600 hidden lg:table-cell">{(row.merma_pct * 100).toFixed(0)}%</td>
-                  <td className="py-2 hidden md:table-cell">{fmtGs(row.costo_promedio)}<span className="text-[10px] text-gray-400">/{formatUnidad(row.unidad_medida) || "u"}</span></td>
+                  <td className="py-2 hidden md:table-cell">
+                    {fmtGs(row.costo_promedio)}
+                    <span className="text-[10px] text-gray-400">
+                      /{formatUnidad(unidadDeInsumo.get(row.insumo_producto_id) ?? "") || "u"}
+                    </span>
+                  </td>
+                  {/* Cuánto insumo se consume de verdad, en la unidad del insumo:
+                      es el número que multiplica al costo para dar el subcosto. */}
+                  <td className="py-2 hidden xl:table-cell tabular-nums text-gray-600">
+                    {row.unidad_incompatible || row.costo_promedio <= 0
+                      ? "—"
+                      : `${(row.subcosto / row.costo_promedio).toLocaleString("es-PY", { maximumFractionDigits: 4 })} ${formatUnidad(unidadDeInsumo.get(row.insumo_producto_id) ?? "") || ""}`.trim()}
+                  </td>
                   <td className="py-2 tabular-nums">
                     {row.unidad_incompatible
                       ? <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium px-2 py-0.5" title="La unidad del ítem no es compatible con la del insumo; no se cuenta en el costo."><AlertTriangle className="mr-1 h-2.5 w-2.5" aria-hidden />Unidad incompatible</span>
                       : fmtGs(row.subcosto)}
                   </td>
-                  <td className="py-2 text-gray-600 hidden lg:table-cell tabular-nums">{Number(row.stock_actual).toLocaleString("es-PY")} <span className="text-xs text-gray-400">{formatUnidad(row.unidad_medida)}</span></td>
+                  <td className="py-2 text-gray-600 hidden lg:table-cell tabular-nums">
+                    {Number(row.stock_actual).toLocaleString("es-PY")}{" "}
+                    <span className="text-xs text-gray-400">
+                      {formatUnidad(unidadDeInsumo.get(row.insumo_producto_id) ?? "")}
+                    </span>
+                  </td>
                   <td className="py-2 hidden lg:table-cell tabular-nums">
                     {row.unidades_aporte == null ? "—" : `${Math.floor(row.unidades_aporte * (receta.rendimiento_cantidad || 1)).toLocaleString("es-PY")} u.`}
                   </td>
@@ -1003,14 +1047,14 @@ export default function EditarRecetaPage() {
               </div>
               <div>
                 <label className="block text-[11px] text-gray-500 mb-1">Cantidad usada</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
+                <NumeroInput
                   value={newCantidad}
-                  onChange={(e) => setNewCantidad(Number(e.target.value))}
+                  onChange={setNewCantidad}
+                  min={0}
+                  fallback={1}
                   placeholder="Ej: 1500"
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  aria-label="Cantidad usada del insumo"
                 />
               </div>
               <div>
@@ -1027,15 +1071,15 @@ export default function EditarRecetaPage() {
               </div>
               <div>
                 <label className="block text-[11px] text-gray-500 mb-1">Merma %</label>
-                <input
-                  type="number"
-                  step="1"
-                  min="0"
-                  max="99"
+                <NumeroInput
                   value={Math.round(newMerma * 100)}
-                  onChange={(e) => setNewMerma(Math.min(0.99, Math.max(0, (Number(e.target.value) || 0) / 100)))}
+                  onChange={(n) => setNewMerma(Math.min(0.99, Math.max(0, n / 100)))}
+                  min={0}
+                  max={99}
+                  decimales={false}
                   placeholder="Ej: 5"
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  aria-label="Merma del insumo en porcentaje"
                 />
               </div>
               <p className="md:col-span-5 -mt-1 text-[11px] text-gray-400">
@@ -1105,13 +1149,12 @@ export default function EditarRecetaPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Cantidad a fabricar</label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0.01"
+                  <NumeroInput
                     value={fabCantidad}
-                    onChange={(e) => setFabCantidad(Number(e.target.value) || 0)}
+                    onChange={setFabCantidad}
+                    min={0}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    aria-label="Cantidad a fabricar"
                   />
                   <p className="mt-1 text-[11px] text-gray-400">
                     Unidades del producto terminado a producir.
