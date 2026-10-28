@@ -13,6 +13,7 @@ Ejecutar con un rol administrador (`postgres` / `supabase_admin`).
 | 6 | `06_recetas_precio_y_formatos.sql` | Precio en Recetas: merma de proceso, formatos de venta y precio sugerido por margen objetivo. |
 | 7 | `07_receta_coven_blonde_ale.sql` | Carga la receta COVEN Blonde Ale 500 L con sus insumos y formatos. |
 | 8 | `08_produccion_lotes_fermentadores.sql` | Producción por lotes: fermentadores, etapas, envasado y trazabilidad. Activa el módulo **Producción**. |
+| 9 | `09_bar_presentaciones.sql` | Chop, botella y litro en el Bar: vender uno descuenta sus litros del granel. |
 
 El paso 4 crea la **ficha** de cada usuario en el ERP; el **login** lo crean el
 3 (para el dueño) y el 5 (para los dos operativos). Sin el login, el usuario

@@ -226,6 +226,46 @@ CREATE INDEX IF NOT EXISTS idx_movimientos_lote
 COMMENT ON COLUMN cerveceriaerp.movimientos_inventario.lote_id IS
   'Lote que originó el movimiento. Permite seguir un lote desde el cocimiento hasta el despacho.';
 
+-- El envasado es un origen de movimiento nuevo. Sin esto el CHECK existente lo
+-- rechaza y el envasado falla al escribir el movimiento.
+-- Se reconstruye la lista completa en vez de agregar un CHECK aparte: dos
+-- constraints sobre la misma columna son mucho más difíciles de leer después.
+DO $orig$
+DECLARE v_def text;
+BEGIN
+  SELECT pg_get_constraintdef(con.oid) INTO v_def
+    FROM pg_constraint con
+    JOIN pg_class c ON c.oid = con.conrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'cerveceriaerp'
+     AND c.relname = 'movimientos_inventario'
+     AND con.conname = 'movimientos_inventario_origen_check';
+
+  IF v_def IS NULL THEN
+    RAISE NOTICE 'No hay CHECK de origen en movimientos_inventario; no se toca nada.';
+    RETURN;
+  END IF;
+
+  IF position('''envasado''' IN v_def) > 0 THEN
+    RAISE NOTICE 'El origen "envasado" ya estaba permitido.';
+    RETURN;
+  END IF;
+
+  ALTER TABLE cerveceriaerp.movimientos_inventario
+    DROP CONSTRAINT movimientos_inventario_origen_check;
+  ALTER TABLE cerveceriaerp.movimientos_inventario
+    ADD CONSTRAINT movimientos_inventario_origen_check CHECK (
+      origen = ANY (ARRAY[
+        'compra','venta','ajuste_manual','inventario_inicial',
+        'anulacion_venta','anulacion_compra','produccion',
+        'transferencia_salida','transferencia_entrada',
+        'nota_credito_compra','envasado'
+      ])
+    );
+  RAISE NOTICE 'Origen "envasado" agregado a movimientos_inventario.';
+END
+$orig$;
+
 -- ---------------------------------------------------------------------------
 -- 7. Privilegios, copiados de `recetas` para que PostgREST las exponga igual
 -- ---------------------------------------------------------------------------
