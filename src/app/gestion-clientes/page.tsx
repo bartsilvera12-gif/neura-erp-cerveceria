@@ -566,7 +566,7 @@ function ClienteBusquedaGlobal({
 
       {open && (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-          <div className="max-h-64 overflow-y-auto overscroll-y-contain">
+          <div className="max-h-[60vh] overflow-y-auto overscroll-y-contain">
             {resultados.length === 0 ? (
               <div className="px-4 py-8 text-center text-xs text-slate-400">
                 {query.trim() ? <>Sin resultados para &ldquo;{query.trim()}&rdquo;</> : <>Sin clientes cargados</>}
@@ -805,7 +805,7 @@ function GestionClientesPageInner() {
       </header>
 
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm ring-1 ring-slate-900/[0.03]"
+        className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-white shadow-sm ring-1 ring-slate-900/[0.03]"
         style={{ minHeight: "min(560px, calc(100dvh - 10.5rem))" }}
       >
         {selected === null ? (
@@ -826,7 +826,7 @@ function GestionClientesPageInner() {
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="shrink-0 border-b border-slate-200/80 bg-slate-50/70">
+            <div className="shrink-0 rounded-t-xl border-b border-slate-200/80 bg-slate-50/70">
               <div className="flex flex-wrap items-center gap-2 px-3 py-2 sm:px-4">
                 <ClienteBusquedaGlobal
                   variant="toolbar"

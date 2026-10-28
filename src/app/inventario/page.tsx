@@ -442,7 +442,9 @@ export default function InventarioPage() {
                     <span title="(precio - costo) / precio × 100">Margen s/venta</span>
                   </th>
                 )}
-                <th className="py-3 pl-4 font-medium text-center w-28">Acción</th>
+                <th className="w-32 border-l border-slate-200 px-4 py-3 text-center font-medium">
+                  Acción
+                </th>
               </tr>
             </thead>
 
@@ -497,7 +499,7 @@ export default function InventarioPage() {
                         {margen.toFixed(2)}%
                       </td>
                     )}
-                    <td className="py-4 pl-4 text-center">
+                    <td className="border-l border-slate-100 px-4 py-4 text-center">
                       <Link
                         href={`/inventario/${p.id}/editar`}
                         className="inline-flex items-center justify-center min-h-[40px] rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"

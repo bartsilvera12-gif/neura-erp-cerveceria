@@ -881,6 +881,26 @@ export default function NuevaVentaPage() {
     await enviarVenta(false);
   }
 
+  /**
+   * Deja la pantalla lista para la venta siguiente. Se llama al cerrar el aviso
+   * post-venta: el carrito no se vacía al registrar, así que quedarse acá con
+   * los mismos ítems cargados habilita vender dos veces lo mismo.
+   */
+  function reiniciarVenta() {
+    setPostVenta(null);
+    setItems([]);
+    setErrorVenta(null);
+    setErrorLinea(null);
+    setFaltantes([]);
+    setMontoRecibido("");
+    setMetodoPago("efectivo");
+    setPagoReferencia("");
+    setPagoTitular("");
+    setComboQuery("");
+    setComboOpen(false);
+    setTimeout(() => comboInputRef.current?.focus(), 0);
+  }
+
   async function confirmarVentaSinStock() {
     setConfirmSinStockOpen(false);
     setErrorVenta(null);
@@ -1557,7 +1577,18 @@ export default function NuevaVentaPage() {
       {/* Panel post-venta: abrir ticket y (si aplica) nota de remisión */}
       {postVenta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl space-y-4 text-center">
+          <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl space-y-4 text-center">
+            {/* Sin esta X el cuadro no se podía cerrar: la única salida era
+                "Ir a ventas", que saca al cajero del mostrador. */}
+            <button
+              type="button"
+              onClick={reiniciarVenta}
+              aria-label="Cerrar"
+              title="Cerrar y cargar otra venta"
+              className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
             <CheckCircle2 className="h-9 w-9 text-emerald-600" aria-hidden />
             <div>
               <h3 className="text-base font-semibold text-slate-800">Venta {postVenta.numero} registrada</h3>
@@ -1630,6 +1661,13 @@ export default function NuevaVentaPage() {
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
               >
                 Ir a ventas
+              </button>
+              <button
+                type="button"
+                onClick={reiniciarVenta}
+                className="rounded-lg border border-slate-300 bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
+              >
+                Cargar otra venta
               </button>
             </div>
           </div>

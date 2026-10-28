@@ -560,24 +560,71 @@ export async function getNotasCliente(clienteId: string): Promise<NotaCliente[]>
   return parseNotas((data as { notas: unknown }).notas);
 }
 
+/**
+ * Guarda el array completo de notas del cliente.
+ *
+ * Las notas viven en una columna `jsonb` del cliente, así que cualquier cambio
+ * reescribe la lista entera. Centralizarlo acá evita que cada operación repita
+ * el update (y se olvide de `updated_at`, como pasaba).
+ */
+async function guardarNotasCliente(clienteId: string, notas: NotaCliente[]): Promise<void> {
+  const supabase = await getBrowserSupabaseForEmpresaData();
+  const { error } = await supabase
+    .from("clientes")
+    .update({ notas, updated_at: new Date().toISOString() })
+    .eq("id", clienteId);
+  if (error) throw new Error(error.message);
+}
+
 /** Añade una nota al cliente y persiste en Supabase. */
 export async function addNotaCliente(clienteId: string, texto: string): Promise<NotaCliente> {
-  const supabase = await getBrowserSupabaseForEmpresaData();
   const notas = await getNotasCliente(clienteId);
+  /**
+   * El id era `Date.now()` a secas: dos notas creadas en el mismo milisegundo
+   * compartían id, y editar o borrar una tocaba las dos. Se busca el siguiente
+   * libre sobre los que ya existen.
+   */
+  const maxId = notas.reduce((m, n) => Math.max(m, Number(n.id) || 0), 0);
   const nota: NotaCliente = {
-    id:    Date.now(),
+    id:    Math.max(Date.now(), maxId + 1),
     texto: texto.trim(),
     fecha: new Date().toISOString(),
   };
-  const nuevas = [...notas, nota];
-
-  const { error } = await supabase
-    .from("clientes")
-    .update({ notas: nuevas, updated_at: new Date().toISOString() })
-    .eq("id", clienteId);
-
-  if (error) console.error("[clientes] addNotaCliente:", error.message);
+  await guardarNotasCliente(clienteId, [...notas, nota]);
   return nota;
+}
+
+/** Reescribe el texto de una nota. Devuelve la lista resultante. */
+export async function updateNotaCliente(
+  clienteId: string,
+  notaId: number,
+  texto: string
+): Promise<NotaCliente[]> {
+  const limpio = texto.trim();
+  if (!limpio) throw new Error("La nota no puede quedar vacía.");
+  const notas = await getNotasCliente(clienteId);
+  if (!notas.some((n) => Number(n.id) === Number(notaId))) {
+    throw new Error("La nota ya no existe. Recargá la ficha del cliente.");
+  }
+  const nuevas = notas.map((n) =>
+    Number(n.id) === Number(notaId) ? { ...n, texto: limpio } : n
+  );
+  await guardarNotasCliente(clienteId, nuevas);
+  return nuevas;
+}
+
+/** Borra una nota. Devuelve la lista resultante. */
+export async function deleteNotaCliente(
+  clienteId: string,
+  notaId: number
+): Promise<NotaCliente[]> {
+  const notas = await getNotasCliente(clienteId);
+  const nuevas = notas.filter((n) => Number(n.id) !== Number(notaId));
+  if (nuevas.length === notas.length) {
+    throw new Error("La nota ya no existe. Recargá la ficha del cliente.");
+  }
+  await guardarNotasCliente(clienteId, nuevas);
+  return nuevas;
 }
 
 export async function toggleEstado(id: string, estado: EstadoCliente): Promise<void> {
