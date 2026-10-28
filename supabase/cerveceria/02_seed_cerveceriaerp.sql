@@ -39,6 +39,7 @@ DECLARE
   v_cols text := '';
   v_vals text := '';
   v_val  text;
+  v_unknown text;
 BEGIN
   FOR r IN
     SELECT a.attname,
@@ -91,6 +92,20 @@ BEGIN
     v_cols := v_cols || CASE WHEN v_cols = '' THEN '' ELSE ', ' END || quote_ident(r.attname);
     v_vals := v_vals || CASE WHEN v_vals = '' THEN '' ELSE ', ' END || v_val;
   END LOOP;
+
+  -- Una clave de `p_over` que no sea columna de la tabla sería un valor perdido
+  -- en silencio (p. ej. 'nombre' donde la columna se llama 'nombre_empresa').
+  SELECT string_agg(k, ', ') INTO v_unknown
+    FROM jsonb_object_keys(p_over) AS k
+   WHERE NOT EXISTS (
+     SELECT 1 FROM pg_attribute a
+       JOIN pg_class c ON c.oid = a.attrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = p_schema AND c.relname = p_table
+        AND a.attname = k AND a.attnum > 0 AND NOT a.attisdropped);
+  IF v_unknown IS NOT NULL THEN
+    RAISE EXCEPTION '%.% no tiene la(s) columna(s): %', p_schema, p_table, v_unknown;
+  END IF;
 
   EXECUTE format('INSERT INTO %I.%I (%s) VALUES (%s)', p_schema, p_table, v_cols, v_vals);
 END
@@ -147,7 +162,7 @@ BEGIN
   -- ---------------------------------------------------------------------------
   IF NOT EXISTS (SELECT 1 FROM cerveceriaerp.empresas WHERE id = v_empresa) THEN
     PERFORM pg_temp.neura_insert_min(tgt, 'empresas',
-      jsonb_build_object('id', v_empresa::text, 'nombre', 'Cervecería'));
+      jsonb_build_object('id', v_empresa::text, 'nombre_empresa', 'Cervecería'));
   END IF;
 
   -- ---------------------------------------------------------------------------
@@ -222,7 +237,7 @@ COMMIT;
 -- =============================================================================
 -- Verificación
 -- =============================================================================
-SELECT e.id AS empresa_id, e.nombre AS empresa,
+SELECT e.id AS empresa_id, e.nombre_empresa AS empresa,
        (SELECT count(*) FROM cerveceriaerp.sucursales s WHERE s.empresa_id = e.id) AS sucursales,
        (SELECT count(*) FROM cerveceriaerp.empresa_modulos em WHERE em.empresa_id = e.id AND em.activo) AS modulos_activos,
        (SELECT count(*) FROM cerveceriaerp.usuarios u WHERE u.empresa_id = e.id) AS usuarios
