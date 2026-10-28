@@ -7,6 +7,8 @@ export type RecetaRow = {
   nombre: string | null;
   rendimiento_cantidad: number;
   rendimiento_unidad: string | null;
+  /** Fracción del rendimiento que se pierde en el proceso (0,06 = 6 %). */
+  merma_proceso_pct: number;
   notas: string | null;
   activa: boolean;
   created_at: string;
@@ -24,6 +26,38 @@ export type RecetaItemRow = {
   orden: number;
 };
 
+/** Formato de venta de una receta: barril 30 L, botella 500 ml, etc. */
+export type RecetaFormatoRow = {
+  id: string;
+  receta_id: string;
+  empresa_id: string;
+  sucursal_id: string;
+  producto_id: string;
+  capacidad: number;
+  capacidad_unidad: string;
+  orden: number;
+};
+
+/** Un formato, ya costeado por `fn_receta_costeo`. */
+export type RecetaFormatoCosteo = {
+  formato_id: string;
+  producto_id: string;
+  producto_nombre: string;
+  capacidad: number;
+  capacidad_unidad: string;
+  orden: number;
+  /** La capacidad no es convertible a la unidad de rendimiento (p. ej. kg contra litros). */
+  unidad_incompatible: boolean;
+  capacidad_en_rendimiento: number | null;
+  unidades_por_lote: number | null;
+  costo_unitario: number | null;
+  precio_venta: number;
+  margen_objetivo_pct: number | null;
+  /** Precio que daría el margen objetivo. `null` si el producto no tiene uno. */
+  precio_sugerido: number | null;
+  margen_pct: number | null;
+};
+
 export type RecetaCosteo = {
   receta_id: string;
   producto_id: string;
@@ -34,6 +68,14 @@ export type RecetaCosteo = {
   margen_abs: number;
   margen_pct: number | null;
   unidades_posibles: number | null;
+  /** Fracción perdida en el proceso (0,06 = 6 %). */
+  merma_proceso_pct: number;
+  rendimiento_unidad: string | null;
+  /** Rendimiento neto de merma: lo que realmente se envasa. */
+  rendimiento_envasable: number;
+  /** Costo por unidad de rendimiento ENVASABLE. Es el que vale para fijar precios. */
+  costo_unitario_envasable: number | null;
+  formatos: RecetaFormatoCosteo[];
   items: Array<{
     item_id: string;
     insumo_producto_id: string;
@@ -253,4 +295,119 @@ export async function listProductos(
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   return data ?? [];
+}
+
+/**
+ * Formatos de venta de una receta, con el nombre y precio del producto.
+ * Para los números costeados usar `getRecetaCosteo`, que es la fuente única.
+ */
+export async function listRecetaFormatos(sb: AppSupabaseClient, recetaId: string) {
+  const { data, error } = await sb
+    .from("receta_formatos")
+    .select("id, receta_id, empresa_id, sucursal_id, producto_id, capacidad, capacidad_unidad, orden, productos(nombre, sku, precio_venta, margen_objetivo_pct)")
+    .eq("receta_id", recetaId)
+    .order("orden", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r: Record<string, unknown>) => {
+    const prod = r.productos as
+      | { nombre?: string; sku?: string; precio_venta?: number; margen_objetivo_pct?: number | null }
+      | null;
+    return {
+      ...(r as unknown as RecetaFormatoRow),
+      producto_nombre: prod?.nombre ?? null,
+      producto_sku: prod?.sku ?? null,
+      precio_venta: prod?.precio_venta ?? 0,
+      margen_objetivo_pct: prod?.margen_objetivo_pct ?? null,
+    };
+  });
+}
+
+export async function insertRecetaFormato(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  sucursalId: string,
+  recetaId: string,
+  input: {
+    producto_id: string;
+    capacidad: number;
+    capacidad_unidad: string;
+    orden?: number;
+  }
+) {
+  const { data, error } = await sb
+    .from("receta_formatos")
+    .insert({
+      empresa_id: empresaId,
+      sucursal_id: sucursalId,
+      receta_id: recetaId,
+      producto_id: input.producto_id,
+      capacidad: input.capacidad,
+      capacidad_unidad: input.capacidad_unidad,
+      orden: input.orden ?? 0,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as RecetaFormatoRow;
+}
+
+export async function updateRecetaFormato(
+  sb: AppSupabaseClient,
+  formatoId: string,
+  patch: Partial<{ capacidad: number; capacidad_unidad: string; orden: number }>
+) {
+  const { data, error } = await sb
+    .from("receta_formatos")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", formatoId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as RecetaFormatoRow;
+}
+
+export async function deleteRecetaFormato(sb: AppSupabaseClient, formatoId: string) {
+  const { error } = await sb.from("receta_formatos").delete().eq("id", formatoId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Margen objetivo del producto, del que sale el precio sugerido.
+ *
+ * Vive en `productos` y no en el formato: el objetivo es del producto que se
+ * vende, y si mañana se fabrica con otra receta el margen sigue siendo el
+ * mismo. Se edita desde la receta porque es ahí donde se ve el costo.
+ */
+export async function updateMargenObjetivo(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  productoId: string,
+  margenObjetivoPct: number | null
+) {
+  const { error } = await sb
+    .from("productos")
+    .update({ margen_objetivo_pct: margenObjetivoPct })
+    .eq("empresa_id", empresaId)
+    .eq("id", productoId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Fija el precio de venta del producto de un formato.
+ *
+ * Existe para cerrar el circuito dentro de la receta: ver el costo, definir el
+ * margen y aplicar el precio sin ir a Inventario y volver.
+ */
+export async function updatePrecioVenta(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  productoId: string,
+  precioVenta: number
+) {
+  const { error } = await sb
+    .from("productos")
+    .update({ precio_venta: precioVenta })
+    .eq("empresa_id", empresaId)
+    .eq("id", productoId);
+  if (error) throw new Error(error.message);
 }

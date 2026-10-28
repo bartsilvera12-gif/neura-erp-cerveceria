@@ -47,6 +47,15 @@ export async function PATCH(request: NextRequest, { params }: RouteCtx) {
       patch.rendimiento_cantidad = body.rendimiento_cantidad;
     if (typeof body.rendimiento_unidad === "string" || body.rendimiento_unidad === null)
       patch.rendimiento_unidad = body.rendimiento_unidad;
+    if (typeof body.merma_proceso_pct === "number") {
+      if (body.merma_proceso_pct < 0 || body.merma_proceso_pct >= 1) {
+        return NextResponse.json(
+          errorResponse("La merma de proceso va entre 0 y 0,99 (0,06 = 6 %)."),
+          { status: 400 }
+        );
+      }
+      patch.merma_proceso_pct = body.merma_proceso_pct;
+    }
     if (typeof body.notas === "string" || body.notas === null) patch.notas = body.notas;
     if (typeof body.activa === "boolean") patch.activa = body.activa;
     const row = await updateReceta(ctx.supabase, ctx.auth.empresa_id, id, patch);

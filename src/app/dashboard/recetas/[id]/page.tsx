@@ -22,6 +22,7 @@ type Receta = {
   producto_nombre: string | null;
   rendimiento_cantidad: number;
   rendimiento_unidad: string | null;
+  merma_proceso_pct: number;
   notas: string | null;
   activa: boolean;
 };
@@ -36,6 +37,21 @@ type Item = {
   merma_pct: number;
   orden: number;
 };
+/** Un formato de venta ya costeado por `fn_receta_costeo`. */
+type FormatoCosteo = {
+  formato_id: string;
+  producto_id: string;
+  producto_nombre: string;
+  capacidad: number;
+  capacidad_unidad: string;
+  unidad_incompatible: boolean;
+  unidades_por_lote: number | null;
+  costo_unitario: number | null;
+  precio_venta: number;
+  margen_objetivo_pct: number | null;
+  precio_sugerido: number | null;
+  margen_pct: number | null;
+};
 type Costeo = {
   costo_total: number;
   costo_unitario: number | null;
@@ -43,6 +59,11 @@ type Costeo = {
   margen_abs: number;
   margen_pct: number | null;
   unidades_posibles: number | null;
+  merma_proceso_pct: number;
+  rendimiento_unidad: string | null;
+  rendimiento_envasable: number;
+  costo_unitario_envasable: number | null;
+  formatos: FormatoCosteo[];
   items: Array<{
     item_id: string;
     insumo_nombre: string;
@@ -125,6 +146,14 @@ export default function EditarRecetaPage() {
   const [newMerma, setNewMerma] = useState<number>(0);
   const [addingItem, setAddingItem] = useState(false);
 
+  // Formatos de venta: productos vendibles a los que se reparte el lote.
+  const [vendibles, setVendibles] = useState<Producto[]>([]);
+  const [fmtProductoId, setFmtProductoId] = useState("");
+  const [fmtCapacidad, setFmtCapacidad] = useState<number>(1);
+  const [fmtUnidad, setFmtUnidad] = useState("L");
+  const [fmtBusy, setFmtBusy] = useState<string | null>(null);
+  const [fmtError, setFmtError] = useState<string | null>(null);
+
   // Fabricación (producción)
   const [fabOpen, setFabOpen] = useState(false);
   const [fabCantidad, setFabCantidad] = useState<number>(1);
@@ -136,9 +165,10 @@ export default function EditarRecetaPage() {
   const [fabOk, setFabOk] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [recRes, prodRes] = await Promise.all([
+    const [recRes, prodRes, vendRes] = await Promise.all([
       fetchWithSupabaseSession(`/api/recetas/${id}`, { cache: "no-store" }),
       fetchWithSupabaseSession(`/api/recetas/productos?filtro=insumos`, { cache: "no-store" }),
+      fetchWithSupabaseSession(`/api/recetas/productos?filtro=vendibles`, { cache: "no-store" }),
     ]);
     const recBody = await recRes.json();
     const prodBody = await prodRes.json();
@@ -151,6 +181,10 @@ export default function EditarRecetaPage() {
     setCosteo(recBody.data.costeo ?? null);
     if (prodRes.ok && prodBody?.success) {
       setInsumos((prodBody.data.productos ?? []) as Producto[]);
+    }
+    if (vendRes.ok) {
+      const vendBody = await vendRes.json();
+      if (vendBody?.success) setVendibles((vendBody.data.productos ?? []) as Producto[]);
     }
   }, [id]);
 
@@ -190,6 +224,7 @@ export default function EditarRecetaPage() {
           nombre: receta.nombre,
           rendimiento_cantidad: receta.rendimiento_cantidad,
           rendimiento_unidad: receta.rendimiento_unidad,
+          merma_proceso_pct: receta.merma_proceso_pct ?? 0,
           notas: receta.notas,
           activa: receta.activa,
         }),
@@ -371,6 +406,40 @@ export default function EditarRecetaPage() {
     }
   }
 
+  /**
+   * Toda acción sobre formatos recarga el costeo: el precio sugerido depende
+   * del costo, del margen y de la merma, y mostrar un número viejo al lado de
+   * uno nuevo es peor que esperar el refresco.
+   */
+  async function formatoRequest(
+    url: string,
+    init: RequestInit,
+    key: string,
+    errorMsg: string
+  ) {
+    if (fmtBusy) return;
+    setFmtError(null);
+    setFmtBusy(key);
+    try {
+      const res = await fetchWithSupabaseSession(url, init);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body?.success === false) {
+        setFmtError(body?.error ?? errorMsg);
+        return;
+      }
+      await refresh();
+    } catch {
+      setFmtError("Error de red.");
+    } finally {
+      setFmtBusy(null);
+    }
+  }
+
+  const formatos = costeo?.formatos ?? [];
+  const vendiblesDisponibles = vendibles.filter(
+    (p) => !formatos.some((f) => f.producto_id === p.id)
+  );
+
   if (loading) {
     return (
       <div className="p-6 flex items-center gap-2 text-sm text-gray-500">
@@ -430,7 +499,7 @@ export default function EditarRecetaPage() {
 
       {/* Costeo summary */}
       {costeo && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 gap-3 mb-6 md:grid-cols-3 xl:grid-cols-5">
           <div className="rounded-md bg-white border border-gray-200 p-4">
             <div className="text-xs text-gray-500 uppercase">Costo total receta</div>
             <div className="text-lg font-semibold text-gray-900">{fmtGs(costeo.costo_total)}</div>
@@ -439,6 +508,17 @@ export default function EditarRecetaPage() {
             <div className="text-xs text-gray-500 uppercase">Costo unitario</div>
             <div className="text-lg font-semibold text-gray-900">{fmtGs(costeo.costo_unitario)}</div>
             <div className="text-xs text-gray-500">costo total / rendimiento</div>
+          </div>
+          <div className="rounded-md bg-white border border-gray-200 p-4">
+            <div className="text-xs text-gray-500 uppercase">Costo real por unidad</div>
+            <div className="text-lg font-semibold text-gray-900">
+              {fmtGs(costeo.costo_unitario_envasable)}
+            </div>
+            <div className="text-xs text-gray-500">
+              {(costeo.merma_proceso_pct ?? 0) > 0
+                ? `sobre ${fmtNum(costeo.rendimiento_envasable)} ${formatUnidad(costeo.rendimiento_unidad ?? "") || ""} envasables (merma ${Number((costeo.merma_proceso_pct * 100).toFixed(1))}%)`
+                : "sin merma de proceso cargada"}
+            </div>
           </div>
           <div className="rounded-md bg-white border border-gray-200 p-4">
             <div className="text-xs text-gray-500 uppercase">Margen</div>
@@ -461,6 +541,251 @@ export default function EditarRecetaPage() {
                 : `${costeo.unidades_posibles} lote(s) × ${receta.rendimiento_cantidad} — según stock de materia prima`}
             </div>
           </div>
+        </div>
+      )}
+
+
+      {/* ── FORMATOS DE VENTA Y PRECIO ──────────────────────────────────── */}
+      {costeo && (
+        <div className="mb-6 rounded-md border border-gray-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">Formatos de venta y precio</h2>
+              <p className="text-[11px] text-gray-500">
+                El lote se reparte entre estos productos. El precio sugerido sale del costo
+                real por unidad y del margen objetivo de cada uno.
+              </p>
+            </div>
+          </div>
+
+          {fmtError && (
+            <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">
+              {fmtError}
+            </div>
+          )}
+
+          {formatos.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-gray-400">
+              Sin formatos cargados. Agregá uno abajo para ver el precio sugerido.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Formato</th>
+                    <th className="px-4 py-2 font-medium">Capacidad</th>
+                    <th className="px-4 py-2 text-right font-medium">Por lote</th>
+                    <th className="px-4 py-2 text-right font-medium">Costo</th>
+                    <th className="px-4 py-2 text-right font-medium">Margen obj.</th>
+                    <th className="px-4 py-2 text-right font-medium">Precio sugerido</th>
+                    <th className="px-4 py-2 text-right font-medium">Precio actual</th>
+                    <th className="px-4 py-2 text-right font-medium">Margen real</th>
+                    {puedeEditar && <th className="px-4 py-2" />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {formatos.map((f) => {
+                    const ocupado = fmtBusy === f.formato_id;
+                    return (
+                      <tr key={f.formato_id} className="border-b border-gray-50 last:border-0">
+                        <td className="px-4 py-2 font-medium text-gray-800">{f.producto_nombre}</td>
+                        <td className="px-4 py-2 text-gray-600">
+                          {fmtNum(f.capacidad)} {formatUnidad(f.capacidad_unidad)}
+                          {f.unidad_incompatible && (
+                            <span
+                              className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                              title="La capacidad no se puede convertir a la unidad de rendimiento de la receta."
+                            >
+                              <AlertTriangle className="mr-1 h-2.5 w-2.5" aria-hidden />
+                              unidad incompatible
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums text-gray-600">
+                          {f.unidades_por_lote == null ? "—" : fmtNum(f.unidades_por_lote)}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">{fmtGs(f.costo_unitario)}</td>
+                        <td className="px-4 py-2 text-right">
+                          {puedeEditar ? (
+                            <input
+                              type="number"
+                              step="1"
+                              min="0"
+                              max="99"
+                              disabled={ocupado}
+                              defaultValue={
+                                f.margen_objetivo_pct == null
+                                  ? ""
+                                  : Number((f.margen_objetivo_pct * 100).toFixed(2))
+                              }
+                              placeholder="—"
+                              onBlur={(e) => {
+                                const txt = e.target.value.trim();
+                                const pct = txt === "" ? null : Number(txt);
+                                if (pct !== null && (!Number.isFinite(pct) || pct < 0 || pct >= 100)) return;
+                                const nuevo = pct === null ? null : pct / 100;
+                                if (nuevo === (f.margen_objetivo_pct ?? null)) return;
+                                void formatoRequest(
+                                  `/api/recetas/${id}/formatos/${f.formato_id}`,
+                                  {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      producto_id: f.producto_id,
+                                      margen_objetivo_pct: nuevo,
+                                    }),
+                                  },
+                                  f.formato_id,
+                                  "No se pudo guardar el margen."
+                                );
+                              }}
+                              className="w-16 rounded border border-gray-300 px-2 py-1 text-right text-sm"
+                            />
+                          ) : f.margen_objetivo_pct == null ? (
+                            "—"
+                          ) : (
+                            `${Number((f.margen_objetivo_pct * 100).toFixed(1))}%`
+                          )}
+                          <span className="ml-1 text-[11px] text-gray-400">%</span>
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums font-semibold text-gray-900">
+                          {f.precio_sugerido == null ? (
+                            <span className="text-xs font-normal text-gray-400">sin margen objetivo</span>
+                          ) : (
+                            fmtGs(f.precio_sugerido)
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums text-gray-600">
+                          {fmtGs(f.precio_venta)}
+                        </td>
+                        <td
+                          className={`px-4 py-2 text-right tabular-nums ${
+                            f.margen_pct == null
+                              ? "text-gray-400"
+                              : f.margen_pct >= 0
+                                ? "text-green-700"
+                                : "text-red-700"
+                          }`}
+                        >
+                          {f.margen_pct == null ? "—" : `${f.margen_pct}%`}
+                        </td>
+                        {puedeEditar && (
+                          <td className="whitespace-nowrap px-4 py-2 text-right">
+                            {f.precio_sugerido != null &&
+                              Math.round(f.precio_sugerido) !== Math.round(f.precio_venta) && (
+                                <button
+                                  type="button"
+                                  disabled={ocupado}
+                                  onClick={() =>
+                                    void formatoRequest(
+                                      `/api/recetas/${id}/formatos/${f.formato_id}`,
+                                      {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          producto_id: f.producto_id,
+                                          precio_venta: Math.round(f.precio_sugerido ?? 0),
+                                        }),
+                                      },
+                                      f.formato_id,
+                                      "No se pudo aplicar el precio."
+                                    )
+                                  }
+                                  className="mr-2 rounded border border-[#4FAEB2] px-2 py-1 text-xs font-medium text-[#2F6F72] hover:bg-[#4FAEB2]/10 disabled:opacity-50"
+                                >
+                                  Aplicar
+                                </button>
+                              )}
+                            <button
+                              type="button"
+                              disabled={ocupado}
+                              onClick={() =>
+                                void formatoRequest(
+                                  `/api/recetas/${id}/formatos/${f.formato_id}`,
+                                  { method: "DELETE" },
+                                  f.formato_id,
+                                  "No se pudo quitar el formato."
+                                )
+                              }
+                              className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              Quitar
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {puedeEditar && (
+            <div className="flex flex-wrap items-end gap-2 border-t border-gray-100 px-4 py-3">
+              <div className="min-w-[14rem] flex-1">
+                <label className="mb-1 block text-xs font-medium text-gray-600">Producto vendible</label>
+                <select
+                  value={fmtProductoId}
+                  onChange={(e) => setFmtProductoId(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">— Elegí —</option>
+                  {vendiblesDisponibles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-28">
+                <label className="mb-1 block text-xs font-medium text-gray-600">Capacidad</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={fmtCapacidad}
+                  onChange={(e) => setFmtCapacidad(Number(e.target.value) || 0)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="w-28">
+                <label className="mb-1 block text-xs font-medium text-gray-600">Unidad</label>
+                <select
+                  value={fmtUnidad}
+                  onChange={(e) => setFmtUnidad(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                >
+                  {["ML", "L", "UNIDAD"].map((u) => (
+                    <option key={u} value={u}>{formatUnidad(u)}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                disabled={!fmtProductoId || fmtCapacidad <= 0 || fmtBusy !== null}
+                onClick={() =>
+                  void formatoRequest(
+                    `/api/recetas/${id}/formatos`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        producto_id: fmtProductoId,
+                        capacidad: fmtCapacidad,
+                        capacidad_unidad: fmtUnidad,
+                        orden: formatos.length + 1,
+                      }),
+                    },
+                    "nuevo",
+                    "No se pudo agregar el formato."
+                  ).then(() => setFmtProductoId(""))
+                }
+                className="rounded-md bg-[#4FAEB2] px-3 py-2 text-sm font-medium text-white hover:bg-[#3F8E91] disabled:opacity-50"
+              >
+                {fmtBusy === "nuevo" ? "Agregando…" : "Agregar formato"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -527,6 +852,25 @@ export default function EditarRecetaPage() {
               )}
             </select>
             <p className="mt-1 text-[11px] text-gray-400">paquetes, unidades, frascos…</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Merma de proceso (%)</label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="99"
+              value={Number((((receta.merma_proceso_pct ?? 0) * 100).toFixed(2)))}
+              onChange={(e) => {
+                const pct = Number(e.target.value);
+                const seguro = Number.isFinite(pct) ? Math.min(Math.max(pct, 0), 99) : 0;
+                setReceta({ ...receta, merma_proceso_pct: seguro / 100 });
+              }}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+            <p className="mt-1 text-[11px] text-gray-400">
+              Lo que se pierde entre el rendimiento teórico y lo que realmente se envasa.
+            </p>
           </div>
           <div className="flex items-end pb-6">
             <label className="inline-flex items-center gap-2 text-sm">
