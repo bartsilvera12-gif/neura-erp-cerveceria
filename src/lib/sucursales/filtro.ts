@@ -1,15 +1,19 @@
 /**
  * Filtro por sucursal para consultas PostgREST.
  *
- * MODELO (definido por el cliente): cada usuario pertenece a UNA sucursal y ve
- * únicamente lo de esa sucursal. Aplica a todos los roles, admin incluido — el
- * admin de Reserva Market no ve nada de Casa Matriz y viceversa. No hay
- * selector de sucursal ni vista consolidada.
+ * MODELO: el usuario opera en UNA sucursal a la vez y ve únicamente lo de esa
+ * sucursal. Aplica a todos los roles, admin incluido. No existe vista
+ * consolidada: las pantallas nunca mezclan dos sucursales.
  *
- * Por eso un usuario SIN sucursal asignada es una MISCONFIGURACIÓN, no un caso
- * válido. Antes esto devolvía "no filtrar" para no dejar a nadie con la pantalla
- * vacía, pero bajo este modelo eso significa que un usuario mal configurado ve
- * los datos de TODAS las sucursales — una fuga es peor que una pantalla vacía.
+ * Quién puede entrar a cuáles lo define `usuario_sucursales`; en cuál está
+ * parado ahora lo resuelve `@/lib/sucursales/activa` y llega acá ya resuelto
+ * como `ctx.auth.sucursal_id`. Para este filtro no cambia nada: siempre recibe
+ * una sola sucursal.
+ *
+ * Un usuario SIN sucursal asignada es una MISCONFIGURACIÓN, no un caso válido.
+ * Antes esto devolvía "no filtrar" para no dejar a nadie con la pantalla vacía,
+ * pero bajo este modelo eso significa que un usuario mal configurado ve los
+ * datos de TODAS las sucursales — una fuga es peor que una pantalla vacía.
  *
  * Ahora `exigirSucursal` falla de forma explícita y con un mensaje accionable,
  * en vez de degradar en silencio hacia cualquiera de los dos extremos.

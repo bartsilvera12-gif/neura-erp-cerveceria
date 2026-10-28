@@ -1,0 +1,67 @@
+import { NextResponse } from "next/server";
+import { getServiceAuthUsuario } from "@/lib/auth/get-service-auth-usuario";
+import {
+  SUCURSAL_COOKIE,
+  SUCURSAL_COOKIE_MAX_AGE,
+  esUuidSucursal,
+} from "@/lib/sucursales/activa";
+
+/**
+ * POST /api/sucursales/activa — cambia la sucursal en la que opera la sesión.
+ *
+ * Sólo deja elegir sucursales declaradas en `usuario_sucursales` para este
+ * usuario. La cookie no otorga acceso por sí sola (el servidor la revalida en
+ * cada request, ver `@/lib/sucursales/activa`), pero rechazar acá es lo que le
+ * da al usuario un error claro en vez de una pantalla que no cambia.
+ */
+export async function POST(request: Request) {
+  try {
+    const r = await getServiceAuthUsuario(request);
+    if (!r.ok) {
+      return NextResponse.json({ error: "No autenticado" }, { status: r.status });
+    }
+    const { catalogUsuario, supabaseSr } = r;
+    if (!catalogUsuario?.id) {
+      return NextResponse.json({ error: "Usuario sin ficha en el ERP." }, { status: 409 });
+    }
+
+    const body = (await request.json().catch(() => null)) as { sucursal_id?: unknown } | null;
+    const pedida = typeof body?.sucursal_id === "string" ? body.sucursal_id.trim() : "";
+    if (!esUuidSucursal(pedida)) {
+      return NextResponse.json({ error: "sucursal_id inválido." }, { status: 400 });
+    }
+
+    const { data, error } = await supabaseSr
+      .from("usuario_sucursales")
+      .select("sucursal_id")
+      .eq("usuario_id", catalogUsuario.id)
+      .eq("sucursal_id", pedida)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!data) {
+      return NextResponse.json(
+        { error: "No tenés acceso a esa sucursal." },
+        { status: 403 }
+      );
+    }
+
+    const res = NextResponse.json({ ok: true, sucursal_id: pedida });
+    res.cookies.set({
+      name: SUCURSAL_COOKIE,
+      value: pedida,
+      path: "/",
+      maxAge: SUCURSAL_COOKIE_MAX_AGE,
+      sameSite: "lax",
+      // Sin httpOnly a propósito: no es una credencial y el servidor la
+      // revalida siempre. Sin secure, porque el ERP se sirve por HTTP detrás
+      // de Cloudflare, que es quien termina el TLS.
+    });
+    return res;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "No se pudo cambiar de sucursal";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

@@ -5,6 +5,10 @@ import type { User } from "@supabase/supabase-js";
 import { usuarioEmailLookupVariants } from "@/lib/auth/usuario-email-variants";
 import { supabaseDbSchemaOption, type AppSupabaseClient } from "@/lib/supabase/schema";
 import { createServiceRoleClient } from "@/lib/supabase/service-admin";
+import {
+  SUCURSAL_COOKIE,
+  resolverSucursalActiva,
+} from "@/lib/sucursales/activa";
 
 export type ApiAuthFailureCode =
   | "missing_public_env"
@@ -20,13 +24,18 @@ export type ApiAuthContext = {
   /** PK `usuarios.id` del schema del tenant, cuando se resolvió la fila (service role o RLS). */
   usuarioCatalogId?: string | null;
   /**
-   * Sucursal activa del usuario (`usuarios.sucursal_predeterminada_id`).
+   * Sucursal en la que está parado el usuario AHORA.
+   *
+   * Sale de la cookie `neura_sucursal` cuando apunta a una sucursal que el
+   * usuario tiene permitida; si no, de `usuarios.sucursal_predeterminada_id`.
+   * Ver `@/lib/sucursales/activa`.
    *
    * `null` significa "no filtrar por sucursal" — es el comportamiento previo a
    * multi-sucursal. Nunca se debe traducir un `null` a un filtro vacío: eso
    * dejaría al usuario sin ver NADA. Ver `aplicarFiltroSucursal`.
    */
   sucursal_id?: string | null;
+
   /** Cliente anon + JWT del usuario (cookies o Bearer). PostgREST respeta RLS en zentra_erp. */
   userScopedSupabase: AppSupabaseClient;
   usuarioRol?: string | null;
@@ -248,8 +257,21 @@ async function resolveApiAuthContextUncached(
   const usuarioRol = row.rol ?? null;
   const usuarioNombre = row.nombre ?? null;
   const usuarioCatalogId = typeof row.id === "string" ? row.id : null;
-  const sucursal_id =
+  const sucursalPorDefecto =
     typeof row.sucursal_predeterminada_id === "string" ? row.sucursal_predeterminada_id : null;
+
+  /**
+   * Sucursal activa. La cookie sólo se consulta si el usuario pidió una
+   * distinta de su predeterminada: así el caso normal (una sola sucursal) no
+   * paga la query a `usuario_sucursales` en cada request.
+   */
+  let sucursal_id = sucursalPorDefecto;
+  const sucursalPedida = await leerCookieSucursal();
+
+  if (sucursalPedida && sucursalPedida !== sucursalPorDefecto && usuarioCatalogId) {
+    const permitidas = await cargarSucursalesPermitidas(usuarioCatalogId, userScopedSupabase);
+    sucursal_id = resolverSucursalActiva(sucursalPedida, permitidas, sucursalPorDefecto);
+  }
 
   if (empresa_id) {
     return {
@@ -282,4 +304,41 @@ async function resolveApiAuthContextUncached(
   }
 
   return { ok: false, code: "empresa_id_null" };
+}
+
+/** Lee la cookie de sucursal activa. Fuera de contexto de petición devuelve null. */
+async function leerCookieSucursal(): Promise<string | null> {
+  try {
+    const c = await cookies();
+    return c.get(SUCURSAL_COOKIE)?.value?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sucursales declaradas para el usuario en `usuario_sucursales`.
+ *
+ * Devuelve `[]` ante cualquier error o si la tabla no existe: el caller cae a
+ * la sucursal predeterminada, que es el comportamiento seguro. Un fallo acá
+ * nunca debe ampliar el alcance de lo que el usuario ve.
+ */
+async function cargarSucursalesPermitidas(
+  usuarioId: string,
+  fallbackClient: AppSupabaseClient
+): Promise<string[]> {
+  try {
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+    const sb = serviceKey ? createServiceRoleClient() : fallbackClient;
+    const { data, error } = await sb
+      .from("usuario_sucursales")
+      .select("sucursal_id")
+      .eq("usuario_id", usuarioId);
+    if (error || !Array.isArray(data)) return [];
+    return data
+      .map((r: { sucursal_id?: unknown }) => (typeof r.sucursal_id === "string" ? r.sucursal_id : ""))
+      .filter((x: string) => x.length > 0);
+  } catch {
+    return [];
+  }
 }

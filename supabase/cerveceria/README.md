@@ -8,6 +8,7 @@ Ejecutar con un rol administrador (`postgres` / `supabase_admin`).
 | 1 | `01_crear_schema_cerveceriaerp.sql` | Clona la **estructura** de `reservacaacupe` en `cerveceriaerp`. Sin datos. |
 | 2 | `02_seed_cerveceriaerp.sql` | Empresa propia, sucursal, catálogo de módulos y usuario `admin@cerveceria.com`. |
 | 3 | `03_usuario_auth.sql` | Crea el login en Supabase Auth y lo enlaza con el usuario del ERP. |
+| 4 | `04_sucursales_cerveceria_bar.sql` | Dos administraciones: sucursales Cervecería y Bar, un usuario por cada una, y el dueño con acceso a las dos. |
 
 Después, **a mano** en Supabase: `Settings → API → Exposed schemas` → agregar
 `cerveceriaerp` (PostgREST no ve el schema hasta que esté expuesto).
@@ -18,7 +19,29 @@ Después, **a mano** en Supabase: `Settings → API → Exposed schemas` → agr
 |---|---|
 | `empresa_id` | `0cbefe95-4007-402c-97de-70147f9d39bb` |
 | `sucursal_id` (Casa Central) | `37907a1a-5283-4b65-ae4e-4254924a1a82` |
-| Usuario admin | `admin@cerveceria.com` — rol `admin` |
+| Usuario admin | `admin@cerveceria.com` — rol `admin`, acceso a las dos sucursales |
+| `sucursal_id` (Bar) | `b31f0c2e-9a7d-4f55-8c10-2d6e4a9b7f31` (lo crea el paso 4) |
+
+## Dos administraciones en un mismo negocio
+
+El paso 4 deja la cervecería y el bar como sucursales separadas.
+
+**Separado por sucursal:** productos, categorías, recetas, movimientos de
+inventario, ventas, compras, órdenes de compra, gastos, presupuestos, facturas,
+notas de crédito, pagos, cuentas por cobrar y por pagar, y caja. El SKU y el
+código de barras son únicos *por sucursal*, así que cada administración arma su
+catálogo sin pisar al otro.
+
+**Compartido:** clientes, proveedores y el padrón de usuarios.
+
+**Entre sucursales:** el módulo Reposición mueve stock de una a otra con su
+circuito de solicitud y recepción.
+
+Cada usuario operativo entra sólo a su sucursal. El dueño
+(`admin@cerveceria.com`) figura en las dos y cambia de una a otra con el
+selector del header; no ve las dos mezcladas, cambia de contexto. El paso 4
+trae los emails de los dos usuarios operativos como variables: **ajustalos
+antes de correrlo**, y creales el login igual que en el paso 3.
 
 ## Aislamiento
 

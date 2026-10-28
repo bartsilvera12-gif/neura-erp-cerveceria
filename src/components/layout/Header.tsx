@@ -3,10 +3,12 @@
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, LogOut, Menu, Store } from "lucide-react";
+import { Bell, Check, ChevronDown, Loader2, LogOut, Menu, Store } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { signOut } from "@/lib/auth";
 import { useBoot } from "@/components/BootContext";
+
+type SucursalOpcion = { id: string; nombre: string };
 
 type HeaderUsuario = {
   nombre: string | null;
@@ -14,6 +16,14 @@ type HeaderUsuario = {
   email: string | null;
   /** Sucursal en la que opera el usuario. Null si no tiene una asignada. */
   sucursal?: string | null;
+  /** Sucursal activa, para marcar la opción elegida en el selector. */
+  sucursal_id?: string | null;
+  /**
+   * Sucursales a las que el usuario puede entrar. Con una sola (el caso
+   * normal) el header muestra la etiqueta fija de siempre; con más de una,
+   * un selector para cambiar de administración.
+   */
+  sucursales?: SucursalOpcion[] | null;
 };
 
 function clean(value: string | null | undefined): string {
@@ -46,13 +56,19 @@ export default function Header() {
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [usuario, setUsuario] = useState<HeaderUsuario | null>(null);
+  const [sucMenuOpen, setSucMenuOpen] = useState(false);
+  const [cambiandoSuc, setCambiandoSuc] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const sucRef = useRef<HTMLDivElement>(null);
   const { mobileSidebarOpen, setMobileSidebarOpen } = useBoot();
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
+      }
+      if (sucRef.current && !sucRef.current.contains(e.target as Node)) {
+        setSucMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -83,6 +99,32 @@ export default function Header() {
   const dropdownName = nombreReal || "Usuario";
   const displayRole = roleLabel(usuario?.rol);
   const sucursal = clean(usuario?.sucursal);
+  const sucursales = usuario?.sucursales ?? [];
+  /** El selector sólo tiene sentido con más de una sucursal a la que entrar. */
+  const puedeCambiarSucursal = sucursales.length > 1;
+
+  /**
+   * Cambiar de sucursal cambia el contexto de TODA la aplicación (catálogo,
+   * stock, ventas, caja). Por eso se recarga entera en vez de refrescar sólo
+   * el header: cualquier pantalla abierta quedaría mostrando datos de la
+   * sucursal anterior.
+   */
+  async function cambiarSucursal(id: string) {
+    if (cambiandoSuc) return;
+    setCambiandoSuc(id);
+    try {
+      const res = await fetchWithSupabaseSession("/api/sucursales/activa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sucursal_id: id }),
+      });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      window.location.reload();
+    } catch {
+      setCambiandoSuc(null);
+      setSucMenuOpen(false);
+    }
+  }
 
   return (
     <header
@@ -107,7 +149,7 @@ export default function Header() {
             usuario evita cargar stock o facturar en la sucursal equivocada.
             Solo se muestra cuando el dato existe: si el usuario no tiene
             sucursal asignada, no se inventa una etiqueta. */}
-        {sucursal && (
+        {sucursal && !puedeCambiarSucursal && (
           <span
             className="flex items-center gap-1.5 rounded-lg border border-[#4FAEB2]/30 bg-[#4FAEB2]/10 px-2.5 py-1.5 text-xs font-semibold text-[#2F6F72]"
             title={`Estás operando en ${sucursal}`}
@@ -115,6 +157,59 @@ export default function Header() {
             <Store className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="max-w-[9rem] truncate">{sucursal}</span>
           </span>
+        )}
+
+        {puedeCambiarSucursal && (
+          <div className="relative" ref={sucRef}>
+            <button
+              type="button"
+              onClick={() => setSucMenuOpen((v) => !v)}
+              className="flex items-center gap-1.5 rounded-lg border border-[#4FAEB2]/30 bg-[#4FAEB2]/10 px-2.5 py-1.5 text-xs font-semibold text-[#2F6F72] transition-colors hover:bg-[#4FAEB2]/20"
+              title={`Estás operando en ${sucursal}. Tocá para cambiar.`}
+              aria-haspopup="menu"
+              aria-expanded={sucMenuOpen}
+            >
+              <Store className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="max-w-[9rem] truncate">{sucursal}</span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 shrink-0 transition-transform ${sucMenuOpen ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+
+            {sucMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+              >
+                <p className="border-b border-slate-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Cambiar de sucursal
+                </p>
+                {sucursales.map((s) => {
+                  const activa = s.id === usuario?.sucursal_id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      role="menuitem"
+                      disabled={cambiandoSuc !== null}
+                      onClick={() => (activa ? setSucMenuOpen(false) : void cambiarSucursal(s.id))}
+                      className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors disabled:opacity-60 ${
+                        activa ? "font-semibold text-[#2F6F72]" : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="truncate">{s.nombre}</span>
+                      {cambiandoSuc === s.id ? (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                      ) : activa ? (
+                        <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Notificaciones */}
