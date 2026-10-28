@@ -1,0 +1,620 @@
+import { montoEnLetras } from "@/lib/recibos/numero-a-letras";
+import { construirFilasRecibo, type NcAplicacionRecibo } from "@/lib/recibos/recibo-lineas";
+import { NextRequest, NextResponse } from "next/server";
+import { getTenantSupabaseFromAuthWithRol } from "@/lib/supabase/tenant-api";
+import { esAdminErp } from "@/lib/roles/erp-role-access";
+import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { EMPRESA_DOC } from "@/lib/documentos/membrete";
+import { getMarcaSucursal } from "@/lib/documentos/marca-sucursal";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
+
+/**
+ * GET /api/recibos-dinero/[id]/pdf?auto=1
+ * Recibo de dinero A4 imprimible (HTML). Documento interno NO fiscal.
+ */
+function esc(v: unknown): string {
+  return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function fmtMonto(n: unknown, moneda: string): string {
+  const v = Number(n) || 0;
+  return (moneda === "USD" ? "USD " : "Gs. ") + v.toLocaleString("es-PY", { maximumFractionDigits: moneda === "USD" ? 2 : 0 });
+}
+function fmtFecha(iso: unknown): string {
+  if (!iso) return "—";
+  try {
+    return new Date(String(iso)).toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch {
+    return String(iso);
+  }
+}
+/**
+ * Fecha en formato largo con ciudad, como los recibos preimpresos paraguayos:
+ * "Caacupé, 24 de julio de 2026". Se arma a mano y no con toLocaleDateString
+ * para no depender de la zona horaria del servidor: se toma la parte YYYY-MM-DD
+ * del ISO, que es la fecha real del cobro.
+ */
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+function fechaLarga(iso: unknown, ciudad = "Caacupé"): string {
+  const s = String(iso ?? "").slice(0, 10);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return ciudad;
+  const [, y, mm, dd] = m;
+  const mes = MESES[Number(mm) - 1] ?? "";
+  const fecha = `${Number(dd)} de ${mes} de ${y}`;
+  // Sin ciudad no se deja la coma huérfana (antes salía ", 24 de julio de 2026").
+  return ciudad.trim() ? `${ciudad.trim()}, ${fecha}` : fecha;
+}
+
+/**
+ * Datos que en el talonario preimpreso van fijos en la cabecera.
+ * Coinciden con empresa_sifen_config (RUC 80131562-0, punto 001-001).
+ */
+const RUC_EMPRESA = "80131562-0";
+/** Punto por defecto si el recibo no tiene sucursal resoluble. */
+const PUNTO_FALLBACK = "001 - 001";
+
+/** "REC-000001" -> "000001", para mostrarlo como en el talonario. */
+function numeroCorto(numero: unknown): string {
+  const s = String(numero ?? "");
+  const m = s.match(/(\d+)\s*$/);
+  return m ? m[1]! : s;
+}
+
+const METODO_LBL: Record<string, string> = { efectivo: "Efectivo", transferencia: "Transferencia", tarjeta: "Tarjeta", cheque: "Cheque", otro: "Otro" };
+
+export async function GET(request: NextRequest, ctxParams: { params: Promise<{ id: string }> }) {
+  const { id } = await ctxParams.params;
+  const auto = new URL(request.url).searchParams.get("auto") === "1";
+  const ctx = await getTenantSupabaseFromAuthWithRol(request);
+  if (!ctx) return new NextResponse("No autorizado", { status: 401 });
+  const puedeAnular = esAdminErp(ctx.auth.rol);
+
+  const rq = await ctx.supabase
+    .from("recibos_dinero")
+    .select("*")
+    .eq("empresa_id", ctx.auth.empresa_id)
+    .eq("id", id)
+    .maybeSingle();
+  if (rq.error || !rq.data) return new NextResponse("Recibo no encontrado", { status: 404 });
+  const r = rq.data as Record<string, unknown>;
+
+  // Schema data del tenant (cerveceriaerp). Reutilizado por el membrete de
+  // sucursal y por el lookup de cliente para nombre_facturacion.
+  let schemaForClienteLookup = "";
+  try { schemaForClienteLookup = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id); }
+  catch { /* deja vacio; el lookup se saltea */ }
+
+  // Membrete por sucursal (logo/teléfono/dirección de Reserva Market; Matriz cae
+  // al membrete por defecto).
+  let marcaLogo = EMPRESA_DOC.logoUrl;
+  let marcaTel = EMPRESA_DOC.telefono;
+  let marcaDir = EMPRESA_DOC.direccion;
+  try {
+    if (schemaForClienteLookup) {
+      const m = await getMarcaSucursal(schemaForClienteLookup, ctx.auth.empresa_id, r.sucursal_id ? String(r.sucursal_id) : ctx.auth.sucursal_id ?? null);
+      if (m) {
+        if (m.logoUrl) marcaLogo = m.logoUrl;
+        if (m.telefono) marcaTel = m.telefono;
+        if (m.direccion && m.direccion.length) marcaDir = m.direccion;
+      }
+    }
+  } catch { /* usa defaults */ }
+
+  // El punto de expedición sale de la SUCURSAL que emitió el recibo, no de una
+  // constante: cada sucursal lleva su propia serie desde 000001 y se distinguen
+  // por el punto (Casa Matriz 001-001, Reserva Market 001-002). Con un valor
+  // fijo, los recibos de Market saldrían con el punto de Casa Matriz.
+  let puntoRecibo = PUNTO_FALLBACK;
+  if (r.sucursal_id) {
+    const sq = await ctx.supabase
+      .from("sucursales")
+      .select("establecimiento, punto_expedicion")
+      .eq("empresa_id", ctx.auth.empresa_id)
+      .eq("id", String(r.sucursal_id))
+      .maybeSingle();
+    const suc = sq.data as { establecimiento?: string | null; punto_expedicion?: string | null } | null;
+    const est = (suc?.establecimiento ?? "").trim();
+    const pto = (suc?.punto_expedicion ?? "").trim();
+    if (est && pto) puntoRecibo = `${est} - ${pto}`;
+  }
+
+  // Detalle de facturas cobradas. Un mismo pago puede cubrir varias: el cliente
+  // necesita ver cuáles, no solo el total (Decreto de recibos aparte, es lo que
+  // permite conciliar contra su cuenta corriente).
+  const itq = await ctx.supabase
+    .from("recibos_dinero_items")
+    .select("numero_documento, fecha_vencimiento, importe_aplicado")
+    .eq("empresa_id", ctx.auth.empresa_id)
+    .eq("recibo_id", id)
+    .order("created_at", { ascending: true });
+  const detalle = ((itq.data ?? []) as Array<{
+    numero_documento?: string | null;
+    fecha_vencimiento?: string | null;
+    importe_aplicado?: unknown;
+  }>);
+
+  // Recibos emitidos ANTES del desglose no tienen línea de detalle: mostrarían
+  // "—" y sin vencimiento. Como el recibo conserva el enlace a la cuenta por
+  // cobrar y a la venta, se derivan el documento (factura o venta) y el
+  // vencimiento al vuelo, para que también estos salgan completos.
+  if (detalle.length === 0 && (r.cuenta_por_cobrar_id || r.venta_id)) {
+    let numeroDoc: string | null = null;
+    let venc: string | null = null;
+    if (r.cuenta_por_cobrar_id) {
+      const cxq = await ctx.supabase
+        .from("cuentas_por_cobrar")
+        .select("numero_venta, fecha_vencimiento")
+        .eq("empresa_id", ctx.auth.empresa_id)
+        .eq("id", String(r.cuenta_por_cobrar_id))
+        .maybeSingle();
+      const cx = cxq.data as { numero_venta?: string | null; fecha_vencimiento?: string | null } | null;
+      numeroDoc = cx?.numero_venta ?? null;
+      venc = cx?.fecha_vencimiento ?? null;
+    }
+    if (r.venta_id) {
+      const fq = await ctx.supabase
+        .from("facturas")
+        .select("numero_factura")
+        .eq("empresa_id", ctx.auth.empresa_id)
+        .eq("origen_venta_id", String(r.venta_id))
+        .maybeSingle();
+      const f = fq.data as { numero_factura?: string | null } | null;
+      if (f?.numero_factura) numeroDoc = f.numero_factura;
+    }
+    if (numeroDoc || venc) {
+      detalle.push({
+        numero_documento: numeroDoc,
+        fecha_vencimiento: venc,
+        importe_aplicado: r.monto,
+      });
+    }
+  }
+
+  const moneda = String(r.moneda ?? "PYG");
+  const metodo = METODO_LBL[String(r.metodo_pago ?? "")] ?? (r.metodo_pago ?? "—");
+
+  // Datos adicionales del receptor para paridad con el KUDE de facturas
+  // (dirección y teléfono), y override del nombre con `nombre_facturacion`
+  // cuando existe — misma prioridad que la factura: el operador puede haber
+  // guardado un "Nombre para facturación" distinto de la razón social corta
+  // (ej. "CARNI SHOP" vs "CARNI SHOP S.R.L."). Para recibos VIEJOS con
+  // snapshot desactualizado esto los re-imprime con el nombre fiscal correcto.
+  let clienteDireccion = "";
+  let clienteTelefono = "";
+  let clienteNombreFinal = String(r.cliente_nombre ?? "");
+  // Fuente que resolvio el nombre (para debug visible en el HTML si algo va mal):
+  //   "snapshot"     -> quedo el guardado en recibos_dinero.cliente_nombre
+  //   "supabase"     -> vino del cliente PostgREST (ctx.supabase)
+  //   "pg_pool"      -> vino del pool PG directo
+  //   "sin_cliente"  -> el recibo no tiene cliente_id
+  let clienteLookupSource: "snapshot" | "supabase" | "pg_pool" | "sin_cliente" = "sin_cliente";
+  if (r.cliente_id) {
+    clienteLookupSource = "snapshot";
+    const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const aplicarCli = (cli: Record<string, unknown> | null | undefined): boolean => {
+      if (!cli) return false;
+      const dir = s(cli.direccion);
+      const tel = s(cli.telefono) || s(cli.celular);
+      if (dir) clienteDireccion = dir;
+      if (tel) clienteTelefono = tel;
+      const preferido =
+        s(cli.nombre_facturacion) ||
+        s(cli.empresa) ||
+        s(cli.nombre_contacto) ||
+        s(cli.nombre);
+      if (preferido) clienteNombreFinal = preferido;
+      return !!s(cli.nombre_facturacion);
+    };
+
+    // 1) Intento primario: Supabase PostgREST con select("*") para eludir el
+    //    shim de tipos que podria estar filtrando nombre_facturacion.
+    let supabaseTrajoNombreFact = false;
+    try {
+      const cq = await ctx.supabase
+        .from("clientes")
+        .select("*")
+        .eq("empresa_id", ctx.auth.empresa_id)
+        .eq("id", String(r.cliente_id))
+        .maybeSingle();
+      if (cq.data) {
+        supabaseTrajoNombreFact = aplicarCli(cq.data as unknown as Record<string, unknown>);
+        clienteLookupSource = "supabase";
+      } else if (cq.error) {
+        console.warn("[recibos-pdf] supabase select fallo", { error: cq.error.message });
+      }
+    } catch (e) {
+      console.warn("[recibos-pdf] supabase select excepcion", {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    // 2) Fallback PG pool: SOLO si Supabase no trajo nombre_facturacion.
+    //    Cubre el caso donde el shim de tipos filtra la columna, o donde el
+    //    cliente PostgREST rechaza el select() por RLS/schema.
+    if (!supabaseTrajoNombreFact && schemaForClienteLookup) {
+      try {
+        const p = getChatPostgresPool();
+        if (p) {
+          const tCli = quoteSchemaTable(schemaForClienteLookup, "clientes");
+          const { rows } = await p.query<Record<string, unknown>>(
+            `SELECT * FROM ${tCli} WHERE id = $1::uuid AND empresa_id = $2::uuid`,
+            [String(r.cliente_id), ctx.auth.empresa_id]
+          );
+          if (rows[0]) {
+            const trajoNombreFact = aplicarCli(rows[0]);
+            if (trajoNombreFact) clienteLookupSource = "pg_pool";
+          }
+        } else {
+          console.warn("[recibos-pdf] PG pool no disponible (falta SUPABASE_DB_PASSWORD?)");
+        }
+      } catch (e) {
+        console.warn("[recibos-pdf] pg pool select fallo", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    console.log("[recibos-pdf] lookup source", { source: clienteLookupSource, nombre: clienteNombreFinal });
+  }
+
+  // En el talonario los documentos cobrados se escriben a mano en la línea
+  // "en concepto de" (ej. "Pago de factura # 001-001-0005519 y 001-001-0005565").
+  // Se arma igual desde el detalle; si no hay líneas, se cae al concepto guardado.
+  const numeros = detalle
+    .map((d) => (d.numero_documento ?? "").trim())
+    .filter((x) => x.length > 0);
+  const conceptoConDocumentos =
+    numeros.length > 0
+      ? `Pago de ${numeros.length === 1 ? "factura" : "facturas"} ${numeros.join(" y ")}`
+      : String(r.concepto ?? "");
+
+  // Aplicaciones de NC que este recibo cargó como línea negativa. Cada una se
+  // muestra a continuación de las facturas para que el total del recibo cuadre
+  // con lo efectivamente cobrado.
+  const ncAplic: NcAplicacionRecibo[] = [];
+  try {
+    const p2 = getChatPostgresPool();
+    if (p2 && schemaForClienteLookup) {
+      const tNcA = quoteSchemaTable(schemaForClienteLookup, "nota_credito_aplicaciones");
+      const tNc  = quoteSchemaTable(schemaForClienteLookup, "nota_credito");
+      const tFacQ  = quoteSchemaTable(schemaForClienteLookup, "facturas");
+      const tCxcQ  = quoteSchemaTable(schemaForClienteLookup, "cuentas_por_cobrar");
+      const { rows: apps } = await p2.query<{
+        importe_aplicado: string;
+        factura_origen_numero: string | null;
+        destino_numero_factura: string | null;
+        destino_numero_venta: string | null;
+      }>(
+        `SELECT a.importe_aplicado,
+                f_origen.numero_factura AS factura_origen_numero,
+                f_dest.numero_factura   AS destino_numero_factura,
+                cxc.numero_venta        AS destino_numero_venta
+           FROM ${tNcA} a
+           JOIN ${tNc}  nc      ON nc.id = a.nota_credito_id
+           LEFT JOIN ${tFacQ} f_origen ON f_origen.id = nc.factura_id
+           LEFT JOIN ${tCxcQ} cxc      ON cxc.id = a.cuenta_por_cobrar_id
+           LEFT JOIN ${tFacQ} f_dest   ON f_dest.origen_venta_id = cxc.venta_id AND f_dest.empresa_id = a.empresa_id
+          WHERE a.recibo_id = $1::uuid AND a.empresa_id = $2::uuid AND a.anulado = false
+          ORDER BY a.created_at`,
+        [id, ctx.auth.empresa_id]
+      );
+      for (const a of apps) {
+        ncAplic.push({
+          importe: Number(a.importe_aplicado) || 0,
+          nc_factura_origen: (a.factura_origen_numero ?? "").trim() || null,
+          destino_numero: (a.destino_numero_factura ?? a.destino_numero_venta ?? "").trim() || null,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("[recibos-pdf] no se pudieron cargar aplicaciones NC", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  /**
+   * Filas de la tabla: solo las reales. Antes se rellenaba con filas vacías
+   * hasta un mínimo para imitar el talonario preimpreso, pero con la tabla de
+   * color las filas en blanco quedaban feas. Se muestran únicamente las que hay.
+   */
+  // Líneas del recibo: la factura muestra el importe BRUTO aplicado en la
+  // operación (efectivo/transferencia + NC aplicada a esa factura) y la NC va
+  // como fila negativa aparte, de modo que "línea factura − NC = total cobrado".
+  // Solo presentación: no cambia ningún dato. Ver construirFilasRecibo.
+  const filasTabla = construirFilasRecibo(
+    detalle.map((d) => ({
+      numero_documento: (d.numero_documento ?? "").trim() || null,
+      fecha_vencimiento: d.fecha_vencimiento ?? null,
+      importe_aplicado: Number(d.importe_aplicado) || 0,
+    })),
+    ncAplic
+  ).map((f) => ({
+    doc: f.doc,
+    venc: f.venc ? fmtFecha(f.venc) : "",
+    concepto: f.concepto,
+    importe: f.esNegativo ? `−${fmtMonto(Math.abs(f.importe), moneda)}` : fmtMonto(f.importe, moneda),
+    esNegativo: f.esNegativo as boolean,
+  }));
+  // Sin detalle (recibos anteriores al desglose) se muestra el concepto guardado.
+  if (filasTabla.length === 0) {
+    filasTabla.push({
+      doc: "—",
+      venc: "",
+      concepto: String(r.concepto ?? "Cobro"),
+      importe: fmtMonto(r.monto, moneda),
+      esNegativo: false,
+    });
+  }
+
+  const html = `<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(r.numero_recibo)} — Recibo de dinero</title>
+<style>
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#f3f4f6}
+  /* Apaisado (como el talonario del cliente): mas ancho que alto. */
+  .page{width:270mm;min-height:150mm;margin:0 auto;background:#fff;padding:12mm}
+
+  /* Paleta de marca */
+  :root{ --verde:#2E7D32; --verde-osc:#1f5c22; --tinta:#1f2937; --suave:#6b7280; --linea:#d9e2dc; --crema:#f6f9f6; }
+
+  .marco{border:1px solid var(--linea);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(31,41,55,.06)}
+
+  /* Cabecera con banda de marca */
+  .cab{display:flex;justify-content:space-between;align-items:center;gap:26px;padding:20px 26px;border-bottom:3px solid var(--verde)}
+  .cab-izq{display:flex;align-items:center;gap:18px;min-width:0}
+  .cab-izq img{width:132px;height:auto;object-fit:contain;flex:0 0 auto}
+  .emisor{min-width:0;border-left:1px solid var(--linea);padding-left:18px}
+  .emisor .nom{font-family:Georgia,"Times New Roman",serif;font-size:16px;font-weight:700;color:var(--verde-osc);line-height:1.2}
+  .emisor .act{margin-top:4px;font-size:9px;color:var(--suave);line-height:1.5;max-width:280px}
+  .emisor .lin{margin-top:6px;font-size:9.5px;color:#4b5563;line-height:1.55}
+  .emisor .lin b{color:var(--tinta)}
+
+  .cab-der{flex:0 0 250px;text-align:right}
+  .cab-der .tit{font-family:Georgia,"Times New Roman",serif;font-size:19px;font-weight:700;letter-spacing:.03em;color:var(--tinta)}
+  .cab-der .fiscal{margin-top:4px;font-size:10px;color:var(--suave)}
+  .cab-der .fiscal .serie{margin-left:12px;color:#4b5563}
+  .cab-der .nro{margin-top:10px;display:inline-flex;align-items:baseline;gap:6px;background:var(--crema);border:1px solid var(--linea);border-radius:8px;padding:5px 12px}
+  .cab-der .nro small{font-size:10px;font-weight:600;color:var(--suave)}
+  .cab-der .nro b{font-size:19px;font-weight:800;color:var(--verde-osc);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+
+  /* Franja: cliente + fecha (formato paridad con KUDE de facturas) */
+  .montofranja{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 26px;background:var(--crema)}
+  .montofranja .cli{min-width:0;flex:1}
+  .montofranja .cli .tt{text-transform:uppercase;letter-spacing:.08em;font-size:8.5px;color:var(--suave);font-weight:700;margin-bottom:4px}
+  .montofranja .cli .razon{font-size:13.5px;font-weight:700;color:var(--tinta);line-height:1.25}
+  .montofranja .cli .razon .lb{color:var(--suave);font-weight:600;margin-right:4px}
+  .montofranja .cli .meta{margin-top:5px;font-size:10.5px;color:#4b5563;line-height:1.55}
+  .montofranja .cli .meta .lb{color:var(--suave);font-weight:600;margin-right:3px}
+  .montofranja .cli .meta .sep{margin:0 8px;color:#cbd5e1}
+  .montofranja .fecha{font-size:10.5px;color:var(--suave);flex:0 0 auto;text-align:right;padding-top:14px}
+
+  /* Monto final: cifra en asteriscos + monto en letras */
+  .montofinal{margin-top:20px;border-top:1px solid var(--linea);padding-top:16px}
+  .montofinal .letras{border:1px solid var(--linea);border-radius:8px;padding:11px 14px;background:#fff}
+  .montofinal .letras .et{text-transform:uppercase;letter-spacing:.06em;font-size:9px;color:var(--suave);font-weight:600}
+  .montofinal .letras .txt{display:block;margin-top:3px;font-size:13px;font-weight:700;color:var(--tinta);line-height:1.45}
+
+  .cuerpo{padding:18px 26px 22px}
+
+
+  .tabla{width:100%;border-collapse:separate;border-spacing:0;margin-top:16px;font-size:10.5px;border:1px solid var(--linea);border-radius:8px;overflow:hidden}
+  .tabla th{background:var(--verde);color:#fff;padding:8px 12px;font-weight:600;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left}
+  .tabla th.num{text-align:right}
+  .tabla td{padding:8px 12px;height:22px;color:var(--tinta);border-top:1px solid var(--linea)}
+  .tabla tbody tr:first-child td{border-top:0}
+  .tabla tbody tr:nth-child(even) td{background:var(--crema)}
+  .tabla .num{text-align:right;font-variant-numeric:tabular-nums}
+  .tabla .ct{text-align:left;color:var(--suave)}
+  .totalfila{display:flex;justify-content:flex-end;margin-top:12px}
+  .totalfila .caja{background:var(--verde);color:#fff;border-radius:8px;padding:9px 18px;min-width:210px;display:flex;justify-content:space-between;align-items:center;gap:16px}
+  .totalfila .caja .l{font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.9}
+  .totalfila .caja .v{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .pie{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-top:30px}
+  .metodos{flex:0 0 auto;font-size:10px;color:#4b5563;line-height:2.1}
+  .metodos .tt{text-transform:uppercase;letter-spacing:.06em;font-size:8.5px;color:var(--suave);font-weight:600;margin-bottom:2px}
+  .metodos .it{display:flex;align-items:center;gap:8px}
+  .metodos .bx{width:13px;height:13px;border:1.5px solid var(--suave);border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;line-height:1;color:var(--verde-osc)}
+  .metodos .it.on{color:var(--tinta);font-weight:700}
+  .metodos .it.on .bx{border-color:var(--verde)}
+  .cobrador{flex:1;text-align:center;font-size:10px;color:var(--suave);padding-bottom:8px}
+  .cobrador b{color:var(--tinta)}
+  .firma{flex:0 0 236px;text-align:center;padding-top:26px}
+  .firma .ln{border-top:1.5px solid var(--tinta);padding-top:5px;font-size:10.5px;font-weight:800;color:var(--verde-osc);letter-spacing:.02em}
+  .firma .orig{margin-top:4px;font-size:8.5px;color:var(--suave);letter-spacing:.02em}
+
+  .toolbar{position:sticky;top:0;background:#111827;padding:10px;text-align:center;display:flex;justify-content:center;gap:10px;z-index:10}
+  .toolbar button{background:#4FAEB2;color:#fff;border:0;padding:8px 16px;border-radius:6px;font-size:14px;cursor:pointer}
+  .toolbar button.danger{background:#dc2626}
+  .toolbar button.danger:hover{background:#b91c1c}
+  .toolbar button:disabled{opacity:.5;cursor:not-allowed}
+  .toolbar .anulado-tag{background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+
+  /* Sello ANULADO cuando r.anulado === true: watermark diagonal en el marco. */
+  .marco{position:relative}
+  .sello-anulado{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:5}
+  .sello-anulado span{font-size:120px;font-weight:900;color:rgba(220,38,38,.28);letter-spacing:.08em;transform:rotate(-24deg);border:8px solid rgba(220,38,38,.4);padding:12px 40px;border-radius:14px}
+  .anulado-motivo{margin-top:6px;text-align:center;font-size:11px;color:#7f1d1d}
+  .anulado-motivo b{font-weight:700}
+  @media print{
+    body{background:#fff}
+    .toolbar{display:none}
+    .page{width:auto;min-height:auto;margin:0;padding:6mm}
+    @page{size:A4 landscape;margin:8mm}
+    .marco{box-shadow:none}
+    /* Compactar para que el recibo entre en UNA sola hoja al imprimir/PDF. */
+    .cab{padding:10px 20px}
+    .montofranja{padding:8px 20px}
+    .cuerpo{padding:10px 20px 12px}
+    .tabla{margin-top:10px}
+    .tabla th{padding:5px 10px}
+    .tabla td{padding:4px 10px;height:auto}
+    .totalfila{margin-top:8px}
+    .montofinal{margin-top:10px;padding-top:8px}
+    .montofinal .letras{padding:8px 12px}
+    .pie{margin-top:14px}
+    .firma{padding-top:16px}
+    /* Si el detalle es muy largo y se extiende a otra hoja, que no corte feo:
+       repetir encabezado y mantener juntas las filas y los bloques finales. */
+    .tabla thead{display:table-header-group}
+    .tabla tr{page-break-inside:avoid}
+    .totalfila,.montofinal,.pie{page-break-inside:avoid}
+  }
+</style></head><body>
+<div class="toolbar">
+  <button onclick="window.print()">Imprimir / Guardar PDF</button>
+  ${r.anulado
+    ? `<span class="anulado-tag">⛔ Recibo anulado</span>`
+    : puedeAnular
+      ? `<button class="danger" id="btnAnular" onclick="anularRecibo()">Anular recibo</button>`
+      : ""}
+</div>
+<div class="page">
+  <div class="marco">
+    ${r.anulado
+      ? `<div class="sello-anulado"><span>ANULADO</span></div>`
+      : ""}
+    <div class="cab">
+      <div class="cab-izq">
+        <img src="${esc(marcaLogo)}" alt="${esc(EMPRESA_DOC.nombre)}" />
+        <div class="emisor">
+          <div class="nom">${esc(EMPRESA_DOC.nombre)}</div>
+          <div class="act">${EMPRESA_DOC.actividad.map(esc).join(" · ")}</div>
+          <div class="lin"><b>Tel.:</b> ${esc(marcaTel)} &nbsp;·&nbsp; ${marcaDir.map(esc).join(" · ")}</div>
+        </div>
+      </div>
+      <div class="cab-der">
+        <div class="tit">Recibo de dinero</div>
+        <div class="fiscal">R.U.C. ${esc(RUC_EMPRESA)}</div>
+        <div class="nro"><small>N&ordm;</small><b>${esc(puntoRecibo)} - ${esc(numeroCorto(r.numero_recibo))}</b></div>
+      </div>
+    </div>
+
+    <div class="montofranja">
+      <div class="cli">
+        <div class="tt">Recibimos de</div>
+        <div class="razon"><span class="lb">Razón social:</span>${esc(clienteNombreFinal)}</div>
+        <div class="meta">
+          <span class="lb">R.U.C./C.I.:</span>${esc(r.cliente_documento ?? "—")}
+          ${clienteDireccion ? `<span class="sep">·</span><span class="lb">Dirección:</span>${esc(clienteDireccion)}` : ""}
+          ${clienteTelefono ? `<span class="sep">·</span><span class="lb">Tel.:</span>${esc(clienteTelefono)}` : ""}
+        </div>
+      </div>
+      <div class="fecha">${esc(fechaLarga(r.fecha))}</div>
+    </div>
+
+    <div class="cuerpo">
+      <!-- Detalle ARRIBA: primero se ve QUE se cobro. -->
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th style="width:28%">Documento</th>
+            <th style="width:20%">Vencimiento</th>
+            <th style="width:30%">Concepto</th>
+            <th class="num" style="width:22%">Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filasTabla.map((f) => `<tr${f.esNegativo ? ' style="color:#7f1d1d;background:#fef2f2 !important"' : ""}>
+            <td>${esc(f.doc)}</td>
+            <td class="ct">${esc(f.venc)}</td>
+            <td>${esc(f.concepto)}</td>
+            <td class="num">${esc(f.importe)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      <div class="totalfila"><div class="caja"><span class="l">Total</span><span class="v">${fmtMonto(r.monto, moneda)}</span></div></div>
+
+      <!-- Monto ABAJO: cifra y letras juntas, cerrando el comprobante. -->
+      <div class="montofinal">
+        <div class="letras">
+          <span class="et">La cantidad de guaran&iacute;es</span>
+          <span class="txt">${esc(montoEnLetras(Number(r.monto) || 0, moneda))}</span>
+        </div>
+      </div>
+
+      <div class="pie">
+        <div class="metodos">
+          <div class="tt">Forma de pago</div>
+          ${["efectivo","transferencia","tarjeta","cheque"].map((k) => {
+            const on = String(r.metodo_pago ?? "").toLowerCase() === k;
+            return `<div class="it${on ? " on" : ""}"><span class="bx">${on ? "&times;" : ""}</span>${esc(METODO_LBL[k] ?? k)}</div>`;
+          }).join("")}
+        </div>
+        <div class="cobrador">${r.usuario_nombre ? `Cobrador: <b>${esc(r.usuario_nombre)}</b>` : ""}${r.referencia ? `<br>Ref.: ${esc(r.referencia)}` : ""}</div>
+        <div class="firma">
+          <div class="ln">${esc(EMPRESA_DOC.nombre)}</div>
+          <div class="orig">Original: Cliente &middot; Duplicado: Archivo Tributario</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  ${r.anulado
+    ? `<div class="anulado-motivo">
+        Anulado ${r.anulado_at ? "el " + esc(fechaLarga(r.anulado_at)) : ""}
+        ${r.anulado_by_nombre ? "por <b>" + esc(r.anulado_by_nombre) + "</b>" : ""}
+        ${r.anulado_motivo ? `&mdash; motivo: <b>${esc(r.anulado_motivo)}</b>` : ""}
+      </div>`
+    : ""}
+</div>
+
+<script>
+try{ if (${auto ? "true" : "false"}) window.print(); }catch(e){}
+
+// Anulación de recibo (solo admin: el botón se pinta condicionalmente).
+async function anularRecibo(){
+  const btn = document.getElementById("btnAnular");
+  const motivo = window.prompt("Anular este recibo. Escribí el motivo (mínimo 5 caracteres):", "");
+  if (motivo === null) return; // canceló
+  const m = String(motivo).trim();
+  if (m.length < 5) { alert("El motivo debe tener al menos 5 caracteres."); return; }
+  if (!window.confirm("¿Confirmás anular este recibo? Esta acción no se puede deshacer.")) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = "Anulando…"; }
+
+  // Recuperar el JWT de Supabase (mismo criterio que fetchWithSupabaseSession
+  // usa en el bundle): buscar en localStorage la key sb-<projectRef>-auth-token.
+  let token = null;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("sb-") && k.endsWith("-auth-token")) {
+        const raw = localStorage.getItem(k);
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.access_token === "string") { token = parsed.access_token; break; }
+        } catch(_) { /* value no-JSON: ignorar */ }
+      }
+    }
+  } catch(_) { /* localStorage bloqueado: intentar sin token */ }
+
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = "Bearer " + token;
+
+  try {
+    const res = await fetch(${JSON.stringify(`/api/recibos-dinero/${id}/anular`)}, {
+      method: "POST",
+      credentials: "include",
+      headers: headers,
+      body: JSON.stringify({ motivo: m }),
+    });
+    const body = await res.json().catch(function(){ return {}; });
+    if (!res.ok || body.success === false) {
+      alert("No se pudo anular: " + (body.error || res.status));
+      if (btn) { btn.disabled = false; btn.textContent = "Anular recibo"; }
+      return;
+    }
+    // Refrescar para mostrar la marca ANULADO.
+    window.location.reload();
+  } catch(e) {
+    alert("Error de red al anular el recibo.");
+    if (btn) { btn.disabled = false; btn.textContent = "Anular recibo"; }
+  }
+}
+</script>
+</body></html>`;
+
+  return new NextResponse(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+}

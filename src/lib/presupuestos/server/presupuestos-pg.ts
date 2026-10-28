@@ -1,0 +1,632 @@
+import type { AppSupabaseClient } from "@/lib/supabase/schema";
+import { calcMontoIvaIncluido, type IvaTipoPresupuesto } from "@/lib/presupuestos/types";
+import {
+  createVentaTransaccionalPg,
+  type CreateVentaItemInput,
+} from "@/lib/ventas/server/create-venta-pg";
+
+/** Item crudo que llega del cliente; los totales se recalculan en el server. */
+export interface PresupuestoItemInput {
+  producto_id: string | null;
+  producto_nombre: string;
+  sku: string | null;
+  cantidad: number;
+  unidad_medida: string | null;
+  precio_unitario: number;
+  iva_tipo: IvaTipoPresupuesto;
+  descuento: number;
+}
+
+export interface CrearPresupuestoInput {
+  cliente_id: string | null;
+  cliente_nombre: string;
+  cliente_ruc: string | null;
+  cliente_telefono: string | null;
+  cliente_direccion: string | null;
+  moneda: string;
+  validez_dias: number | null;
+  forma_pago: string | null;
+  plazo_entrega: string | null;
+  /** Día de entrega concreto (YYYY-MM-DD). Se muestra en el PDF. */
+  fecha_entrega: string | null;
+  observaciones: string | null;
+  items: PresupuestoItemInput[];
+}
+
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/** Calcula los totales de un ítem (precio IVA-incluido, descuento absoluto por línea). */
+export function calcularItem(it: PresupuestoItemInput) {
+  const cantidad = Number(it.cantidad) || 0;
+  const precio = Number(it.precio_unitario) || 0;
+  const descuento = Math.max(0, Number(it.descuento) || 0);
+  const bruto = precio * cantidad;
+  const total = Math.max(0, bruto - descuento);
+  const montoIva = round2(calcMontoIvaIncluido(it.iva_tipo, total));
+  const subtotal = round2(total - montoIva);
+  return {
+    cantidad,
+    precio_unitario: precio,
+    descuento: round2(descuento),
+    subtotal,
+    monto_iva: montoIva,
+    total: round2(total),
+  };
+}
+
+/** Próximo número de control PRE-XXXXXX (best-effort, puede haber carrera multi-usuario). */
+export async function siguienteNumeroControl(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  sucursalId: string
+): Promise<string> {
+  const { data, error } = await sb
+    .from("presupuestos")
+    .select("numero_control")
+    .eq("empresa_id", empresaId)
+    .eq("sucursal_id", sucursalId)
+    .like("numero_control", "PRE-%")
+    .order("numero_control", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  let next = 1;
+  const last = (data?.[0] as { numero_control?: string } | undefined)?.numero_control;
+  if (last) {
+    const m = last.match(/^PRE-(\d+)$/);
+    if (m) next = parseInt(m[1], 10) + 1;
+  }
+  return `PRE-${String(next).padStart(6, "0")}`;
+}
+
+/**
+ * Crea un presupuesto + ítems. Recalcula TODOS los totales en el server (no confía en
+ * los del cliente). NO toca stock. Rollback best-effort si falla la inserción de ítems.
+ */
+export async function crearPresupuesto(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  sucursalId: string,
+  input: CrearPresupuestoInput
+): Promise<{ id: string; numero_control: string }> {
+  if (!input.items || input.items.length === 0) {
+    throw new Error("El presupuesto debe tener al menos un ítem.");
+  }
+  if (!input.cliente_nombre || !input.cliente_nombre.trim()) {
+    throw new Error("El nombre del cliente es obligatorio.");
+  }
+
+  // Recalcular ítems y totales del presupuesto.
+  const calculados = input.items.map((it) => ({ raw: it, calc: calcularItem(it) }));
+  let subtotal = 0;
+  let montoIva = 0;
+  let descuentoTotal = 0;
+  let total = 0;
+  for (const { calc } of calculados) {
+    subtotal += calc.subtotal;
+    montoIva += calc.monto_iva;
+    descuentoTotal += calc.descuento;
+    total += calc.total;
+  }
+
+  const numero = await siguienteNumeroControl(sb, empresaId, sucursalId);
+  const fechaIso = new Date().toISOString();
+  let vencimiento: string | null = null;
+  if (input.validez_dias && input.validez_dias > 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + input.validez_dias);
+    vencimiento = d.toISOString().slice(0, 10);
+  }
+
+  const ins = await sb
+    .from("presupuestos")
+    .insert({
+      empresa_id: empresaId,
+      sucursal_id: sucursalId,
+      cliente_id: input.cliente_id,
+      cliente_nombre: input.cliente_nombre.trim(),
+      cliente_ruc: input.cliente_ruc?.trim() || null,
+      cliente_telefono: input.cliente_telefono?.trim() || null,
+      cliente_direccion: input.cliente_direccion?.trim() || null,
+      numero_control: numero,
+      estado: "creado",
+      moneda: input.moneda || "PYG",
+      subtotal: round2(subtotal),
+      monto_iva: round2(montoIva),
+      descuento_total: round2(descuentoTotal),
+      total: round2(total),
+      validez_dias: input.validez_dias ?? null,
+      fecha: fechaIso,
+      fecha_vencimiento: vencimiento,
+      forma_pago: input.forma_pago?.trim() || null,
+      plazo_entrega: input.plazo_entrega?.trim() || null,
+      fecha_entrega: input.fecha_entrega?.trim() || null,
+      observaciones: input.observaciones?.trim() || null,
+    })
+    .select("id, numero_control")
+    .single();
+  if (ins.error) throw new Error(ins.error.message);
+  const presupuestoId = String((ins.data as { id: string }).id);
+
+  const itemsRows = calculados.map(({ raw, calc }, idx) => ({
+    empresa_id: empresaId,
+    presupuesto_id: presupuestoId,
+    producto_id: raw.producto_id,
+    producto_nombre: raw.producto_nombre,
+    sku: raw.sku,
+    cantidad: calc.cantidad,
+    unidad_medida: raw.unidad_medida,
+    precio_unitario: calc.precio_unitario,
+    iva_tipo: raw.iva_tipo,
+    subtotal: calc.subtotal,
+    monto_iva: calc.monto_iva,
+    descuento: calc.descuento,
+    total: calc.total,
+    orden: idx,
+  }));
+  const insItems = await sb.from("presupuesto_items").insert(itemsRows);
+  if (insItems.error) {
+    // Rollback best-effort de la cabecera para no dejar un presupuesto sin ítems.
+    try {
+      await sb.from("presupuestos").delete().eq("id", presupuestoId).eq("empresa_id", empresaId);
+    } catch {}
+    throw new Error(insItems.error.message);
+  }
+
+  return { id: presupuestoId, numero_control: numero };
+}
+
+/**
+ * Edita un presupuesto existente: datos del cliente, condiciones e ítems (cantidades,
+ * precios, orden, agregar/quitar). Recalcula TODOS los totales en el server. Reemplaza
+ * la lista de ítems completa (borra e inserta) respetando el orden del array recibido.
+ *
+ * Restricción: NO se puede editar un presupuesto ya convertido/facturado (estado
+ * 'convertido' o con convertido_pedido_id / convertido_venta_id), para no desincronizar
+ * el pedido/venta/factura ya generados. Mantiene numero_control, estado y fecha original;
+ * recalcula fecha_vencimiento desde la fecha original + validez.
+ */
+export async function actualizarPresupuesto(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  presupuestoId: string,
+  input: CrearPresupuestoInput
+): Promise<{ id: string; numero_control: string }> {
+  if (!input.items || input.items.length === 0) {
+    throw new Error("El presupuesto debe tener al menos un ítem.");
+  }
+  if (!input.cliente_nombre || !input.cliente_nombre.trim()) {
+    throw new Error("El nombre del cliente es obligatorio.");
+  }
+
+  const pq = await sb
+    .from("presupuestos")
+    .select("id, numero_control, estado, fecha, convertido_pedido_id, convertido_venta_id")
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId)
+    .maybeSingle();
+  if (pq.error) throw new Error(pq.error.message);
+  if (!pq.data) throw new Error("Presupuesto no encontrado.");
+  const p = pq.data as {
+    numero_control: string;
+    estado: string;
+    fecha: string;
+    convertido_pedido_id: string | null;
+    convertido_venta_id: string | null;
+  };
+  if (p.estado === "convertido" || p.convertido_pedido_id || p.convertido_venta_id) {
+    throw new Error("No se puede editar un presupuesto ya convertido o facturado.");
+  }
+
+  // Recalcular ítems y totales (mismo criterio que al crear).
+  const calculados = input.items.map((it) => ({ raw: it, calc: calcularItem(it) }));
+  let subtotal = 0;
+  let montoIva = 0;
+  let descuentoTotal = 0;
+  let total = 0;
+  for (const { calc } of calculados) {
+    subtotal += calc.subtotal;
+    montoIva += calc.monto_iva;
+    descuentoTotal += calc.descuento;
+    total += calc.total;
+  }
+
+  // Recalcular vencimiento desde la fecha original del presupuesto + validez.
+  let vencimiento: string | null = null;
+  if (input.validez_dias && input.validez_dias > 0) {
+    const base = new Date(p.fecha);
+    if (!Number.isNaN(base.getTime())) {
+      base.setDate(base.getDate() + input.validez_dias);
+      vencimiento = base.toISOString().slice(0, 10);
+    }
+  }
+
+  const upd = await sb
+    .from("presupuestos")
+    .update({
+      cliente_id: input.cliente_id,
+      cliente_nombre: input.cliente_nombre.trim(),
+      cliente_ruc: input.cliente_ruc?.trim() || null,
+      cliente_telefono: input.cliente_telefono?.trim() || null,
+      cliente_direccion: input.cliente_direccion?.trim() || null,
+      moneda: input.moneda || "PYG",
+      subtotal: round2(subtotal),
+      monto_iva: round2(montoIva),
+      descuento_total: round2(descuentoTotal),
+      total: round2(total),
+      validez_dias: input.validez_dias ?? null,
+      fecha_vencimiento: vencimiento,
+      forma_pago: input.forma_pago?.trim() || null,
+      plazo_entrega: input.plazo_entrega?.trim() || null,
+      fecha_entrega: input.fecha_entrega?.trim() || null,
+      observaciones: input.observaciones?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId)
+    .select("id, numero_control")
+    .maybeSingle();
+  if (upd.error) throw new Error(upd.error.message);
+  if (!upd.data) throw new Error("Presupuesto no encontrado.");
+
+  // Reemplazar la lista de ítems completa (borrar + reinsertar con orden explícito).
+  const del = await sb
+    .from("presupuesto_items")
+    .delete()
+    .eq("empresa_id", empresaId)
+    .eq("presupuesto_id", presupuestoId);
+  if (del.error) throw new Error(del.error.message);
+
+  const itemsRows = calculados.map(({ raw, calc }, idx) => ({
+    empresa_id: empresaId,
+    presupuesto_id: presupuestoId,
+    producto_id: raw.producto_id,
+    producto_nombre: raw.producto_nombre,
+    sku: raw.sku,
+    cantidad: calc.cantidad,
+    unidad_medida: raw.unidad_medida,
+    precio_unitario: calc.precio_unitario,
+    iva_tipo: raw.iva_tipo,
+    subtotal: calc.subtotal,
+    monto_iva: calc.monto_iva,
+    descuento: calc.descuento,
+    total: calc.total,
+    orden: idx,
+  }));
+  const insItems = await sb.from("presupuesto_items").insert(itemsRows);
+  if (insItems.error) throw new Error(insItems.error.message);
+
+  return { id: presupuestoId, numero_control: String(p.numero_control) };
+}
+
+/**
+ * Duplica un presupuesto: crea uno NUEVO (numero_control nuevo, estado 'creado',
+ * fecha de hoy) con los mismos datos de cliente, condiciones e ítems. No copia el
+ * estado ni los vínculos de conversión del original.
+ */
+export async function duplicarPresupuesto(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  sucursalId: string,
+  presupuestoId: string
+): Promise<{ id: string; numero_control: string }> {
+  const pq = await sb
+    .from("presupuestos")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId)
+    .maybeSingle();
+  if (pq.error) throw new Error(pq.error.message);
+  if (!pq.data) throw new Error("Presupuesto no encontrado.");
+  const p = pq.data as Record<string, unknown>;
+
+  const itq = await sb
+    .from("presupuesto_items")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .eq("presupuesto_id", presupuestoId)
+    .order("orden", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (itq.error) throw new Error(itq.error.message);
+  const items = (itq.data ?? []) as Record<string, unknown>[];
+  if (items.length === 0) throw new Error("El presupuesto no tiene ítems para duplicar.");
+
+  return crearPresupuesto(sb, empresaId, sucursalId, {
+    cliente_id: (p.cliente_id as string | null) ?? null,
+    cliente_nombre: String(p.cliente_nombre ?? "").trim(),
+    cliente_ruc: (p.cliente_ruc as string | null) ?? null,
+    cliente_telefono: (p.cliente_telefono as string | null) ?? null,
+    cliente_direccion: (p.cliente_direccion as string | null) ?? null,
+    moneda: String(p.moneda ?? "PYG"),
+    validez_dias: p.validez_dias != null ? Number(p.validez_dias) : null,
+    forma_pago: (p.forma_pago as string | null) ?? null,
+    plazo_entrega: (p.plazo_entrega as string | null) ?? null,
+    fecha_entrega: (p.fecha_entrega as string | null) ?? null,
+    observaciones: (p.observaciones as string | null) ?? null,
+    items: items.map((it) => ({
+      producto_id: (it.producto_id as string | null) ?? null,
+      producto_nombre: String(it.producto_nombre ?? ""),
+      sku: (it.sku as string | null) ?? null,
+      cantidad: Number(it.cantidad) || 0,
+      unidad_medida: (it.unidad_medida as string | null) ?? null,
+      precio_unitario: Number(it.precio_unitario) || 0,
+      iva_tipo: (String(it.iva_tipo ?? "10%") as IvaTipoPresupuesto),
+      descuento: Number(it.descuento) || 0,
+    })),
+  });
+}
+
+/**
+ * Convierte un presupuesto APROBADO en un pedido (proyecto tipo 'pedido', estado inicial 'nuevo').
+ * NO descuenta stock (el pedido aún no está confirmado). Evita doble conversión.
+ * Devuelve el id del proyecto/pedido creado.
+ */
+export async function convertirEnPedido(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  sucursalId: string,
+  presupuestoId: string
+): Promise<{ pedido_id: string }> {
+  // Cargar presupuesto + ítems.
+  const pq = await sb
+    .from("presupuestos")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId)
+    .maybeSingle();
+  if (pq.error) throw new Error(pq.error.message);
+  if (!pq.data) throw new Error("Presupuesto no encontrado.");
+  const p = pq.data as Record<string, unknown>;
+
+  if (p.estado === "convertido" || p.convertido_pedido_id) {
+    throw new Error("Este presupuesto ya fue convertido en pedido.");
+  }
+  if (p.estado !== "aprobado") {
+    throw new Error("Solo se puede convertir un presupuesto en estado 'aprobado'.");
+  }
+
+  const itq = await sb
+    .from("presupuesto_items")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .eq("presupuesto_id", presupuestoId)
+    .order("orden", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (itq.error) throw new Error(itq.error.message);
+  const items = (itq.data ?? []) as Record<string, unknown>[];
+
+  // Resolver tipo 'pedido' + estado inicial 'nuevo'.
+  const tipoQ = await sb
+    .from("proyecto_tipos")
+    .select("id")
+    .eq("empresa_id", empresaId)
+    .eq("codigo", "pedido")
+    .eq("activo", true)
+    .limit(1)
+    .maybeSingle();
+  if (tipoQ.error) throw new Error(tipoQ.error.message);
+  if (!tipoQ.data) throw new Error("Tipo de proyecto 'pedido' no configurado para esta empresa.");
+  const tipoId = (tipoQ.data as { id: string }).id;
+
+  const estadoQ = await sb
+    .from("proyecto_estados")
+    .select("id")
+    .eq("empresa_id", empresaId)
+    .eq("codigo", "nuevo")
+    .eq("activo", true)
+    .limit(1)
+    .maybeSingle();
+  if (estadoQ.error) throw new Error(estadoQ.error.message);
+  if (!estadoQ.data) throw new Error("Estado 'nuevo' no configurado para esta empresa.");
+  const estadoId = (estadoQ.data as { id: string }).id;
+
+  const fechaIso = new Date().toISOString();
+  const itemsSnapshot = items.map((it) => ({
+    producto_id: it.producto_id,
+    producto_nombre: it.producto_nombre,
+    sku: it.sku,
+    cantidad: Number(it.cantidad),
+    precio_venta: Number(it.precio_unitario),
+    total_linea: Number(it.total),
+  }));
+
+  const titulo = `Pedido desde ${String(p.numero_control)} · ${String(p.cliente_nombre)}`.slice(0, 200);
+
+  const insProy = await sb
+    .from("proyectos")
+    .insert({
+      empresa_id: empresaId,
+      sucursal_id: sucursalId,
+      cliente_id: p.cliente_id ?? null,
+      tipo_id: tipoId,
+      estado_id: estadoId,
+      titulo,
+      prioridad: "normal",
+      monto_vendido: Number(p.total) || 0,
+      fecha_ingreso: fechaIso,
+      observaciones_comerciales: p.observaciones ?? null,
+      brief_data: {
+        origen: "presupuesto",
+        presupuesto_id: presupuestoId,
+        numero_presupuesto: p.numero_control,
+        cliente_nombre: p.cliente_nombre,
+        cliente_ruc: p.cliente_ruc,
+        cliente_telefono: p.cliente_telefono,
+        cliente_direccion: p.cliente_direccion,
+        forma_pago: p.forma_pago,
+        plazo_entrega: p.plazo_entrega,
+        observaciones: p.observaciones,
+        items: itemsSnapshot,
+        total: Number(p.total) || 0,
+      },
+      metadata: {
+        source: "presupuesto",
+        presupuesto_id: presupuestoId,
+        numero_presupuesto: p.numero_control,
+      },
+    })
+    .select("id")
+    .single();
+  if (insProy.error) throw new Error(insProy.error.message);
+  const pedidoId = String((insProy.data as { id: string }).id);
+
+  // Marcar presupuesto como convertido (idempotencia: si otro proceso ya lo marcó, no duplica pedido relevante).
+  const upd = await sb
+    .from("presupuestos")
+    .update({ estado: "convertido", convertido_pedido_id: pedidoId, updated_at: fechaIso })
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId);
+  if (upd.error) {
+    // Rollback del proyecto creado para no dejar un pedido huérfano sin marca de conversión.
+    try {
+      await sb.from("proyectos").delete().eq("id", pedidoId).eq("empresa_id", empresaId);
+    } catch {}
+    throw new Error(upd.error.message);
+  }
+
+  return { pedido_id: pedidoId };
+}
+
+/**
+ * Facturación directa desde presupuesto aprobado, sin pasar por proyecto/pedido ni por
+ * el formulario `/ventas/nueva`. Reutiliza `createVentaTransaccionalPg` para que
+ * stock, movimientos, CxC y puente venta→factura sean idénticos a una venta normal.
+ *
+ * Restricciones:
+ *  - Estado debe ser 'aprobado'.
+ *  - Todos los ítems necesitan `producto_id` (para descontar stock / recetas).
+ *  - Se marca el presupuesto como 'convertido' con `convertido_venta_id`.
+ */
+export async function facturarPresupuestoDirecto(
+  sb: AppSupabaseClient,
+  schema: string,
+  empresaId: string,
+  sucursalId: string,
+  presupuestoId: string,
+  auditor: { createdBy: string | null; usuarioNombre: string | null }
+): Promise<{
+  venta_id: string;
+  numero_control: string;
+  factura_id: string | null;
+  numero_factura: string | null;
+  factura_warning: string | null;
+}> {
+  const pq = await sb
+    .from("presupuestos")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId)
+    .maybeSingle();
+  if (pq.error) throw new Error(pq.error.message);
+  if (!pq.data) throw new Error("Presupuesto no encontrado.");
+  const p = pq.data as Record<string, unknown>;
+
+  if (p.estado === "convertido" || p.convertido_pedido_id || p.convertido_venta_id) {
+    throw new Error("Este presupuesto ya fue convertido/facturado.");
+  }
+  if (p.estado !== "aprobado") {
+    throw new Error("Solo se puede facturar un presupuesto en estado 'aprobado'.");
+  }
+
+  const itq = await sb
+    .from("presupuesto_items")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .eq("presupuesto_id", presupuestoId)
+    .order("orden", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (itq.error) throw new Error(itq.error.message);
+  const items = (itq.data ?? []) as Record<string, unknown>[];
+  if (items.length === 0) throw new Error("El presupuesto no tiene ítems.");
+
+  const sinProducto = items.filter((it) => !it.producto_id);
+  if (sinProducto.length > 0) {
+    throw new Error(
+      "El presupuesto tiene ítems sin producto vinculado; no se puede facturar directamente. Editá el presupuesto o convertí en pedido primero."
+    );
+  }
+
+  const ventaItems: CreateVentaItemInput[] = items.map((it) => {
+    const precioUnitario = Number(it.precio_unitario) || 0;
+    const cantidad = Number(it.cantidad) || 0;
+    const subtotal = Number(it.subtotal) || 0;
+    const montoIva = Number(it.monto_iva) || 0;
+    const totalLinea = Number(it.total) || 0;
+    const ivaTipo = String(it.iva_tipo ?? "10%") as IvaTipoPresupuesto;
+    return {
+      producto_id: String(it.producto_id),
+      producto_nombre: String(it.producto_nombre ?? ""),
+      sku: String(it.sku ?? ""),
+      cantidad,
+      precio_venta_original: precioUnitario,
+      precio_venta: precioUnitario,
+      tipo_iva: ivaTipo,
+      tipo_precio: "minorista",
+      subtotal,
+      monto_iva: montoIva,
+      total_linea: totalLinea,
+    };
+  });
+
+  const subtotalDeclarado = ventaItems.reduce((s, it) => s + it.subtotal, 0);
+  const montoIvaDeclarado = ventaItems.reduce((s, it) => s + it.monto_iva, 0);
+  const totalDeclarado = ventaItems.reduce((s, it) => s + it.total_linea, 0);
+
+  const moneda = (String(p.moneda ?? "GS") === "USD" ? "USD" : "GS") as "GS" | "USD";
+  const observacionesOriginales = (p.observaciones as string | null) ?? null;
+  const observacionesVenta = observacionesOriginales
+    ? `Facturación directa del presupuesto ${String(p.numero_control ?? "")}. ${observacionesOriginales}`
+    : `Facturación directa del presupuesto ${String(p.numero_control ?? "")}.`;
+
+  const {
+    ventaId,
+    numeroControl,
+    facturaId,
+    numeroFactura,
+    facturaWarning,
+  } = await createVentaTransaccionalPg({
+    schema,
+    empresaId,
+    sucursalId,
+    clienteId: (p.cliente_id as string | null) ?? null,
+    observaciones: observacionesVenta.slice(0, 500),
+    moneda,
+    tipoCambio: 1,
+    tipoVenta: "CONTADO",
+    plazoDias: null,
+    metodoPago: "efectivo",
+    items: ventaItems,
+    subtotalDeclarado,
+    montoIvaDeclarado,
+    totalDeclarado,
+    createdBy: auditor.createdBy,
+    usuarioNombre: auditor.usuarioNombre,
+  });
+
+  // Marcar presupuesto como convertido (usa columna existente `convertido_venta_id`).
+  const upd = await sb
+    .from("presupuestos")
+    .update({
+      estado: "convertido",
+      convertido_venta_id: ventaId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId);
+  if (upd.error) {
+    // No se hace rollback de la venta: ya afectó stock/CxC/factura. Se logea y se sigue.
+    console.error(
+      "[facturarPresupuestoDirecto] no se pudo marcar convertido; venta ya creada:",
+      { presupuestoId, ventaId, error: upd.error.message }
+    );
+  }
+
+  return {
+    venta_id: ventaId,
+    numero_control: numeroControl,
+    factura_id: facturaId ?? null,
+    numero_factura: numeroFactura ?? null,
+    factura_warning: facturaWarning ?? null,
+  };
+}
