@@ -153,6 +153,14 @@ DECLARE
     {"slug":"omnicanal",                  "nombre":"Omnicanal (paquete)",        "activo":false}
   ]'::jsonb;
 
+  -- Pestañas del tablero principal (ver src/lib/dashboard/resolve-effective-dashboard-views.ts).
+  v_dash_views CONSTANT jsonb := '[
+    {"slug":"comercial",  "nombre":"Comercial",  "orden":10},
+    {"slug":"financiero", "nombre":"Financiero", "orden":20},
+    {"slug":"inventario", "nombre":"Inventario", "orden":30},
+    {"slug":"ventas",     "nombre":"Ventas",     "orden":40}
+  ]'::jsonb;
+
   m          jsonb;
   v_modulo   uuid;
   v_usuario  uuid;
@@ -206,6 +214,23 @@ BEGIN
   END LOOP;
 
   -- ---------------------------------------------------------------------------
+  -- Catálogo de vistas del tablero (las 4 pestañas del dashboard).
+  -- Sin estas filas el home muestra "Sin vistas asignadas". No hace falta tocar
+  -- `empresa_dashboard_views`: vacío equivale a "todas las del catálogo".
+  -- ---------------------------------------------------------------------------
+  FOR m IN SELECT * FROM jsonb_array_elements(v_dash_views)
+  LOOP
+    IF NOT EXISTS (SELECT 1 FROM cerveceriaerp.dashboard_views WHERE slug = (m ->> 'slug')) THEN
+      PERFORM pg_temp.neura_insert_min(tgt, 'dashboard_views',
+        jsonb_build_object(
+          'slug',   m ->> 'slug',
+          'nombre', m ->> 'nombre',
+          'orden',  m ->> 'orden',
+          'activo', 'true'));
+    END IF;
+  END LOOP;
+
+  -- ---------------------------------------------------------------------------
   -- Usuario administrador del ERP
   -- `rol = 'admin'` → ve todos los módulos activos de la empresa sin necesitar
   -- filas en `usuario_modulos`.
@@ -242,6 +267,8 @@ SELECT e.id AS empresa_id, e.nombre_empresa AS empresa,
        (SELECT count(*) FROM cerveceriaerp.empresa_modulos em WHERE em.empresa_id = e.id AND em.activo) AS modulos_activos,
        (SELECT count(*) FROM cerveceriaerp.usuarios u WHERE u.empresa_id = e.id) AS usuarios
   FROM cerveceriaerp.empresas e;
+
+SELECT slug, nombre, orden, activo FROM cerveceriaerp.dashboard_views ORDER BY orden;
 
 SELECT m.slug, m.nombre, em.activo
   FROM cerveceriaerp.empresa_modulos em
