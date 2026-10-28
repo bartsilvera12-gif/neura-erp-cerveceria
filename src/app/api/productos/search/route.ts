@@ -89,6 +89,13 @@ export async function GET(request: NextRequest) {
 
     query = aplicarFiltroSucursal(query, exigirSucursal(auth));
 
+    // Filtro por categoría: el buscador de Nueva venta manda ?categoria_id=…
+    // para poder listar una categoría entera sin tipear nada.
+    const categoriaId = (url.searchParams.get("categoria_id") ?? "").trim();
+    if (categoriaId) {
+      query = query.eq("categoria_principal_id", categoriaId);
+    }
+
     if (q.length > 0) {
       const pat = `%${escapeIlikePattern(q)}%`;
       query = query.or(`nombre.ilike.${pat},sku.ilike.${pat},codigo_barras.ilike.${pat}`);

@@ -11,7 +11,7 @@ import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
 import type { Producto } from "@/lib/inventario/types";
 
-import { AlertTriangle, CheckCircle2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Image as ImageIcon, Plus, Search, X } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -43,8 +43,20 @@ function precioPorTipo(p: Producto, tipo: TipoPrecioVenta): number {
   return p.precio_venta;
 }
 
-/** Tipos de precio ofrecidos en la UI (sin 'costo', que queda solo como histórico). */
-const TIPOS_PRECIO_UI: TipoPrecioVenta[] = ["minorista", "mayorista", "distribuidor"];
+/** Cuántos resultados pide el buscador: por texto alcanza con los primeros. */
+const COMBO_LIMITE_TEXTO = 20;
+/** Con una categoría elegida se lista la categoría entera (tope del endpoint). */
+const COMBO_LIMITE_CATEGORIA = 100;
+
+/**
+ * ¿Este producto maneja stock real? Un producto del Menú preparado al vender no
+ * tiene existencias propias (sale de la receta), así que no se puede bloquear
+ * por stock 0. Uno con `produccion_previa` sí: se produjo antes y se stockeó.
+ */
+function manejaStock(p: { controla_stock?: boolean; modo_receta?: string }): boolean {
+  if (p.controla_stock !== false) return true;
+  return p.modo_receta === "produccion_previa";
+}
 
 const tipoPrecioLabel: Record<TipoPrecioVenta, string> = {
   minorista: "Minorista",
@@ -60,6 +72,132 @@ const inputClass =
 const labelClass = "block text-sm font-medium text-slate-700 mb-1.5";
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
+
+/** Miniatura del producto, con un marcador cuando no hay imagen o no carga. */
+function ProductoThumb({ url, alt }: { url?: string | null; alt: string }) {
+  const [err, setErr] = useState(false);
+  if (!url || err) {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-100 bg-slate-50 text-slate-300">
+        <ImageIcon className="h-4 w-4" aria-hidden />
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt={alt}
+      loading="lazy"
+      onError={() => setErr(true)}
+      className="h-10 w-10 shrink-0 rounded-md border border-slate-100 object-cover"
+    />
+  );
+}
+
+/** Filtro de categoría del buscador: desplegable con su propia búsqueda. */
+function CategoriaCombo({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  options: { id: string; nombre: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 30);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQ("");
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const selected = options.find((o) => o.id === value) ?? null;
+  const nq = q.trim().toLowerCase();
+  const filtradas = nq ? options.filter((o) => o.nombre.toLowerCase().includes(nq)) : options;
+
+  return (
+    <div ref={wrapRef} className="relative sm:w-56">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex h-12 w-full items-center justify-between gap-2 rounded-xl border-2 bg-white px-3 text-sm outline-none transition-all ${
+          open || selected
+            ? "border-[#4FAEB2] text-slate-800 ring-4 ring-[#4FAEB2]/15"
+            : "border-[#0EA5E9]/30 text-slate-700 hover:border-[#4FAEB2]/60"
+        }`}
+      >
+        <span className="truncate">{selected ? selected.nombre : "Todas las categorías"}</span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-40 mt-2 w-full min-w-[16rem] overflow-hidden rounded-xl border-2 border-[#4FAEB2]/25 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)]">
+          <div className="relative border-b border-slate-100 p-2">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#4FAEB2]" aria-hidden />
+            <input
+              ref={inputRef}
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar categoría…"
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/15"
+            />
+          </div>
+          <ul className="max-h-72 overflow-y-auto py-1">
+            <li>
+              <button
+                type="button"
+                onClick={() => { onChange(""); setOpen(false); setQ(""); }}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                  !value ? "bg-[#4FAEB2]/10 font-semibold text-[#3F8E91]" : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                Todas las categorías
+              </button>
+            </li>
+            {filtradas.length === 0 ? (
+              <li className="px-3 py-2 text-center text-xs text-slate-400">Sin resultados.</li>
+            ) : (
+              filtradas.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => { onChange(c.id); setOpen(false); setQ(""); }}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                      value === c.id
+                        ? "bg-[#4FAEB2]/10 font-semibold text-[#3F8E91]"
+                        : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="truncate">{c.nombre}</span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SegmentedControl<T extends string>({
   value,
@@ -113,7 +251,6 @@ export default function NuevaVentaPage() {
   const router = useRouter();
 
   // ── Estado global ──────────────────────────────────────────────────────────
-  const [productos, setProductos]   = useState<Producto[]>([]);
   const [items, setItems]           = useState<LineaVenta[]>([]);
   const [errorLinea, setErrorLinea] = useState<string | null>(null);
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
@@ -181,19 +318,18 @@ export default function NuevaVentaPage() {
   const [cobroModalOpen, setCobroModalOpen] = useState(false);
   const [entidadQuery, setEntidadQuery] = useState("");
 
-  // ── Línea en construcción ─────────────────────────────────────────────────
-  const [lineaProdId, setLineaProdId] = useState("");
-  const [lineaCant,   setLineaCant]   = useState("");
-  const [lineaPrecio, setLineaPrecio] = useState("");
-  const [lineaIva,    setLineaIva]    = useState<TipoIvaVenta>("10%");
-  const [lineaTipoPrecio, setLineaTipoPrecio] = useState<TipoPrecioVenta>("minorista");
-
-  // ── Combobox de producto ───────────────────────────────────────────────────
-  const [comboQuery,     setComboQuery]     = useState("");
-  const [comboOpen,      setComboOpen]      = useState(false);
-  const [comboHighlight, setComboHighlight] = useState(-1);
-  const comboInputRef    = useRef<HTMLInputElement>(null);
+  // ── Buscador de producto (server-side sobre todo el catálogo) ──────────────
+  // Elegir un resultado agrega la línea de una: no hay formulario intermedio.
+  const [comboQuery,       setComboQuery]       = useState("");
+  const [comboOpen,        setComboOpen]        = useState(false);
+  const [comboHighlight,   setComboHighlight]   = useState(-1);
+  const [comboHits,        setComboHits]        = useState<Producto[]>([]);
+  const [comboBuscando,    setComboBuscando]    = useState(false);
+  const [comboCategoriaId, setComboCategoriaId] = useState("");
+  const [categorias,       setCategorias]       = useState<{ id: string; nombre: string }[]>([]);
+  const comboInputRef     = useRef<HTMLInputElement>(null);
   const comboContainerRef = useRef<HTMLDivElement>(null);
+  const comboTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Modal buscador (F3) ────────────────────────────────────────────────────
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -231,16 +367,15 @@ export default function NuevaVentaPage() {
       metodo_valuacion: "CPP",
       codigo_barras: p.codigo_barras,
       codigo_barras_interno: p.codigo_barras_interno,
-      imagen_path: null,
+      imagen_path: p.imagen_path ?? null,
       imagen_url: p.imagen_url,
+      // Sin estas banderas, un producto del Menú (controla_stock=false) entraba
+      // al catálogo local como si manejara stock y las validaciones lo trataban
+      // como agotado.
+      controla_stock: p.controla_stock,
+      modo_receta: p.modo_receta,
+      es_vendible: true,
     };
-  }
-
-  function handleSelectFromPicker(p: ProductoPickerItem) {
-    const prod = pickerToProducto(p);
-    setProductos((prev) => (prev.find((x) => x.id === prod.id) ? prev : [...prev, prod]));
-    seleccionarProducto(prod);
-    setPickerOpen(false);
   }
 
   /**
@@ -259,11 +394,6 @@ export default function NuevaVentaPage() {
     const totalLinea = cantidad * precioPyg;
     const montoIva = calcIva(iva, totalLinea);
     const subtotal = totalLinea - montoIva;
-
-    // Asegurar que el producto este en el array local (para que stock_actual
-    // se conozca en validaciones posteriores del form inline).
-    const prodLocal = pickerToProducto(p);
-    setProductos((prev) => (prev.find((x) => x.id === prodLocal.id) ? prev : [...prev, prodLocal]));
 
     setItems((prev) => [
       ...prev,
@@ -284,14 +414,6 @@ export default function NuevaVentaPage() {
     setErrorVenta(null);
     return true;
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    getProductos().then((data) => {
-      if (!cancelled) setProductos(data);
-    });
-    return () => { cancelled = true; };
-  }, []);
 
   // Precarga al facturar un pedido (Caja): lee ?pedido_id=, trae el pedido y carga sus
   // items + cliente en el carrito. NO crea nada acá; la venta se genera al confirmar.
@@ -409,8 +531,65 @@ export default function NuevaVentaPage() {
     return () => { cancelled = true; window.removeEventListener("focus", onFocus); };
   }, []);
 
-  // El buscador de productos NO se auto-abre al entrar: se va directo a la venta.
-  // El cajero lo abre con el botón "+ Agregar producto" cuando lo necesita.
+  // Al entrar, el foco va al buscador: el cajero empieza a tipear y carga, sin
+  // tener que abrir ningún modal primero.
+  useEffect(() => {
+    const t = setTimeout(() => comboInputRef.current?.focus(), 120);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Catálogo de categorías para el filtro del buscador (una sola vez).
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/inventario/categorias", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel) return;
+        const rows = ((j?.data?.categorias ?? []) as Record<string, unknown>[])
+          .map((c) => ({ id: String(c.id), nombre: String(c.nombre ?? "") }))
+          .filter((c) => c.nombre !== "");
+        setCategorias(rows);
+      })
+      .catch(() => { /* el filtro es opcional, no bloquea la venta */ });
+    return () => { cancel = true; };
+  }, []);
+
+  /**
+   * Búsqueda en el servidor, con debounce. Con una categoría elegida lista la
+   * categoría entera sin necesidad de tipear; si no, pide al menos 2 letras
+   * para no traer el catálogo completo en cada tecla.
+   */
+  useEffect(() => {
+    const q = comboQuery.trim();
+    const hayCategoria = comboCategoriaId !== "";
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    if (q.length < 2 && !hayCategoria) {
+      setComboHits([]);
+      setComboBuscando(false);
+      return;
+    }
+    setComboBuscando(true);
+    comboTimerRef.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (q) params.set("q", q);
+        if (hayCategoria) params.set("categoria_id", comboCategoriaId);
+        params.set("limit", hayCategoria ? String(COMBO_LIMITE_CATEGORIA) : String(COMBO_LIMITE_TEXTO));
+        const res = await fetch(`/api/productos/search?${params.toString()}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const j = await res.json();
+        if (!res.ok || !j?.success) throw new Error("search");
+        setComboHits(((j?.data?.items ?? []) as ProductoPickerItem[]).map(pickerToProducto));
+      } catch {
+        setComboHits([]);
+      } finally {
+        setComboBuscando(false);
+      }
+    }, 220);
+    return () => { if (comboTimerRef.current) clearTimeout(comboTimerRef.current); };
+  }, [comboQuery, comboCategoriaId]);
 
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
@@ -435,30 +614,6 @@ export default function NuevaVentaPage() {
 
   // ── Cálculos ───────────────────────────────────────────────────────────────
   const tipoCambioNum = 1;
-
-  const prodSel     = productos.find((p) => p.id === lineaProdId);
-  const cantNum     = parseInt(lineaCant) || 0;
-  const precioInput = parseFloat(lineaPrecio) || 0;
-  const precioGs    = precioInput;
-
-  const enCarrito = items
-    .filter((i) => i.producto_id === lineaProdId)
-    .reduce((s, i) => s + i.cantidad, 0);
-  const prodSelControlaStock = prodSel ? prodSel.controla_stock !== false : true;
-  const stockDisp = (prodSel?.stock_actual ?? 0) - enCarrito;
-
-  // IVA incluido: el total de la línea es precio × cantidad; el IVA se desglosa
-  // desde adentro y el subtotal (base imponible) = total − IVA.
-  const lineaTotalLinea = cantNum > 0 && precioGs > 0 ? cantNum * precioGs : 0;
-  const lineaMontoIva   = calcIva(lineaIva, lineaTotalLinea);
-  const lineaSubtotal   = lineaTotalLinea - lineaMontoIva;
-
-  // Aviso de stock (no bloquea): si falta stock se permite agregar igual y se pide
-  // confirmación al confirmar la venta (venta sin stock con confirmación, Fase 5).
-  // Productos del Menú (controla_stock=false) no controlan stock.
-  const stockInsuf  = prodSel !== undefined && prodSelControlaStock && cantNum > 0 && cantNum > stockDisp;
-  const lineaValida =
-    !!prodSel && cantNum > 0 && precioGs > 0;
 
   const totalSubtotal = items.reduce((s, i) => s + i.subtotal, 0);
   const totalIva      = items.reduce((s, i) => s + i.monto_iva, 0);
@@ -497,29 +652,12 @@ export default function NuevaVentaPage() {
   const montoRecibidoNum = parseFloat(montoRecibido) || 0;
   const vuelto           = montoRecibidoNum - totalGeneral;
 
-  // ── Productos filtrados para el combobox ──────────────────────────────────
-  // Solo vendibles (Reventa + Menú). Excluye materia prima / insumos.
-  const productosVendibles = productos.filter((p) => p.es_vendible !== false);
-  const comboFiltrados = comboQuery.trim() === ""
-    ? productosVendibles
-    : productosVendibles.filter((p) => {
-        const q = comboQuery.toLowerCase();
-        return p.nombre.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
-      });
-
-  // ── Selección de un producto desde el combobox ────────────────────────────
-  function seleccionarProducto(p: Producto) {
-    setLineaProdId(String(p.id));
-    setLineaTipoPrecio("minorista");
-    setLineaPrecio(String(precioPorTipo(p, "minorista")));
-    setLineaCant("1");
-    // IVA real del producto (no forzar 10%: hay productos 5%/exenta).
-    setLineaIva(p.tipo_iva ?? "10%");
-    setComboQuery(`${p.nombre} — ${p.sku}`);
-    setComboOpen(false);
-    setComboHighlight(-1);
-    setErrorLinea(null);
-  }
+  /**
+   * Resultados del buscador. Vienen del endpoint, no de un filtrado en memoria:
+   * el catálogo entero no cabe en el cliente y filtrar lo ya cargado dejaba
+   * productos afuera sin avisar.
+   */
+  const comboResultados = comboHits;
 
   /** Selecciona método de cobro. Efectivo no pide datos; transferencia/tarjeta abren modal. */
   function handleSelectMetodo(m: MetodoPago) {
@@ -536,84 +674,76 @@ export default function NuevaVentaPage() {
     }
   }
 
-  /** Cambia el tipo de precio de la línea en construcción y ajusta el precio unitario. */
-  function handleLineaTipoPrecio(tipo: TipoPrecioVenta) {
-    setLineaTipoPrecio(tipo);
-    if (prodSel) setLineaPrecio(String(precioPorTipo(prodSel, tipo)));
-    setErrorLinea(null);
+  // ── Agregar productos desde el buscador ───────────────────────────────────
+
+  /** Recalcula subtotal / IVA / total de una línea (IVA incluido, ver calcIva). */
+  function recomputeLinea(l: LineaVenta): LineaVenta {
+    const total_linea = l.cantidad > 0 && l.precio_venta > 0 ? l.cantidad * l.precio_venta : 0;
+    const monto_iva = calcIva(l.tipo_iva, total_linea);
+    return { ...l, total_linea, monto_iva, subtotal: total_linea - monto_iva };
   }
 
-  // ── Handlers del combobox ─────────────────────────────────────────────────
-  function handleComboInput(e: React.ChangeEvent<HTMLInputElement>) {
-    setComboQuery(e.target.value);
-    setComboOpen(true);
+  /**
+   * Agrega el producto elegido en el buscador. Si ya está en el carrito suma
+   * una unidad en vez de abrir una segunda línea del mismo producto, que es lo
+   * que pasaba cuando el cajero cargaba la misma cerveza dos veces.
+   *
+   * El nivel de precio sale del cliente de la venta; el IVA, del producto.
+   */
+  function agregarProductoRapido(p: Producto) {
+    const nivel: TipoPrecioVenta = clienteSel?.nivel_precio ?? "minorista";
+    const precio = precioPorTipo(p, nivel);
+    setItems((prev) => {
+      const idx = prev.findIndex((it) => it.producto_id === p.id);
+      if (idx >= 0) {
+        return prev.map((it, i) =>
+          i === idx ? recomputeLinea({ ...it, cantidad: it.cantidad + 1 }) : it
+        );
+      }
+      return [
+        ...prev,
+        recomputeLinea({
+          producto_id: p.id,
+          producto_nombre: p.nombre,
+          sku: p.sku,
+          cantidad: 1,
+          precio_venta_original: precio,
+          precio_venta: precio,
+          tipo_iva: p.tipo_iva ?? "10%",
+          tipo_precio: nivel,
+          subtotal: 0,
+          monto_iva: 0,
+          total_linea: 0,
+        }),
+      ];
+    });
+    setComboQuery("");
+    setComboOpen(false);
     setComboHighlight(-1);
-    // Si el usuario borra el texto, limpiar la selección
-    if (e.target.value === "") {
-      setLineaProdId("");
-      setLineaPrecio("");
-      setLineaCant("");
-    }
     setErrorLinea(null);
+    setErrorVenta(null);
+    setTimeout(() => comboInputRef.current?.focus(), 0);
   }
 
-  function handleComboKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  /** Teclado del buscador: ↑/↓ navega, Enter agrega el resaltado, Esc cierra. */
+  function onComboKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setComboOpen(true);
-      setComboHighlight((h) => Math.min(h + 1, comboFiltrados.length - 1));
+      setComboHighlight((h) => Math.min(h + 1, comboResultados.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setComboHighlight((h) => Math.max(h - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (comboOpen && comboHighlight >= 0 && comboFiltrados[comboHighlight]) {
-        // Seleccionar el ítem destacado del dropdown
-        seleccionarProducto(comboFiltrados[comboHighlight]);
-      } else if (!comboOpen && lineaValida) {
-        // Dropdown cerrado + producto válido → agregar al carrito
-        handleAgregarLinea();
+      const sel = comboResultados[comboHighlight] ?? comboResultados[0];
+      if (sel && (sel.controla_stock === false || (sel.stock_actual ?? 0) > 0)) {
+        agregarProductoRapido(sel);
       }
     } else if (e.key === "Escape") {
       setComboOpen(false);
       setComboHighlight(-1);
     }
-  }
-
-  // ── Agregar línea al carrito ──────────────────────────────────────────────
-  function handleAgregarLinea() {
-    setErrorLinea(null);
-    if (!prodSel)          return setErrorLinea("Seleccioná un producto.");
-    if (cantNum <= 0)      return setErrorLinea("La cantidad debe ser mayor a 0.");
-    if (precioGs <= 0)     return setErrorLinea("El precio de venta debe ser mayor a 0.");
-    // Nota: si falta stock NO se bloquea; se confirma al registrar la venta.
-
-    setItems((prev) => [
-      ...prev,
-      {
-        producto_id:           prodSel.id,
-        producto_nombre:       prodSel.nombre,
-        sku:                   prodSel.sku,
-        cantidad:              cantNum,
-        precio_venta_original: precioInput,
-        precio_venta:          precioGs,
-        tipo_iva:              lineaIva,
-        tipo_precio:           lineaTipoPrecio,
-        subtotal:              lineaSubtotal,
-        monto_iva:             lineaMontoIva,
-        total_linea:           lineaTotalLinea,
-      },
-    ]);
-
-    // Limpiar línea y devolver foco al buscador de producto
-    setLineaProdId("");
-    setLineaCant("");
-    setLineaPrecio("");
-    setLineaIva("10%");
-    setLineaTipoPrecio("minorista");
-    setComboQuery("");
-    setComboOpen(false);
-    setTimeout(() => comboInputRef.current?.focus(), 0);
   }
 
   /**
@@ -766,16 +896,9 @@ export default function NuevaVentaPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Nueva venta</h1>
           <p className="text-gray-600">
-            Agregá productos de reventa o del catálogo. Al confirmar se registra la venta.
+            Buscá el producto y se agrega solo. Al confirmar se registra la venta.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setPickerOpen(true)}
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[#0EA5E9] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#0284C7] active:scale-95"
-        >
-          + Agregar producto
-        </button>
       </div>
 
       {pedidoId && (
@@ -943,18 +1066,144 @@ export default function NuevaVentaPage() {
 
         {/* ── SECCIÓN 3: Carrito + totales + confirmar ─────────────────────── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
-          <SectionTitle>Productos en esta venta</SectionTitle>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <SectionTitle>Productos en esta venta</SectionTitle>
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-[#0EA5E9] hover:text-[#0284C7]"
+              title="Buscador avanzado: elegir cantidad, precio e IVA antes de agregar"
+            >
+              Buscador avanzado
+            </button>
+          </div>
+
+          {/* Buscador: al elegir un producto se agrega solo y el input se limpia. */}
+          <div ref={comboContainerRef} className="relative">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#0EA5E9]" aria-hidden />
+                <input
+                  ref={comboInputRef}
+                  type="text"
+                  value={comboQuery}
+                  onChange={(e) => { setComboQuery(e.target.value); setComboOpen(true); setComboHighlight(-1); }}
+                  onFocus={() => setComboOpen(true)}
+                  onKeyDown={onComboKeyDown}
+                  placeholder="Buscar producto por nombre, SKU o código de barras…"
+                  className="h-12 w-full rounded-xl border-2 border-[#0EA5E9]/30 bg-white pl-12 pr-4 text-base text-slate-800 outline-none transition-all focus:border-[#0EA5E9] focus:ring-4 focus:ring-[#0EA5E9]/15"
+                  autoComplete="off"
+                  aria-label="Buscar producto"
+                />
+              </div>
+              <CategoriaCombo
+                value={comboCategoriaId}
+                options={categorias}
+                onChange={(id) => { setComboCategoriaId(id); setComboOpen(true); setComboHighlight(-1); }}
+              />
+            </div>
+            {comboOpen && (comboQuery.trim().length >= 2 || comboCategoriaId !== "") && (
+              <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-[56vh] overflow-y-auto rounded-xl border-2 border-[#0EA5E9]/20 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)]">
+                {comboBuscando && comboResultados.length === 0 ? (
+                  <div className="px-4 py-5 text-center text-sm text-slate-400">Buscando…</div>
+                ) : comboResultados.length === 0 ? (
+                  <div className="px-4 py-5 text-center text-sm text-slate-400">
+                    {comboQuery.trim()
+                      ? `Sin resultados para "${comboQuery.trim()}"${comboCategoriaId ? " en esa categoría" : ""}.`
+                      : "No hay productos en esta categoría."}
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {comboResultados.map((p, i) => {
+                      const controla = manejaStock(p);
+                      /**
+                       * Un producto que maneja stock y está en cero no se puede
+                       * vender: antes se dejaba agregar igual y la venta recién
+                       * fallaba al confirmar, con el carrito ya armado.
+                       */
+                      const sinStock = controla && (p.stock_actual ?? 0) <= 0;
+                      return (
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            id={`combo-opt-${i}`}
+                            onMouseEnter={() => setComboHighlight(i)}
+                            onClick={() => agregarProductoRapido(p)}
+                            disabled={sinStock}
+                            aria-disabled={sinStock}
+                            title={sinStock ? `"${p.nombre}" no tiene stock disponible.` : undefined}
+                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                              sinStock
+                                ? "cursor-not-allowed opacity-50"
+                                : i === comboHighlight ? "bg-[#0EA5E9]/[0.08]" : "hover:bg-slate-50"
+                            }`}
+                          >
+                            <ProductoThumb url={p.imagen_url} alt={p.nombre} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-slate-800">{p.nombre}</p>
+                              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
+                                <span className="truncate font-mono">{p.sku}</span>
+                                <span className="shrink-0 text-slate-300">·</span>
+                                <span className={`shrink-0 font-semibold ${
+                                  !controla ? "text-slate-400"
+                                  : sinStock ? "text-red-600"
+                                  : (p.stock_actual ?? 0) < 5 ? "text-amber-600"
+                                  : "text-emerald-700"
+                                }`}>
+                                  {!controla ? "Sin control" : sinStock ? "Sin stock" : `${p.stock_actual} ${p.unidad_medida ?? ""}`}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Precio y acción apilados: en celular el precio no se
+                                encima con el stock. */}
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <span className="whitespace-nowrap text-sm font-bold tabular-nums text-slate-800">
+                                {formatGs(precioPorTipo(p, clienteSel?.nivel_precio ?? "minorista"))}
+                              </span>
+                              {sinStock ? (
+                                <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-400">
+                                  Sin stock
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-[#0EA5E9]/10 px-2.5 py-1 text-xs font-bold text-[#0284C7]">
+                                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden /> Agregar
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                    {comboCategoriaId === "" && comboResultados.length >= COMBO_LIMITE_TEXTO && (
+                      <li className="px-4 py-2 text-center text-[11px] text-slate-400">
+                        Mostrando los primeros {COMBO_LIMITE_TEXTO}. Refiná la búsqueda o elegí una categoría para ver más.
+                      </li>
+                    )}
+                    {comboCategoriaId !== "" && comboResultados.length >= COMBO_LIMITE_CATEGORIA && (
+                      <li className="px-4 py-2 text-center text-[11px] text-slate-400">
+                        Mostrando los primeros {COMBO_LIMITE_CATEGORIA} de la categoría. Escribí para filtrar más.
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+
+          {errorLinea && (
+            <p className="mt-2 text-sm text-red-600">{errorLinea}</p>
+          )}
 
           {items.length === 0 ? (
-            <div className="py-10 text-center text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-lg">
-              Todavía no agregaste productos a esta venta.
+            <div className="mt-4 py-10 text-center text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-lg">
+              Buscá un producto arriba y se agrega solo a la venta.
             </div>
           ) : (
             <>
               {/* min-w fuerza scroll horizontal en mobile (9 columnas).
                   Columnas secundarias (SKU, Subtotal, IVA Gs) se ocultan
                   progresivamente: en mobile solo Producto/Cant/Precio/Total/eliminar. */}
-              <div className="overflow-x-auto">
+              <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[760px] sm:min-w-0 text-sm text-left">
                   <thead>
                     <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
@@ -1187,7 +1436,7 @@ export default function NuevaVentaPage() {
         excludeIds={items.map((i) => i.producto_id)}
         moneda={moneda}
         tipoCambio={tipoCambioNum}
-        ivaDefault={lineaIva}
+        ivaDefault="10%"
         tipoPrecioDefault={clienteSel?.nivel_precio ?? "minorista"}
       />
 

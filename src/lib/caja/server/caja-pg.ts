@@ -95,9 +95,17 @@ export async function calcularArqueoCaja(
   const desde = caja.abierta_at;
   const hasta = ventanaHasta(caja); // null => now()
 
+  /**
+   * Las tres agregaciones son independientes, así que van en paralelo: en serie
+   * el arqueo costaba tres idas y vueltas a Postgres, que es lo que hacía
+   * esperar al cajero cada vez que el panel de caja se refrescaba.
+   *
+   * Sobre un PoolClient (cierre de caja, dentro de la transacción) node-pg las
+   * encola igual: el resultado es el mismo, solo no hay ganancia.
+   */
   // Ventas de la caja: por caja_id, más el fallback por ventana para ventas sin
   // etiquetar cuando esta es la única caja activa.
-  const { rows: v } = await q.query(
+  const qVentas = q.query(
     `SELECT
        COUNT(*) cantidad,
        COALESCE(SUM(total) FILTER (WHERE tipo_venta='CONTADO' AND metodo_pago='efectivo'),0) ventas_efectivo,
@@ -117,7 +125,7 @@ export async function calcularArqueoCaja(
   // Cobros CxC en efectivo: solo por ventana y solo si es la única caja activa
   // (los cobros no llevan caja_id; con varias cajas no se atribuyen para no
   // duplicar). Preserva el comportamiento histórico de una caja por sucursal.
-  const { rows: co } = await q.query(
+  const qCobros = q.query(
     `SELECT
        COALESCE(SUM(monto) FILTER (WHERE metodo_pago='efectivo'),0) cobros_efectivo,
        COALESCE(SUM(monto),0) cobros_total
@@ -126,7 +134,7 @@ export async function calcularArqueoCaja(
        AND fecha_pago >= $4::timestamptz AND fecha_pago <= COALESCE($5::timestamptz, now())`,
     [empresaId, sucursalId, sole, desde, hasta]
   );
-  const { rows: m } = await q.query(
+  const qMovs = q.query(
     `SELECT
        COALESCE(SUM(monto) FILTER (WHERE tipo='ingreso' AND metodo_pago='efectivo'),0) ingresos_efectivo,
        COALESCE(SUM(monto) FILTER (WHERE tipo='egreso'  AND metodo_pago='efectivo'),0) egresos_efectivo,
@@ -137,6 +145,12 @@ export async function calcularArqueoCaja(
      FROM ${tM} WHERE caja_id=$1::uuid`,
     [caja.id]
   );
+
+  const [{ rows: v }, { rows: co }, { rows: m }] = await Promise.all([
+    qVentas,
+    qCobros,
+    qMovs,
+  ]);
 
   const apertura = num(caja.monto_apertura);
   const a: Arqueo = {
@@ -286,38 +300,88 @@ export async function abrirCaja(params: {
 }): Promise<{ id: string; numero_caja: number }> {
   const schema = assertAllowedChatDataSchema(params.schemaRaw);
   const tCaja = quoteSchemaTable(schema, "cajas");
+  const tSuc = quoteSchemaTable(schema, "sucursales");
   const arqueoJson = params.arqueoApertura && params.arqueoApertura.length ? JSON.stringify(params.arqueoApertura) : null;
-  if (!(await sucursalManejaCaja(params.schemaRaw, params.empresaId, params.sucursalId))) {
-    throw new CajaError(409, "Esta sucursal no opera caja.");
+
+  /**
+   * Toda la apertura en una sola sentencia.
+   *
+   * Antes eran seis idas y vueltas a Postgres en serie (chequeo de
+   * `maneja_caja`, BEGIN, números activos, INSERT, COMMIT, más tomar la
+   * conexión). Sobre una base remota eso es el segundo largo que el cajero
+   * veía en "Abriendo…". Como es una sentencia única, Postgres la corre en su
+   * propia transacción implícita: la condición de carrera que cubría el BEGIN
+   * sigue cubierta, y el índice único sobre el número activo sigue siendo la
+   * red de seguridad final.
+   *
+   * `diag` devuelve además por qué no se insertó, para no perder los mensajes
+   * de error que el cajero necesita leer.
+   */
+  const numeroPedido =
+    params.numeroCaja && params.numeroCaja > 0 ? Math.floor(params.numeroCaja) : null;
+  const { rows } = await pool()
+    .query<{
+      id: string | null;
+      numero_caja: number | null;
+      maneja: boolean;
+      numero: number;
+    }>(
+      `WITH suc AS (
+         SELECT COALESCE(maneja_caja, true) AS maneja
+           FROM ${tSuc}
+          WHERE id=$2::uuid AND empresa_id=$1::uuid
+       ),
+       calc AS (
+         SELECT
+           -- Sin fila de sucursal (o flag nulo) → por defecto opera caja.
+           COALESCE((SELECT maneja FROM suc), true) AS maneja,
+           COALESCE(
+             $3::int,
+             (SELECT COALESCE(MAX(numero_caja), 0) + 1
+                FROM ${tCaja}
+               WHERE empresa_id=$1::uuid AND sucursal_id=$2::uuid
+                 AND estado IN ('abierta','en_cierre'))
+           ) AS numero
+       ),
+       libre AS (
+         SELECT numero FROM calc
+          WHERE maneja
+            AND NOT EXISTS (
+              SELECT 1 FROM ${tCaja}
+               WHERE empresa_id=$1::uuid AND sucursal_id=$2::uuid
+                 AND estado IN ('abierta','en_cierre')
+                 AND numero_caja = calc.numero)
+       ),
+       ins AS (
+         INSERT INTO ${tCaja}
+           (empresa_id, sucursal_id, numero_caja, estado, monto_apertura, observacion_apertura, abierta_por, abierta_por_nombre, arqueo_apertura_json)
+         SELECT $1::uuid, $2::uuid, numero, 'abierta', $4::numeric, $5, $6::uuid, $7, $8::jsonb
+           FROM libre
+         RETURNING id, numero_caja
+       )
+       SELECT (SELECT id FROM ins) AS id,
+              (SELECT numero_caja FROM ins) AS numero_caja,
+              calc.maneja, calc.numero
+         FROM calc`,
+      [
+        params.empresaId, params.sucursalId, numeroPedido, num(params.montoApertura),
+        params.observacion, params.usuarioId, params.usuarioNombre, arqueoJson,
+      ]
+    )
+    .catch((e: unknown) => {
+      if ((e as { code?: string })?.code === "23505") {
+        throw new CajaError(409, "Ese número de caja ya está activo en esta sucursal.");
+      }
+      throw e;
+    });
+
+  const r = rows[0];
+  if (!r) throw new CajaError(500, "No se pudo abrir la caja.");
+  if (!r.maneja) throw new CajaError(409, "Esta sucursal no opera caja.");
+  if (!r.id) {
+    throw new CajaError(409, `La Caja ${r.numero} ya está activa en esta sucursal.`);
   }
-  const client = await pool().connect();
-  try {
-    await client.query("BEGIN");
-    // Próximo número: el solicitado, o max(activos)+1 (default 1).
-    const activos = await numerosActivos(client, schema, params.empresaId, params.sucursalId);
-    let numero = params.numeroCaja && params.numeroCaja > 0 ? Math.floor(params.numeroCaja) : 0;
-    if (!numero) numero = (activos.length ? Math.max(...activos) : 0) + 1;
-    if (activos.includes(numero)) {
-      throw new CajaError(409, `La Caja ${numero} ya está activa en esta sucursal.`);
-    }
-    const { rows } = await client.query<{ id: string; numero_caja: number }>(
-      `INSERT INTO ${tCaja}
-         (empresa_id, sucursal_id, numero_caja, estado, monto_apertura, observacion_apertura, abierta_por, abierta_por_nombre, arqueo_apertura_json)
-       VALUES ($1::uuid,$2::uuid,$3::int,'abierta',$4::numeric,$5,$6::uuid,$7,$8::jsonb)
-       RETURNING id, numero_caja`,
-      [params.empresaId, params.sucursalId, numero, num(params.montoApertura), params.observacion, params.usuarioId, params.usuarioNombre, arqueoJson]
-    );
-    await client.query("COMMIT");
-    return { id: rows[0]!.id, numero_caja: Number(rows[0]!.numero_caja) || numero };
-  } catch (e) {
-    await client.query("ROLLBACK").catch(() => null);
-    if ((e as { code?: string })?.code === "23505") {
-      throw new CajaError(409, "Ese número de caja ya está activo en esta sucursal.");
-    }
-    throw e;
-  } finally {
-    client.release();
-  }
+  return { id: r.id, numero_caja: Number(r.numero_caja) || Number(r.numero) };
 }
 
 /** Pasa una caja 'abierta' a 'en_cierre' (conteo): deja de recibir ventas nuevas. */
