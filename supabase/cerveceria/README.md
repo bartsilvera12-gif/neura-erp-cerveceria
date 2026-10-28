@@ -41,3 +41,21 @@ Después, **a mano** en Supabase: `Settings → API → Exposed schemas` → agr
 - Las secuencias arrancan desde su valor inicial, no desde el del origen
   (el schema queda vacío).
 - Las vistas materializadas se crean `WITH NO DATA`.
+
+## Verificación hecha
+
+Los tres scripts se probaron sobre PostgreSQL 16 contra un schema de prueba con
+enums, dominios, tipos compuestos, `serial`, `IDENTITY`, columnas generadas,
+arrays, `jsonb`, PK/UNIQUE/CHECK/EXCLUDE, índices parciales y por expresión con
+nombre propio, FKs internas y hacia `auth.users`, vistas anidadas, vista
+materializada, triggers, RLS con policies, grants a `anon`/`authenticated`/
+`service_role`, privilegios por defecto y comentarios.
+
+El `pg_dump --schema-only` del clon resultó **idéntico** al del origen (salvo el
+nombre del schema). Las únicas limitaciones conocidas:
+
+- Agregados (`CREATE AGGREGATE`) y tablas particionadas no se clonan; el script
+  avisa por `NOTICE` si encuentra alguno.
+- Una columna **generada** cuya expresión llame a una función del schema origen
+  queda apuntando ahí (Postgres 16 no permite reescribir esa expresión). El
+  script lo avisa por `NOTICE`.

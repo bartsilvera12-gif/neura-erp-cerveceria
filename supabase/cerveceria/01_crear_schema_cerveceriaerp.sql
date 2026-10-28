@@ -35,6 +35,10 @@ DECLARE
   v_name    text;
   v_progress boolean;
   v_owner   text;
+  v_tmin    bigint;
+  v_tmax    bigint;
+  v_dmin    bigint;
+  v_dmax    bigint;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = src) THEN
     RAISE EXCEPTION 'No existe el schema origen %', src;
@@ -88,9 +92,9 @@ BEGIN
       SELECT 1 FROM pg_type t2 JOIN pg_namespace n2 ON n2.oid = t2.typnamespace
        WHERE n2.nspname = tgt AND t2.typname = r.typname);
     v_sql := format('CREATE DOMAIN %I.%I AS %s', tgt, r.typname,
-                    replace(replace(r.basetype, '"' || src || '".', tgt || '.'), src || '.', tgt || '.'));
+                    regexp_replace(r.basetype, '\m' || src || '\M', tgt, 'g'));
     IF r.defexpr IS NOT NULL THEN
-      v_sql := v_sql || ' DEFAULT ' || replace(replace(r.defexpr, '"' || src || '".', tgt || '.'), src || '.', tgt || '.');
+      v_sql := v_sql || ' DEFAULT ' || regexp_replace(r.defexpr, '\m' || src || '\M', tgt, 'g');
     END IF;
     IF r.typnotnull THEN
       v_sql := v_sql || ' NOT NULL';
@@ -101,7 +105,7 @@ BEGIN
       SELECT pg_get_constraintdef(c.oid), c.conname FROM pg_constraint c WHERE c.contypid = r.oid
     LOOP
       EXECUTE format('ALTER DOMAIN %I.%I ADD CONSTRAINT %I %s', tgt, r.typname, v_name,
-                     replace(replace(v_def, '"' || src || '".', tgt || '.'), src || '.', tgt || '.'));
+                     regexp_replace(v_def, '\m' || src || '\M', tgt, 'g'));
     END LOOP;
   END LOOP;
 
@@ -111,7 +115,7 @@ BEGIN
   FOR r IN
     SELECT t.typname,
            (SELECT string_agg(format('%I %s', a.attname,
-                     replace(replace(format_type(a.atttypid, a.atttypmod), '"' || src || '".', tgt || '.'), src || '.', tgt || '.')),
+                     regexp_replace(format_type(a.atttypid, a.atttypmod), '\m' || src || '\M', tgt, 'g')),
                      ', ' ORDER BY a.attnum)
               FROM pg_attribute a
              WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped) AS cols
@@ -143,7 +147,7 @@ BEGIN
      ORDER BY p.proname
   LOOP
     BEGIN
-      EXECUTE replace(replace(r.def, '"' || src || '".', tgt || '.'), src || '.', tgt || '.');
+      EXECUTE regexp_replace(r.def, '\m' || src || '\M', tgt, 'g');
     EXCEPTION WHEN OTHERS THEN
       RAISE NOTICE 'función %.% no clonada: %', src, r.proname, SQLERRM;
     END;
@@ -182,6 +186,44 @@ BEGIN
   END LOOP;
 
   -- ---------------------------------------------------------------------------
+  -- 5b. Reapuntar los tipos de columna al schema destino.
+  --     `LIKE` copia la columna con SU tipo, así que un `estado_venta` seguiría
+  --     siendo `reservacaacupe.estado_venta`. Las tablas están vacías, así que
+  --     el cambio de tipo no toca datos.
+  -- ---------------------------------------------------------------------------
+  FOR r IN
+    SELECT c.relname, a.attname, a.attgenerated,
+           format_type(a.atttypid, a.atttypmod) AS typ
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_type t ON t.oid = a.atttypid
+      LEFT JOIN pg_type et ON et.oid = t.typelem
+      JOIN pg_namespace tn ON tn.oid = coalesce(nullif(et.typnamespace, 0), t.typnamespace)
+     WHERE n.nspname = tgt AND c.relkind = 'r'
+       AND a.attnum > 0 AND NOT a.attisdropped
+       AND tn.nspname = src
+     ORDER BY c.relname, a.attnum
+  LOOP
+    IF r.attgenerated <> '' THEN
+      RAISE NOTICE 'columna generada %.%.% conserva el tipo del schema origen — revisar a mano',
+        tgt, r.relname, r.attname;
+      CONTINUE;
+    END IF;
+
+    EXECUTE format('SELECT EXISTS (SELECT 1 FROM %I.%I)', tgt, r.relname) INTO v_progress;
+    IF v_progress THEN
+      RAISE NOTICE 'tabla %.% no está vacía: el tipo de % no se reapunta', tgt, r.relname, r.attname;
+      CONTINUE;
+    END IF;
+
+    v_def := regexp_replace(r.typ, '\m' || src || '\M', tgt, 'g');
+    EXECUTE format('ALTER TABLE %I.%I ALTER COLUMN %I DROP DEFAULT', tgt, r.relname, r.attname);
+    EXECUTE format('ALTER TABLE %I.%I ALTER COLUMN %I TYPE %s USING NULL::%s',
+                   tgt, r.relname, r.attname, v_def, v_def);
+  END LOOP;
+
+  -- ---------------------------------------------------------------------------
   -- 6. Secuencias que no quedaron creadas por IDENTITY (p. ej. columnas serial)
   -- ---------------------------------------------------------------------------
   FOR r IN
@@ -193,17 +235,34 @@ BEGIN
      WHERE n.nspname = src
      ORDER BY c.relname
   LOOP
-    CONTINUE WHEN EXISTS (
-      SELECT 1 FROM pg_class c2 JOIN pg_namespace n2 ON n2.oid = c2.relnamespace
-       WHERE n2.nspname = tgt AND c2.relname = r.relname AND c2.relkind = 'S');
+    -- MINVALUE/MAXVALUE sólo si difieren del default del tipo, para que el
+    -- clon quede idéntico a un `serial` del origen y no con límites explícitos.
+    v_tmin := CASE r.seqtype WHEN 'smallint' THEN -32768 WHEN 'integer' THEN -2147483648
+                             ELSE (-9223372036854775807)::bigint - 1 END;
+    v_tmax := CASE r.seqtype WHEN 'smallint' THEN 32767 WHEN 'integer' THEN 2147483647
+                             ELSE 9223372036854775807 END;
+    IF r.seqincrement > 0 THEN
+      v_dmin := 1;          v_dmax := v_tmax;
+    ELSE
+      v_dmin := v_tmin;     v_dmax := -1;
+    END IF;
+
     EXECUTE format(
-      'CREATE SEQUENCE %I.%I AS %s INCREMENT BY %s MINVALUE %s MAXVALUE %s START WITH %s CACHE %s %s',
-      tgt, r.relname, r.seqtype, r.seqincrement, r.seqmin, r.seqmax, r.seqstart, r.seqcache,
+      CASE WHEN EXISTS (SELECT 1 FROM pg_class c2 JOIN pg_namespace n2 ON n2.oid = c2.relnamespace
+                         WHERE n2.nspname = tgt AND c2.relname = r.relname AND c2.relkind = 'S')
+           THEN 'ALTER SEQUENCE %I.%I AS %s INCREMENT BY %s %s %s START WITH %s CACHE %s %s'
+           ELSE 'CREATE SEQUENCE %I.%I AS %s INCREMENT BY %s %s %s START WITH %s CACHE %s %s' END,
+      tgt, r.relname, r.seqtype, r.seqincrement,
+      CASE WHEN r.seqmin = v_dmin THEN 'NO MINVALUE' ELSE 'MINVALUE ' || r.seqmin END,
+      CASE WHEN r.seqmax = v_dmax THEN 'NO MAXVALUE' ELSE 'MAXVALUE ' || r.seqmax END,
+      r.seqstart, r.seqcache,
       CASE WHEN r.seqcycle THEN 'CYCLE' ELSE 'NO CYCLE' END);
   END LOOP;
 
   -- ---------------------------------------------------------------------------
-  -- 7. Defaults que todavía apuntan al schema origen (nextval, funciones, etc.)
+  -- 7. Defaults, tomados del ORIGEN y reescritos al schema destino.
+  --    Se reaplican todos (no sólo los que mencionan el schema) porque el paso
+  --    5b descarta el default de las columnas cuyo tipo se reapuntó.
   -- ---------------------------------------------------------------------------
   FOR r IN
     SELECT c.relname, a.attname, pg_get_expr(ad.adbin, ad.adrelid) AS def
@@ -211,11 +270,23 @@ BEGIN
       JOIN pg_class c ON c.oid = ad.adrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace
       JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ad.adnum
-     WHERE n.nspname = tgt
-       AND pg_get_expr(ad.adbin, ad.adrelid) LIKE '%' || src || '.%'
+     WHERE n.nspname = src
+       AND c.relkind = 'r'
+       AND a.attidentity = ''
+       AND a.attgenerated = ''
   LOOP
-    EXECUTE format('ALTER TABLE %I.%I ALTER COLUMN %I SET DEFAULT %s', tgt, r.relname, r.attname,
-                   replace(replace(r.def, '"' || src || '".', tgt || '.'), src || '.', tgt || '.'));
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_attribute a2
+        JOIN pg_class c2 ON c2.oid = a2.attrelid
+        JOIN pg_namespace n2 ON n2.oid = c2.relnamespace
+       WHERE n2.nspname = tgt AND c2.relname = r.relname
+         AND a2.attname = r.attname AND a2.attnum > 0 AND NOT a2.attisdropped);
+    BEGIN
+      EXECUTE format('ALTER TABLE %I.%I ALTER COLUMN %I SET DEFAULT %s', tgt, r.relname, r.attname,
+                     regexp_replace(r.def, '\m' || src || '\M', tgt, 'g'));
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'default de %.%.% no aplicado: %', tgt, r.relname, r.attname, SQLERRM;
+    END;
   END LOOP;
 
   -- ---------------------------------------------------------------------------
@@ -261,7 +332,7 @@ BEGIN
        WHERE n2.nspname = tgt AND c2.relname = r.relname AND con2.conname = r.conname);
     BEGIN
       EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I %s', tgt, r.relname, r.conname,
-                     replace(replace(r.def, '"' || src || '".', tgt || '.'), src || '.', tgt || '.'));
+                     regexp_replace(r.def, '\m' || src || '\M', tgt, 'g'));
     EXCEPTION WHEN OTHERS THEN
       RAISE NOTICE 'constraint %.% no aplicada: %', r.relname, r.conname, SQLERRM;
     END;
@@ -280,7 +351,7 @@ BEGIN
     v_progress := false;
     v_next := '{}';
     FOREACH v_name IN ARRAY v_pend LOOP
-      SELECT replace(replace(pg_get_viewdef(c.oid, true), '"' || src || '".', tgt || '.'), src || '.', tgt || '.'),
+      SELECT regexp_replace(regexp_replace(pg_get_viewdef(c.oid, true), '\m' || src || '\M', tgt, 'g'), ';\s*$', ''),
              CASE WHEN c.reloptions IS NULL THEN ''
                   ELSE ' WITH (' || array_to_string(c.reloptions, ', ') || ')' END
         INTO v_def, v_sql
@@ -318,7 +389,7 @@ BEGIN
       CONTINUE WHEN EXISTS (
         SELECT 1 FROM pg_class c2 JOIN pg_namespace n2 ON n2.oid = c2.relnamespace
          WHERE n2.nspname = tgt AND c2.relname = v_name);
-      SELECT replace(replace(pg_get_viewdef(c.oid, true), '"' || src || '".', tgt || '.'), src || '.', tgt || '.')
+      SELECT regexp_replace(regexp_replace(pg_get_viewdef(c.oid, true), '\m' || src || '\M', tgt, 'g'), ';\s*$', '')
         INTO v_def
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
        WHERE n.nspname = src AND c.relname = v_name AND c.relkind = 'm';
@@ -356,7 +427,7 @@ BEGIN
       SELECT 1 FROM pg_class c2 JOIN pg_namespace n2 ON n2.oid = c2.relnamespace
        WHERE n2.nspname = tgt AND c2.relname = r.idxname);
     BEGIN
-      EXECUTE replace(replace(r.def, '"' || src || '".', tgt || '.'), src || '.', tgt || '.');
+      EXECUTE regexp_replace(r.def, '\m' || src || '\M', tgt, 'g');
     EXCEPTION WHEN OTHERS THEN
       RAISE NOTICE 'índice % no creado: %', r.idxname, SQLERRM;
     END;
@@ -382,7 +453,7 @@ BEGIN
        WHERE n2.nspname = tgt AND c2.relname = r.relname AND con2.conname = r.conname);
     BEGIN
       EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I %s', tgt, r.relname, r.conname,
-                     replace(replace(r.def, '"' || src || '".', tgt || '.'), src || '.', tgt || '.'));
+                     regexp_replace(r.def, '\m' || src || '\M', tgt, 'g'));
     EXCEPTION WHEN OTHERS THEN
       RAISE NOTICE 'FK %.% no aplicada: %', r.relname, r.conname, SQLERRM;
     END;
@@ -405,7 +476,7 @@ BEGIN
         JOIN pg_namespace n2 ON n2.oid = c2.relnamespace
        WHERE n2.nspname = tgt AND c2.relname = r.relname AND t2.tgname = r.tgname);
     BEGIN
-      EXECUTE replace(replace(r.def, '"' || src || '".', tgt || '.'), src || '.', tgt || '.');
+      EXECUTE regexp_replace(r.def, '\m' || src || '\M', tgt, 'g');
     EXCEPTION WHEN OTHERS THEN
       RAISE NOTICE 'trigger %.% no creado: %', r.relname, r.tgname, SQLERRM;
     END;
@@ -454,11 +525,11 @@ BEGIN
                     coalesce(r.roles, 'PUBLIC'));
     IF r.using_expr IS NOT NULL THEN
       v_sql := v_sql || format(' USING (%s)',
-        replace(replace(r.using_expr, '"' || src || '".', tgt || '.'), src || '.', tgt || '.'));
+        regexp_replace(r.using_expr, '\m' || src || '\M', tgt, 'g'));
     END IF;
     IF r.check_expr IS NOT NULL THEN
       v_sql := v_sql || format(' WITH CHECK (%s)',
-        replace(replace(r.check_expr, '"' || src || '".', tgt || '.'), src || '.', tgt || '.'));
+        regexp_replace(r.check_expr, '\m' || src || '\M', tgt, 'g'));
     END IF;
     BEGIN
       EXECUTE v_sql;
@@ -519,12 +590,13 @@ BEGIN
      WHERE n.nspname = src AND p.prokind IN ('f', 'p', 'w')
   LOOP
     BEGIN
-      EXECUTE format('GRANT %s ON %s %I.%I(%s) TO %s', r.privilege_type,
-                     'FUNCTION', tgt, r.proname,
-                     replace(replace(r.args, '"' || src || '".', tgt || '.'), src || '.', tgt || '.'),
+      -- ROUTINE cubre funciones y procedimientos por igual.
+      EXECUTE format('GRANT %s ON ROUTINE %I.%I(%s) TO %s', r.privilege_type,
+                     tgt, r.proname,
+                     regexp_replace(r.args, '\m' || src || '\M', tgt, 'g'),
                      r.grantee);
     EXCEPTION WHEN OTHERS THEN
-      RAISE NOTICE 'GRANT % ON FUNCTION %.% sin aplicar: %', r.privilege_type, tgt, r.proname, SQLERRM;
+      RAISE NOTICE 'GRANT % ON ROUTINE %.% sin aplicar: %', r.privilege_type, tgt, r.proname, SQLERRM;
     END;
   END LOOP;
 
@@ -550,6 +622,54 @@ BEGIN
                      r.grantee);
     EXCEPTION WHEN OTHERS THEN
       RAISE NOTICE 'default privilege sin aplicar (% / %): %', r.forrole, r.privilege_type, SQLERRM;
+    END;
+  END LOOP;
+
+  -- ---------------------------------------------------------------------------
+  -- 19b. Comentarios de tablas, vistas, secuencias, funciones y tipos.
+  --      (`LIKE INCLUDING COMMENTS` sólo trae los de columna.)
+  -- ---------------------------------------------------------------------------
+  FOR r IN
+    SELECT c.relname, c.relkind, obj_description(c.oid, 'pg_class') AS cmt
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = src AND c.relkind IN ('r', 'v', 'm', 'S')
+       AND obj_description(c.oid, 'pg_class') IS NOT NULL
+  LOOP
+    BEGIN
+      EXECUTE format('COMMENT ON %s %I.%I IS %L',
+                     CASE r.relkind WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW'
+                                    WHEN 'S' THEN 'SEQUENCE' ELSE 'TABLE' END,
+                     tgt, r.relname, r.cmt);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'comentario de %.% sin copiar: %', tgt, r.relname, SQLERRM;
+    END;
+  END LOOP;
+
+  FOR r IN
+    SELECT p.proname, pg_get_function_identity_arguments(p.oid) AS args,
+           obj_description(p.oid, 'pg_proc') AS cmt
+      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = src AND p.prokind IN ('f', 'p', 'w')
+       AND obj_description(p.oid, 'pg_proc') IS NOT NULL
+  LOOP
+    BEGIN
+      EXECUTE format('COMMENT ON ROUTINE %I.%I(%s) IS %L', tgt, r.proname,
+                     regexp_replace(r.args, '\m' || src || '\M', tgt, 'g'), r.cmt);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'comentario de la rutina %.% sin copiar: %', tgt, r.proname, SQLERRM;
+    END;
+  END LOOP;
+
+  FOR r IN
+    SELECT t.typname, obj_description(t.oid, 'pg_type') AS cmt
+      FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+     WHERE n.nspname = src AND t.typtype IN ('e', 'd', 'c')
+       AND obj_description(t.oid, 'pg_type') IS NOT NULL
+  LOOP
+    BEGIN
+      EXECUTE format('COMMENT ON TYPE %I.%I IS %L', tgt, r.typname, r.cmt);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'comentario del tipo %.% sin copiar: %', tgt, r.typname, SQLERRM;
     END;
   END LOOP;
 
