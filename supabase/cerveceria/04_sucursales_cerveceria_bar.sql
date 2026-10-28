@@ -13,9 +13,18 @@
 -- padrón de usuarios.
 --
 -- Este script:
+--   · recrea `usuario_sucursales` (ver más abajo)
 --   · renombra la sucursal inicial a "Cervecería" y crea "Bar"
 --   · da de alta un usuario por sucursal
 --   · deja a admin@cerveceria.com con acceso a LAS DOS (cuenta del dueño)
+--
+-- SOBRE `usuario_sucursales`: el ERP de origen la creó y después la borró,
+-- porque ESE cliente definió "un usuario, una sucursal" y le alcanzaba con
+-- `usuarios.sucursal_predeterminada_id`. Acá hace falta de nuevo: el dueño
+-- entra a las dos. Para que no haya dos fuentes de verdad sobre el mismo
+-- hecho, cada una responde una pregunta distinta:
+--     usuario_sucursales          → a QUÉ sucursales puede entrar
+--     sucursal_predeterminada_id  → con CUÁL arranca la sesión
 --
 -- Sólo escribe en `cerveceriaerp`. Es re-ejecutable.
 --
@@ -26,6 +35,45 @@
 BEGIN;
 
 SET LOCAL search_path = pg_catalog, pg_temp;
+
+-- ---------------------------------------------------------------------------
+-- 0. Acceso de usuarios a sucursales (N:M)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS cerveceriaerp.usuario_sucursales (
+  usuario_id   uuid NOT NULL REFERENCES cerveceriaerp.usuarios(id)   ON DELETE CASCADE,
+  sucursal_id  uuid NOT NULL REFERENCES cerveceriaerp.sucursales(id) ON DELETE CASCADE,
+  empresa_id   uuid NOT NULL REFERENCES cerveceriaerp.empresas(id)   ON DELETE CASCADE,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (usuario_id, sucursal_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_usuario_sucursales_sucursal
+  ON cerveceriaerp.usuario_sucursales (sucursal_id);
+
+COMMENT ON TABLE cerveceriaerp.usuario_sucursales IS
+  'A qué sucursales puede entrar cada usuario. Con cuál arranca la sesión lo dice usuarios.sucursal_predeterminada_id.';
+
+-- Mismos privilegios que el resto de las tablas del schema, para que PostgREST
+-- la exponga igual. Se copian de `sucursales` en vez de escribirlos a mano:
+-- así no queda desalineada si la instalación usa otros roles.
+DO $acl$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT DISTINCT
+           CASE WHEN a.grantee = 0 THEN 'PUBLIC'
+                ELSE quote_ident(pg_get_userbyid(a.grantee)) END AS grantee,
+           a.privilege_type
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace,
+           aclexplode(c.relacl) a
+     WHERE n.nspname = 'cerveceriaerp' AND c.relname = 'sucursales'
+  LOOP
+    EXECUTE format('GRANT %s ON cerveceriaerp.usuario_sucursales TO %s',
+                   r.privilege_type, r.grantee);
+  END LOOP;
+END
+$acl$;
 
 DO $suc$
 DECLARE
@@ -111,6 +159,10 @@ END
 $suc$;
 
 COMMIT;
+
+-- PostgREST cachea el esquema: sin esto, la tabla recién creada le sigue
+-- figurando como inexistente hasta que se reinicie.
+NOTIFY pgrst, 'reload schema';
 
 -- =============================================================================
 -- Verificación

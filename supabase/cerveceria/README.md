@@ -8,7 +8,7 @@ Ejecutar con un rol administrador (`postgres` / `supabase_admin`).
 | 1 | `01_crear_schema_cerveceriaerp.sql` | Clona la **estructura** de `reservacaacupe` en `cerveceriaerp`. Sin datos. |
 | 2 | `02_seed_cerveceriaerp.sql` | Empresa propia, sucursal, catálogo de módulos y usuario `admin@cerveceria.com`. |
 | 3 | `03_usuario_auth.sql` | Crea el login en Supabase Auth y lo enlaza con el usuario del ERP. |
-| 4 | `04_sucursales_cerveceria_bar.sql` | Dos administraciones: sucursales Cervecería y Bar, un usuario por cada una, y el dueño con acceso a las dos. |
+| 4 | `04_sucursales_cerveceria_bar.sql` | Dos administraciones: recrea `usuario_sucursales`, crea las sucursales Cervecería y Bar, un usuario por cada una, y el dueño con acceso a las dos. |
 
 Después, **a mano** en Supabase: `Settings → API → Exposed schemas` → agregar
 `cerveceriaerp` (PostgREST no ve el schema hasta que esté expuesto).
@@ -36,6 +36,13 @@ catálogo sin pisar al otro.
 
 **Entre sucursales:** el módulo Reposición mueve stock de una a otra con su
 circuito de solicitud y recepción.
+
+El ERP de origen había creado `usuario_sucursales` y después la borró, porque
+ese cliente definió "un usuario, una sucursal". Acá el paso 4 la recrea, con
+los mismos privilegios que `sucursales` para que PostgREST la exponga. Cada
+tabla responde una pregunta distinta y no se pisan: `usuario_sucursales` dice
+a **qué** sucursales puede entrar el usuario, y `sucursal_predeterminada_id`
+con **cuál** arranca la sesión.
 
 Cada usuario operativo entra sólo a su sucursal. El dueño
 (`admin@cerveceria.com`) figura en las dos y cambia de una a otra con el
