@@ -68,7 +68,7 @@ export async function GET(
         .select(PRODUCTO_COLS)
         .eq("empresa_id", ctx.auth.empresa_id)
         .eq("id", id),
-      exigirSucursal(ctx.auth.sucursal_id)
+      exigirSucursal(ctx.auth)
     ).maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
@@ -186,7 +186,7 @@ export async function PATCH(
 
     const upd = await aplicarFiltroSucursal(
       sb.from("productos").update(patch).eq("empresa_id", empresaId).eq("id", id),
-      exigirSucursal(ctx.auth.sucursal_id)
+      exigirSucursal(ctx.auth)
     )
       .select(PRODUCTO_COLS)
       .maybeSingle();
@@ -233,7 +233,7 @@ export async function PATCH(
           } else {
             await sb.from("producto_categorias").insert({
               empresa_id: empresaId,
-              sucursal_id: exigirSucursal(ctx.auth.sucursal_id),
+              sucursal_id: exigirSucursal(ctx.auth),
               producto_id: id,
               categoria_id: categoriaNueva,
               es_principal: true,

@@ -29,7 +29,7 @@ export async function POST(
       ctx.supabase,
       schema,
       ctx.auth.empresa_id,
-      exigirSucursal(ctx.auth.sucursal_id),
+      exigirSucursal(ctx.auth),
       id,
       {
         createdBy: ctx.auth.usuarioCatalogId ?? null,

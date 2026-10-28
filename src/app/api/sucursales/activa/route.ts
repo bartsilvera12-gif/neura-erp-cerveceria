@@ -3,6 +3,7 @@ import { getServiceAuthUsuario } from "@/lib/auth/get-service-auth-usuario";
 import {
   SUCURSAL_COOKIE,
   SUCURSAL_COOKIE_MAX_AGE,
+  SUCURSAL_CONSOLIDADO,
   esUuidSucursal,
 } from "@/lib/sucursales/activa";
 
@@ -27,21 +28,35 @@ export async function POST(request: Request) {
 
     const body = (await request.json().catch(() => null)) as { sucursal_id?: unknown } | null;
     const pedida = typeof body?.sucursal_id === "string" ? body.sucursal_id.trim() : "";
-    if (!esUuidSucursal(pedida)) {
+    const quiereConsolidado = pedida === SUCURSAL_CONSOLIDADO;
+
+    if (!quiereConsolidado && !esUuidSucursal(pedida)) {
       return NextResponse.json({ error: "sucursal_id inválido." }, { status: 400 });
     }
 
-    const { data, error } = await supabaseSr
+    const { data: acceso, error } = await supabaseSr
       .from("usuario_sucursales")
       .select("sucursal_id")
-      .eq("usuario_id", catalogUsuario.id)
-      .eq("sucursal_id", pedida)
-      .maybeSingle();
+      .eq("usuario_id", catalogUsuario.id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    if (!data) {
+
+    const permitidas = (acceso ?? []).map((r: { sucursal_id?: unknown }) =>
+      typeof r.sucursal_id === "string" ? r.sucursal_id : ""
+    );
+
+    if (quiereConsolidado) {
+      // Con una sola sucursal no hay nada que consolidar, y aceptarlo dejaría
+      // al usuario en un estado donde no puede operar sin ganar nada.
+      if (permitidas.length < 2) {
+        return NextResponse.json(
+          { error: "La vista consolidada necesita acceso a más de una sucursal." },
+          { status: 403 }
+        );
+      }
+    } else if (!permitidas.includes(pedida)) {
       return NextResponse.json(
         { error: "No tenés acceso a esa sucursal." },
         { status: 403 }

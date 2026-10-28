@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, ctxParams: { params: Promise<{ 
     const { id: nuevoId, numero_control } = await duplicarPresupuesto(
       ctx.supabase,
       ctx.auth.empresa_id,
-      exigirSucursal(ctx.auth.sucursal_id),
+      exigirSucursal(ctx.auth),
       id
     );
 

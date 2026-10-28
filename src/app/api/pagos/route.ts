@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       .from("pagos")
       .select("*, facturas(numero_factura, cliente_id)")
       .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
       .order("fecha_pago", { ascending: false });
 
     if (facturaId) {
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
       referencia: referencia?.trim() || null,
       cliente_id: factura.cliente_id ?? null,
       usuario_id: auth.user?.id ?? null,
-      sucursal_id: exigirSucursal(auth.sucursal_id),
+      sucursal_id: exigirSucursal(auth),
     };
 
     const { data, error } = await supabase

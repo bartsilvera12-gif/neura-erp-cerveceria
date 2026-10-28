@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       .from("cuentas_por_cobrar")
       .select(CXC_COLS)
       .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(ctx.auth))
       .order("fecha_vencimiento", { ascending: true, nullsFirst: false })
       .limit(1000);
     if (clienteId) q = q.eq("cliente_id", clienteId);
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       .from("cuentas_por_cobrar")
       .select("saldo, estado, fecha_vencimiento")
       .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id));
+      .eq("sucursal_id", exigirSucursal(ctx.auth));
     let totalPendiente = 0;
     let totalVencido = 0;
     for (const r of (allQ.data ?? []) as Record<string, unknown>[]) {
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       .from("cobros_clientes")
       .select("monto, fecha_pago")
       .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(ctx.auth))
       .gte("fecha_pago", inicioMes);
     let cobradoMes = 0;
     for (const r of (cobMesQ.data ?? []) as Record<string, unknown>[]) cobradoMes += Number(r.monto) || 0;
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
       .from("cobros_clientes")
       .select("id, cliente_id, venta_id, cuenta_por_cobrar_id, fecha_pago, monto, metodo_pago, referencia, usuario_nombre")
       .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(ctx.auth))
       .order("fecha_pago", { ascending: false })
       .limit(500);
     const histRows = (histQ.data ?? []) as Record<string, unknown>[];

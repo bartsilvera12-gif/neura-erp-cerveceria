@@ -54,7 +54,7 @@ export async function GET(
         .select("id, numero_factura, monto, saldo, fecha, estado")
         .eq("cliente_id", clienteId)
         .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
         .neq("estado", "Anulado")
         .gt("saldo", 0)
         .order("fecha", { ascending: false }),
@@ -158,7 +158,7 @@ export async function POST(
         .select("id")
         .eq("cliente_id", clienteId)
         .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
         .neq("estado", "Anulado")
         .gt("saldo", 0);
 
@@ -171,7 +171,7 @@ export async function POST(
           .update({ estado: "Anulado", saldo: 0, updated_at: now })
           .in("id", facturaIds)
           .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id));
+      .eq("sucursal_id", exigirSucursal(auth));
       }
     }
 

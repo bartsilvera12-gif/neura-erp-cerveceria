@@ -72,7 +72,7 @@ export async function GET(
       .eq("cliente_id", clienteId)
       .eq("suscripcion_id", suscripcion.id)
       .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id));
+      .eq("sucursal_id", exigirSucursal(auth));
 
     if (errFact) {
       return NextResponse.json(errorResponse(errFact.message), { status: 400 });

@@ -260,7 +260,7 @@ export async function POST(request: NextRequest) {
 
     // Caja del turno: resuelve a qué caja abierta se imputa la venta (0→null,
     // 1→esa, varias→exige elegir). No bloquea la venta si no hay caja abierta.
-    const sucursalIdVenta = exigirSucursal(auth.sucursal_id);
+    const sucursalIdVenta = exigirSucursal(auth);
     let cajaIdVenta: string | null = null;
     try {
       const cajaPedida = o.caja_id != null && String(o.caja_id).trim() !== "" ? String(o.caja_id).trim() : null;

@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         .select(PRODUCTO_COLS)
         .eq("empresa_id", ctx.auth.empresa_id)
         .eq("activo", true),
-      exigirSucursal(ctx.auth.sucursal_id)
+      exigirSucursal(ctx.auth)
     ).order("nombre");
     if (error) throw new Error(error.message);
     const rows = ((data ?? []) as unknown as Record<string, unknown>[]).map(rowToApi);
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
     // Insert principal
     const insertPayload: Record<string, unknown> = {
       empresa_id: empresaId,
-      sucursal_id: exigirSucursal(ctx.auth.sucursal_id),
+      sucursal_id: exigirSucursal(ctx.auth),
       nombre,
       sku,
       costo_promedio: costoPromedio,
@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
     if (stockActual > 0 && controlaStockFinal) {
       const movIns = await sb.from("movimientos_inventario").insert({
         empresa_id: empresaId,
-        sucursal_id: exigirSucursal(ctx.auth.sucursal_id),
+        sucursal_id: exigirSucursal(ctx.auth),
         producto_id: productoId,
         producto_nombre: nombre,
         producto_sku: sku,
@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
     if (categoriaPrincipalId) {
       const pc = await sb.from("producto_categorias").insert({
         empresa_id: empresaId,
-        sucursal_id: exigirSucursal(ctx.auth.sucursal_id),
+        sucursal_id: exigirSucursal(ctx.auth),
         producto_id: productoId,
         categoria_id: categoriaPrincipalId,
         es_principal: true,
@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
     // allá), se logea y sigue, sin romper la creación principal.
     let creadoEnSucursales = 1;
     if (body.crear_en_ambas === true) {
-      const currentSucursal = exigirSucursal(ctx.auth.sucursal_id);
+      const currentSucursal = exigirSucursal(ctx.auth);
       const { data: otras } = await sb
         .from("sucursales")
         .select("id")

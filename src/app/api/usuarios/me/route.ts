@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { getServiceAuthUsuario } from "@/lib/auth/get-service-auth-usuario";
 import { cookies } from "next/headers";
-import { SUCURSAL_COOKIE, resolverSucursalActiva } from "@/lib/sucursales/activa";
+import {
+  SUCURSAL_COOKIE,
+  esConsolidado,
+  resolverSucursalActiva,
+} from "@/lib/sucursales/activa";
 
 type UsuarioMeRow = {
   nombre: string | null;
@@ -90,18 +94,27 @@ export async function GET(request: Request) {
 
     const porDefecto = row?.sucursal_predeterminada_id ?? null;
     const pedida = (await cookies()).get(SUCURSAL_COOKIE)?.value ?? null;
-    const sucursalId = resolverSucursalActiva(pedida, opciones.map((o) => o.id), porDefecto);
+    const ids = opciones.map((o) => o.id);
+    const consolidada = esConsolidado(pedida, ids);
+    const sucursalId = consolidada ? null : resolverSucursalActiva(pedida, ids, porDefecto);
     const activa = opciones.find((o) => o.id === sucursalId) ?? null;
 
     // El embed de la predeterminada sigue siendo el fallback cuando la N:M no
     // está cargada, que es como quedan las instalaciones de una sola sucursal.
-    const sucursal = (activa?.nombre ?? sucObj?.nombre ?? "").trim() || null;
-    // Sin fila o flag nulo → por defecto opera caja.
-    const sucursalManejaCaja = activa
-      ? activa.maneja_caja
-      : sucObj
-        ? sucObj.maneja_caja !== false
-        : true;
+    const sucursal = consolidada
+      ? "Consolidado"
+      : (activa?.nombre ?? sucObj?.nombre ?? "").trim() || null;
+    /**
+     * En consolidado no hay caja que abrir: es una vista de sólo lectura, y
+     * marcarlo acá evita que la UI ofrezca el módulo.
+     */
+    const sucursalManejaCaja = consolidada
+      ? false
+      : activa
+        ? activa.maneja_caja
+        : sucObj
+          ? sucObj.maneja_caja !== false
+          : true;
 
     return NextResponse.json({
       usuario: {
@@ -110,6 +123,7 @@ export async function GET(request: Request) {
         email,
         sucursal,
         sucursal_id: sucursalId,
+        sucursal_consolidada: consolidada,
         sucursal_maneja_caja: sucursalManejaCaja,
         sucursales: opciones,
       },

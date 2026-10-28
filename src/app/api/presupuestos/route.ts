@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       .from("presupuestos")
       .select(PRESU_COLS)
       .eq("empresa_id", ctx.auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(ctx.auth))
       .order("fecha", { ascending: false })
       .limit(500);
     if (estado) q = q.eq("estado", estado);
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
         ? null
         : Math.max(0, parseInt(String(validezRaw), 10) || 0) || null;
 
-    const { id, numero_control } = await crearPresupuesto(ctx.supabase, ctx.auth.empresa_id, exigirSucursal(ctx.auth.sucursal_id), {
+    const { id, numero_control } = await crearPresupuesto(ctx.supabase, ctx.auth.empresa_id, exigirSucursal(ctx.auth), {
       cliente_id: body.cliente_id ? String(body.cliente_id) : null,
       cliente_nombre: clienteNombre,
       cliente_ruc: body.cliente_ruc ? String(body.cliente_ruc) : null,

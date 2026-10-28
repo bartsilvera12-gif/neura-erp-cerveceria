@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     // que el único (empresa_id, sucursal_id, sku).
     const { data, error } = await aplicarFiltroSucursal(
       ctx.supabase.from("productos").select("sku").eq("empresa_id", ctx.auth.empresa_id),
-      exigirSucursal(ctx.auth.sucursal_id)
+      exigirSucursal(ctx.auth)
     );
     if (error) throw new Error(error.message);
 

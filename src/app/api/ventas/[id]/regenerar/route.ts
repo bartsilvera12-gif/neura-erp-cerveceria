@@ -148,7 +148,7 @@ export async function POST(
       } = await createVentaTransaccionalPg({
         schema,
         empresaId,
-        sucursalId: exigirSucursal(auth.sucursal_id),
+        sucursalId: exigirSucursal(auth),
         clienteId: venta.cliente_id,
         observaciones: `Regenerada desde ${venta.numero_control} (anulada).`,
         moneda,

@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       .from("proyectos")
       .select("id, titulo, cliente_id, monto_vendido, fecha_ingreso, created_at, brief_data, metadata")
       .eq("empresa_id", auth.empresaId)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
       .eq("archivado", false)
       .eq("metadata->>facturacion_estado", "pendiente_caja")
       .order("last_activity_at", { ascending: false })

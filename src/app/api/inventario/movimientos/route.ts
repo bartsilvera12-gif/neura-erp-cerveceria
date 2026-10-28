@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
         "id, empresa_id, producto_id, producto_nombre, producto_sku, tipo, cantidad, costo_unitario, origen, referencia, fecha, created_at, updated_at, created_by, usuario_nombre"
       )
       .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(ctx.auth))
       .order("fecha", { ascending: false })
       .limit(500);
     if (error) throw new Error(error.message);

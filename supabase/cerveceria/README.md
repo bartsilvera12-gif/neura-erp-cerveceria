@@ -46,7 +46,25 @@ con **cuál** arranca la sesión.
 
 Cada usuario operativo entra sólo a su sucursal. El dueño
 (`admin@cerveceria.com`) figura en las dos y cambia de una a otra con el
-selector del header; no ve las dos mezcladas, cambia de contexto. El paso 4
+selector del header.
+
+### Vista consolidada
+
+El selector trae además **Consolidado**, que suma las dos sucursales. Es de
+**sólo lectura**: desde ahí no se puede vender, comprar, mover stock ni
+facturar, porque esas operaciones necesitan una sucursal concreta.
+
+| | Consolidado |
+|---|---|
+| Dashboard | suma las dos |
+| Estado de cuenta, Ventas, Compras, Conciliación, Proveedores | suman las dos |
+| Caja y arqueo, Cierres de caja | por sucursal — se ocultan |
+| Proyección de inventario, Inventario crítico | por sucursal — se ocultan |
+| Libro IVA y R90 | ya cubrían la empresa entera (son fiscales, por RUC) |
+
+Los de caja y stock no se consolidan a propósito: los arqueos son de cada
+turno de cada sucursal, y el mismo SKU existe en las dos como filas distintas,
+así que sumarlos daría un número sin significado. El paso 4
 trae los emails de los dos usuarios operativos como variables: **ajustalos
 antes de correrlo**, y creales el login igual que en el paso 3.
 

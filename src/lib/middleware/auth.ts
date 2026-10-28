@@ -8,10 +8,19 @@ export interface UsuarioConEmpresa {
   /** PK `usuarios.id` del schema del tenant cuando se resolvió la fila. */
   usuarioCatalogId?: string | null;
   /**
-   * Sucursal activa. `null` = no filtrar (comportamiento previo a multi-sucursal).
-   * Para aplicarla usá `aplicarFiltroSucursal`, que respeta ese contrato.
+   * Sucursal activa. `null` = no filtrar (comportamiento previo a multi-sucursal)
+   * o vista consolidada, que se distingue por `sucursal_consolidada`.
+   * Para aplicarla usá `exigirSucursal` + `aplicarFiltroSucursal`.
    */
   sucursal_id?: string | null;
+  /**
+   * Sucursales que entran en una lectura: la activa, o todas las permitidas en
+   * vista consolidada. Para aplicarlas usá `exigirSucursales` +
+   * `aplicarFiltroSucursales`, sólo en endpoints que agregan.
+   */
+  sucursal_ids?: string[];
+  /** `true` en vista consolidada: Dashboard y Reportes suman, operar no se puede. */
+  sucursal_consolidada?: boolean;
 }
 
 export interface UsuarioConEmpresaYRol extends UsuarioConEmpresa {
@@ -36,6 +45,8 @@ export async function getAuthWithRol(request?: Request | null): Promise<UsuarioC
     empresa_id: r.ctx.empresa_id,
     usuarioCatalogId: r.ctx.usuarioCatalogId ?? null,
     sucursal_id: r.ctx.sucursal_id ?? null,
+    sucursal_ids: r.ctx.sucursal_ids ?? [],
+    sucursal_consolidada: r.ctx.sucursal_consolidada ?? false,
     rol: r.ctx.usuarioRol ?? undefined,
     nombre: r.ctx.usuarioNombre ?? undefined,
   };
@@ -58,5 +69,7 @@ export async function getUserAndEmpresa(request?: Request | null): Promise<Usuar
     empresa_id: r.ctx.empresa_id,
     usuarioCatalogId: r.ctx.usuarioCatalogId ?? null,
     sucursal_id: r.ctx.sucursal_id ?? null,
+    sucursal_ids: r.ctx.sucursal_ids ?? [],
+    sucursal_consolidada: r.ctx.sucursal_consolidada ?? false,
   };
 }

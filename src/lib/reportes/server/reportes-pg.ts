@@ -1,4 +1,4 @@
-import { andSucursal } from "@/lib/sucursales/sql";
+import { andSucursales } from "@/lib/sucursales/sql";
 /**
  * Agregados SQL server-side para el módulo Reportes (schema cerveceriaerp).
  * Fase 1: Estado de cuenta + Proveedores. Solo lectura sobre
@@ -54,13 +54,14 @@ const num = (v: unknown): number => Number(v ?? 0) || 0;
 export async function getEstadoCuenta(
   schemaRaw: string,
   empresaId: string,
-  sucursalId: string,
+  /** Una sucursal, o varias en vista consolidada. */
+  sucursalIds: readonly string[],
   b: MesBounds
 ): Promise<EstadoCuentaReporte> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
-  const SUC = andSucursal(sucursalId);
-  const SUC_C = andSucursal(sucursalId, "c.");
-  const SUC_V = andSucursal(sucursalId, "v.");
+  const SUC = andSucursales(sucursalIds);
+  const SUC_C = andSucursales(sucursalIds, "c.");
+  const SUC_V = andSucursales(sucursalIds, "v.");
   const tVentas = quoteSchemaTable(schema, "ventas");
   const tCompras = quoteSchemaTable(schema, "compras");
   const tGastos = quoteSchemaTable(schema, "gastos");
@@ -145,13 +146,14 @@ export async function getEstadoCuenta(
 export async function getReporteProveedores(
   schemaRaw: string,
   empresaId: string,
-  sucursalId: string,
+  /** Una sucursal, o varias en vista consolidada. */
+  sucursalIds: readonly string[],
   b: MesBounds
 ): Promise<ProveedoresReporte> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
-  const SUC = andSucursal(sucursalId);
-  const SUC_C = andSucursal(sucursalId, "c.");
-  const SUC_V = andSucursal(sucursalId, "v.");
+  const SUC = andSucursales(sucursalIds);
+  const SUC_C = andSucursales(sucursalIds, "c.");
+  const SUC_V = andSucursales(sucursalIds, "v.");
   const tProv = quoteSchemaTable(schema, "proveedores");
   const tC = quoteSchemaTable(schema, "compras");
   const p = pool();
@@ -210,13 +212,14 @@ export async function getReporteProveedores(
 export async function getReporteCompras(
   schemaRaw: string,
   empresaId: string,
-  sucursalId: string,
+  /** Una sucursal, o varias en vista consolidada. */
+  sucursalIds: readonly string[],
   b: MesBounds
 ): Promise<ComprasReporte> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
-  const SUC = andSucursal(sucursalId);
-  const SUC_C = andSucursal(sucursalId, "c.");
-  const SUC_V = andSucursal(sucursalId, "v.");
+  const SUC = andSucursales(sucursalIds);
+  const SUC_C = andSucursales(sucursalIds, "c.");
+  const SUC_V = andSucursales(sucursalIds, "v.");
   const tC = quoteSchemaTable(schema, "compras");
   const p = pool();
   const per = `c.empresa_id=$1::uuid${SUC_C} AND c.fecha>=$2::timestamptz AND c.fecha<=$3::timestamptz`;
@@ -323,13 +326,14 @@ function normTipoPrecio(v: unknown): TipoPrecioReporte {
 export async function getReporteVentas(
   schemaRaw: string,
   empresaId: string,
-  sucursalId: string,
+  /** Una sucursal, o varias en vista consolidada. */
+  sucursalIds: readonly string[],
   b: MesBounds
 ): Promise<VentasReporte> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
-  const SUC = andSucursal(sucursalId);
-  const SUC_C = andSucursal(sucursalId, "c.");
-  const SUC_V = andSucursal(sucursalId, "v.");
+  const SUC = andSucursales(sucursalIds);
+  const SUC_C = andSucursales(sucursalIds, "c.");
+  const SUC_V = andSucursales(sucursalIds, "v.");
   const tV = quoteSchemaTable(schema, "ventas");
   const tVI = quoteSchemaTable(schema, "ventas_items");
   const tCli = quoteSchemaTable(schema, "clientes");
@@ -434,13 +438,14 @@ export async function getReporteVentas(
 export async function getReporteConciliacion(
   schemaRaw: string,
   empresaId: string,
-  sucursalId: string,
+  /** Una sucursal, o varias en vista consolidada. */
+  sucursalIds: readonly string[],
   b: MesBounds
 ): Promise<ConciliacionReporte> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
-  const SUC = andSucursal(sucursalId);
-  const SUC_C = andSucursal(sucursalId, "c.");
-  const SUC_V = andSucursal(sucursalId, "v.");
+  const SUC = andSucursales(sucursalIds);
+  const SUC_C = andSucursales(sucursalIds, "c.");
+  const SUC_V = andSucursales(sucursalIds, "v.");
   const tV = quoteSchemaTable(schema, "ventas");
   const tD = quoteSchemaTable(schema, "ventas_pagos_detalle");
   const tCob = quoteSchemaTable(schema, "cobros_clientes");

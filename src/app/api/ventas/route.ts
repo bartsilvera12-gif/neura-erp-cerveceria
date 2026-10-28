@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     // Sin tope: se traen TODAS las ventas de la sucursal paginando con .range()
     // (mismo patrón que clientes/facturas más abajo). Un .limit(N) grande lo
     // recorta el gateway/PostgREST; el bucle no depende de ese tope.
-    const sucursalIdVentas = exigirSucursal(ctx.auth.sucursal_id);
+    const sucursalIdVentas = exigirSucursal(ctx.auth);
     const PAGE_VENTAS = 1000;
     const ventasData: Array<Record<string, unknown>> = [];
     for (let desde = 0; ; desde += PAGE_VENTAS) {
@@ -174,7 +174,7 @@ export async function GET(request: NextRequest) {
           .from("facturas")
           .select("id, numero_factura, cliente_razon_social")
           .eq("empresa_id", empresaId)
-          .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id))
+          .eq("sucursal_id", exigirSucursal(ctx.auth))
           .order("id", { ascending: true })
           .range(desde, desde + PAGE_FAC - 1);
         if (pageQ.error) throw new Error(pageQ.error.message);
@@ -199,7 +199,7 @@ export async function GET(request: NextRequest) {
           .from("factura_electronica")
           .select("factura_id, estado_sifen")
           .eq("empresa_id", empresaId)
-          .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id))
+          .eq("sucursal_id", exigirSucursal(ctx.auth))
           .order("factura_id", { ascending: true })
           .range(desde, desde + PAGE_FAC - 1);
         if (pageQ.error) break; // no fatal: sin estado SIFEN el UI degrada bien

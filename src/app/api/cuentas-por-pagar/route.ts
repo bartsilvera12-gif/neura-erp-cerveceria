@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const empresaId = ctx.auth.empresa_id;
     const schema = await fetchDataSchemaForEmpresaId(empresaId);
-    const sucursalId = exigirSucursal(ctx.auth.sucursal_id);
+    const sucursalId = exigirSucursal(ctx.auth);
     const hoyISO = new Date().toLocaleDateString("en-CA", { timeZone: "America/Asuncion" });
     const cuentas = await listCuentasPorPagar(schema, empresaId, sucursalId, hoyISO);
     return NextResponse.json(successResponse({ cuentas, hoy: hoyISO }));

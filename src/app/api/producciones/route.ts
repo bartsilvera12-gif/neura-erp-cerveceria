@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
         "id, receta_id, producto_id, producto_nombre, cantidad_fabricada, rendimiento_cantidad, unidad_rendimiento, costo_total, costo_unitario, fecha, usuario_nombre, observaciones"
       )
       .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
       .order("fecha", { ascending: false })
       .limit(500);
     if (error) throw new Error(error.message);

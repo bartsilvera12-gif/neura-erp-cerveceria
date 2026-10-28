@@ -94,7 +94,7 @@ export async function POST(
       .eq("cliente_id", clienteId)
       .eq("suscripcion_id", susUso.id)
       .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
       .gte("fecha", `${mes}-01`)
       .lt("fecha", `${mesSiguiente}-01`)
       .limit(1);
@@ -106,7 +106,7 @@ export async function POST(
       );
     }
 
-    const numeroFactura = await obtenerSiguienteNumeroFacturaEmpresa(supabase, auth.empresa_id, exigirSucursal(auth.sucursal_id));
+    const numeroFactura = await obtenerSiguienteNumeroFacturaEmpresa(supabase, auth.empresa_id, exigirSucursal(auth));
     const monto = Number(susUso.precio);
     const moneda = susUso.moneda === "USD" ? "USD" : "GS";
 
@@ -114,7 +114,7 @@ export async function POST(
       .from("facturas")
       .insert({
         empresa_id: auth.empresa_id,
-        sucursal_id: exigirSucursal(auth.sucursal_id),
+        sucursal_id: exigirSucursal(auth),
         cliente_id: clienteId,
         suscripcion_id: susUso.id,
         numero_factura: numeroFactura,

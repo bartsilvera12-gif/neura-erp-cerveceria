@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const sp = new URL(request.url).searchParams;
     const rango = resolverRangoCajas(sp.get("desde"), sp.get("hasta"));
     const manejaCaja = await sucursalManejaCaja(schema, ctx.auth.empresa_id, sucursalId);
-    const r = await getReporteCierresCaja(schema, ctx.auth.empresa_id, exigirSucursal(sucursalId), rango, manejaCaja);
+    const r = await getReporteCierresCaja(schema, ctx.auth.empresa_id, exigirSucursal(ctx.auth), rango, manejaCaja);
     const t = r.totales;
 
     const resumen = [

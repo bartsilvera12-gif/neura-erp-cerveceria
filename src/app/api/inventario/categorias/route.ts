@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         .from("categorias_productos")
         .select("id, empresa_id, nombre, codigo, descripcion, parent_id, activo, created_at, updated_at")
         .eq("empresa_id", ctx.auth.empresa_id),
-      exigirSucursal(ctx.auth.sucursal_id)
+      exigirSucursal(ctx.auth)
     ).order("nombre");
     if (!todas) q = q.eq("activo", true);
     const { data, error } = await q;
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         .select("id")
         .eq("empresa_id", ctx.auth.empresa_id)
         .ilike("nombre", nombre),
-      exigirSucursal(ctx.auth.sucursal_id)
+      exigirSucursal(ctx.auth)
     ).limit(1);
     if (dup.error) {
       console.error("[/api/inventario/categorias POST] pre-check", dup.error.message);
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       .from("categorias_productos")
       .insert({
         empresa_id: ctx.auth.empresa_id,
-        sucursal_id: exigirSucursal(ctx.auth.sucursal_id),
+        sucursal_id: exigirSucursal(ctx.auth),
         nombre,
         codigo,
         descripcion: normalizeUpperNullable(body.descripcion) ?? null,

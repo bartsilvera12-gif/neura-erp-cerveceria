@@ -1,4 +1,4 @@
-import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { aplicarFiltroSucursales, exigirSucursales, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuthWithRol } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
@@ -85,8 +85,14 @@ export async function GET(request: NextRequest) {
     const dataSchema = await fetchDataSchemaForEmpresaId(empresaId);
 
     const [facturasQ, pagosQ] = await Promise.all([
-      supabase.from("facturas").select("*").eq("empresa_id", empresaId).eq("sucursal_id", exigirSucursal(auth.sucursal_id)),
-      supabase.from("pagos").select("id, factura_id, monto, fecha_pago").eq("empresa_id", empresaId).eq("sucursal_id", exigirSucursal(auth.sucursal_id)),
+      aplicarFiltroSucursales(
+        supabase.from("facturas").select("*").eq("empresa_id", empresaId),
+        exigirSucursales(auth)
+      ),
+      aplicarFiltroSucursales(
+        supabase.from("pagos").select("id, factura_id, monto, fecha_pago").eq("empresa_id", empresaId),
+        exigirSucursales(auth)
+      ),
     ]);
 
     const facturasErr = facturasQ.error?.message ?? null;

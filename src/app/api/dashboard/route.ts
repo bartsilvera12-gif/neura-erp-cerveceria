@@ -1,4 +1,4 @@
-import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { aplicarFiltroSucursales, exigirSucursales, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
@@ -22,24 +22,27 @@ export async function GET(request: NextRequest) {
     const inicioMesSiguiente = `${nextY}-${String(nextM + 1).padStart(2, "0")}-01`;
 
 
+    // En vista consolidada son las dos sucursales; si no, una sola.
+    const sucursales = exigirSucursales(auth);
+
     const [facturasRes, pagosRes, inactivosRes] = await Promise.all([
-      supabase
-        .from("facturas")
-        .select("monto, fecha")
-        .eq("empresa_id", auth.empresa_id)
-        .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      aplicarFiltroSucursales(
+        supabase.from("facturas").select("monto, fecha").eq("empresa_id", auth.empresa_id),
+        sucursales
+      )
         .neq("estado", "Anulado")
         .gte("fecha", inicioMes)
         .lt("fecha", inicioMesSiguiente),
-      supabase
-        .from("pagos")
-        .select("monto, fecha_pago")
-        .eq("empresa_id", auth.empresa_id)
-        .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      aplicarFiltroSucursales(
+        supabase.from("pagos").select("monto, fecha_pago").eq("empresa_id", auth.empresa_id),
+        sucursales
+      )
         .gte("fecha_pago", inicioMes)
         .lt("fecha_pago", inicioMesSiguiente),
-      supabase.from("clientes").select("id").eq("empresa_id", auth.empresa_id)
-        .eq("sucursal_id", exigirSucursal(auth.sucursal_id)).eq("estado", "inactivo"),
+      aplicarFiltroSucursales(
+        supabase.from("clientes").select("id").eq("empresa_id", auth.empresa_id),
+        sucursales
+      ).eq("estado", "inactivo"),
     ]);
 
     if (facturasRes.error) {
@@ -57,11 +60,11 @@ export async function GET(request: NextRequest) {
 
     const inactivos = new Set((inactivosRes.data ?? []).map((c: { id: string }) => c.id));
 
-    const { data: facturasPendientes } = await supabase
-      .from("facturas")
-      .select("saldo, cliente_id")
+    const { data: facturasPendientes } = await aplicarFiltroSucursales(
+      supabase.from("facturas").select("saldo, cliente_id"),
+      sucursales
+    )
       .eq("empresa_id", auth.empresa_id)
-        .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
       .neq("estado", "Anulado")
       .gt("saldo", 0);
 

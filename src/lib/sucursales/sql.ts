@@ -36,3 +36,23 @@ export function sucursalUuidLiteral(sucursalId: string): string {
 export function andSucursal(sucursalId: string, prefijo = ""): string {
   return ` AND ${prefijo}sucursal_id = ${sucursalUuidLiteral(sucursalId)}`;
 }
+
+/**
+ * Fragmento para varias sucursales (vista consolidada):
+ * ` AND <prefijo>sucursal_id IN ('<uuid>'::uuid, ...)`.
+ *
+ * Con una sola cae en `andSucursal`, que es la consulta que se venía haciendo:
+ * así el camino normal no cambia de plan de ejecución.
+ *
+ * Cada UUID se valida igual que en `sucursalUuidLiteral`; una lista vacía es un
+ * error de programación (el caller debió usar `exigirSucursales`, que nunca
+ * devuelve vacío) y lanza en vez de producir un `IN ()` inválido.
+ */
+export function andSucursales(sucursalIds: readonly string[], prefijo = ""): string {
+  if (sucursalIds.length === 0) {
+    throw new Error("andSucursales: lista de sucursales vacía.");
+  }
+  if (sucursalIds.length === 1) return andSucursal(sucursalIds[0], prefijo);
+  const lista = sucursalIds.map(sucursalUuidLiteral).join(", ");
+  return ` AND ${prefijo}sucursal_id IN (${lista})`;
+}

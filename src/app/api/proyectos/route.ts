@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 
     const sb = await getChatServiceClientForEmpresa(auth.empresaId);
     const empresaId = auth.empresaId;
-    const sucursalId = exigirSucursal(auth.sucursal_id);
+    const sucursalId = exigirSucursal(auth);
 
     function proyectosFiltrados() {
       let qq = sb
@@ -213,7 +213,7 @@ export async function POST(request: Request) {
       bloqueo_motivo: typeof body.bloqueo_motivo === "string" ? body.bloqueo_motivo : null,
       created_by: auth.usuarioCatalogId,
       updated_by: auth.usuarioCatalogId,
-      sucursal_id: exigirSucursal(auth.sucursal_id),
+      sucursal_id: exigirSucursal(auth),
       ultimo_movimiento_at: new Date().toISOString(),
       last_activity_at: new Date().toISOString(),
     };

@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Bell, Check, ChevronDown, Loader2, LogOut, Menu, Store } from "lucide-react";
+import { Bell, Check, ChevronDown, Layers, Loader2, LogOut, Menu, Store } from "lucide-react";
+import { SUCURSAL_CONSOLIDADO } from "@/lib/sucursales/activa";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { signOut } from "@/lib/auth";
 import { useBoot } from "@/components/BootContext";
@@ -18,6 +19,8 @@ type HeaderUsuario = {
   sucursal?: string | null;
   /** Sucursal activa, para marcar la opción elegida en el selector. */
   sucursal_id?: string | null;
+  /** `true` en vista consolidada: Dashboard y Reportes suman las dos. */
+  sucursal_consolidada?: boolean;
   /**
    * Sucursales a las que el usuario puede entrar. Con una sola (el caso
    * normal) el header muestra la etiqueta fija de siempre; con más de una,
@@ -102,6 +105,7 @@ export default function Header() {
   const sucursales = usuario?.sucursales ?? [];
   /** El selector sólo tiene sentido con más de una sucursal a la que entrar. */
   const puedeCambiarSucursal = sucursales.length > 1;
+  const consolidada = usuario?.sucursal_consolidada === true;
 
   /**
    * Cambiar de sucursal cambia el contexto de TODA la aplicación (catálogo,
@@ -164,12 +168,24 @@ export default function Header() {
             <button
               type="button"
               onClick={() => setSucMenuOpen((v) => !v)}
-              className="flex items-center gap-1.5 rounded-lg border border-[#4FAEB2]/30 bg-[#4FAEB2]/10 px-2.5 py-1.5 text-xs font-semibold text-[#2F6F72] transition-colors hover:bg-[#4FAEB2]/20"
-              title={`Estás operando en ${sucursal}. Tocá para cambiar.`}
+              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                consolidada
+                  ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  : "border-[#4FAEB2]/30 bg-[#4FAEB2]/10 text-[#2F6F72] hover:bg-[#4FAEB2]/20"
+              }`}
+              title={
+                consolidada
+                  ? "Vista consolidada: Dashboard y Reportes suman las dos sucursales. Para operar, elegí una."
+                  : `Estás operando en ${sucursal}. Tocá para cambiar.`
+              }
               aria-haspopup="menu"
               aria-expanded={sucMenuOpen}
             >
-              <Store className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {consolidada ? (
+                <Layers className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              ) : (
+                <Store className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              )}
               <span className="max-w-[9rem] truncate">{sucursal}</span>
               <ChevronDown
                 className={`h-3.5 w-3.5 shrink-0 transition-transform ${sucMenuOpen ? "rotate-180" : ""}`}
@@ -207,6 +223,36 @@ export default function Header() {
                     </button>
                   );
                 })}
+
+                {/* Consolidado: suma las sucursales en Dashboard y Reportes.
+                    Va separado y con su propia leyenda porque NO es una
+                    sucursal más: desde acá no se puede operar. */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={cambiandoSuc !== null}
+                  onClick={() =>
+                    consolidada ? setSucMenuOpen(false) : void cambiarSucursal(SUCURSAL_CONSOLIDADO)
+                  }
+                  className={`flex w-full items-start justify-between gap-2 border-t border-slate-100 px-3 py-2 text-left text-sm transition-colors disabled:opacity-60 ${
+                    consolidada ? "font-semibold text-amber-800" : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      Consolidado
+                    </span>
+                    <span className="mt-0.5 block text-[11px] font-normal leading-snug text-slate-500">
+                      Dashboard y Reportes con las dos sumadas. Sólo lectura.
+                    </span>
+                  </span>
+                  {cambiandoSuc === SUCURSAL_CONSOLIDADO ? (
+                    <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                  ) : consolidada ? (
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  ) : null}
+                </button>
               </div>
             )}
           </div>

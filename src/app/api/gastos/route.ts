@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       .from("gastos")
       .select("*")
       .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
       .order("fecha", { ascending: false });
 
     if (error) {

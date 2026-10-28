@@ -236,7 +236,7 @@ export async function GET(request: Request) {
   const catalog = createServiceRoleClient();
   const sb = await getChatServiceClientForEmpresa(auth.empresaId);
   const empresaId = auth.empresaId;
-  const sucursalId = exigirSucursal(auth.sucursal_id);
+  const sucursalId = exigirSucursal(auth);
 
   try {
     const { data: politicaRaw } = await sb

@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
       .from("nota_credito")
       .select(SELECT_LIST, { count: "exact" })
       .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
       .order("created_at", { ascending: false });
 
     if (idFilter) q = q.in("id", idFilter);

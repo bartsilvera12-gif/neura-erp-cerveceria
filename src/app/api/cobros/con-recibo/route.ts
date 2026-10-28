@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       cuentasPendientesDeCliente({
         schemaRaw: schema,
         empresaId: ctx.auth.empresa_id,
-        sucursalId: exigirSucursal(ctx.auth.sucursal_id),
+        sucursalId: exigirSucursal(ctx.auth),
         clienteId,
       }),
       ncDisponiblesDeCliente({
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     const out = await cobrarConRecibo({
       schemaRaw: schema,
       empresaId: ctx.auth.empresa_id,
-      sucursalId: exigirSucursal(ctx.auth.sucursal_id),
+      sucursalId: exigirSucursal(ctx.auth),
       clienteId,
       aplicaciones,
       nc_aplicaciones,

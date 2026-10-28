@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       .from("facturas")
       .select("*")
       .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
       .order("fecha", { ascending: false });
 
     if (clienteId) {
@@ -147,11 +147,11 @@ export async function POST(request: NextRequest) {
       const diasCred = Number(process.env.FACTURA_DIAS_CREDITO_DEFAULT ?? 30);
       fechaVenc = fechaMasDiasCalendario(fechaNorm, Number.isFinite(diasCred) ? diasCred : 30);
     }
-    const numeroFactura = await obtenerSiguienteNumeroFacturaEmpresa(supabase, auth.empresa_id, exigirSucursal(auth.sucursal_id));
+    const numeroFactura = await obtenerSiguienteNumeroFacturaEmpresa(supabase, auth.empresa_id, exigirSucursal(auth));
 
     const insert = {
       empresa_id: auth.empresa_id,
-      sucursal_id: exigirSucursal(auth.sucursal_id),
+      sucursal_id: exigirSucursal(auth),
       cliente_id: String(cliente_id).trim(),
       numero_factura: numeroFactura,
       fecha: fechaNorm,

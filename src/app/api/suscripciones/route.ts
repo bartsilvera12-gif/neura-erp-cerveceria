@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       await crearFacturaInicialSuscripcionSiCorresponde({
         supabase,
         empresaId: auth.empresa_id,
-        sucursalId: exigirSucursal(auth.sucursal_id),
+        sucursalId: exigirSucursal(auth),
         suscripcion: {
           id: data.id,
           cliente_id: data.cliente_id,

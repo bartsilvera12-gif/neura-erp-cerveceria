@@ -237,7 +237,7 @@ export async function DELETE(
         .select("id")
         .eq("cliente_id", clienteId)
         .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
         .eq("estado", "activa"),
       supabase
         .from("facturas")
@@ -308,7 +308,7 @@ export async function DELETE(
           .update({ estado: "Anulado", saldo: 0, updated_at: now })
           .in("id", facturaIds)
           .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id));
+      .eq("sucursal_id", exigirSucursal(auth));
 
         if (errF) {
           return NextResponse.json(errorResponse("Error al anular facturas: " + errF.message), { status: 500 });

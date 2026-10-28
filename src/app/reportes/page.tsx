@@ -9,12 +9,21 @@ import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, TrendingDown, Pac
 export default function ReportesPage() {
   // La tarjeta de Caja solo se muestra en sucursales que operan caja.
   const [manejaCaja, setManejaCaja] = useState(true);
+  /**
+   * En vista consolidada se ocultan los reportes que son POR SUCURSAL (caja,
+   * arqueo y los de stock). No se consolidan a propósito: los arqueos son de
+   * cada turno de cada sucursal, y el mismo SKU existe en las dos como filas
+   * distintas, así que sumarlos daría un número que no significa nada.
+   * Mejor no ofrecerlos que devolver un error al entrar.
+   */
+  const [consolidada, setConsolidada] = useState(false);
   useEffect(() => {
     (async () => {
       try {
         const r = await fetch("/api/usuarios/me", { credentials: "include", cache: "no-store" });
         const j = await r.json();
         setManejaCaja(j?.usuario?.sucursal_maneja_caja !== false);
+        setConsolidada(j?.usuario?.sucursal_consolidada === true);
       } catch { /* por defecto se muestra */ }
     })();
   }, []);
@@ -25,6 +34,14 @@ export default function ReportesPage() {
         title="Reportes"
         description="Panel de análisis y reportería operativa"
       />
+
+      {consolidada && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Estás en la vista <strong>consolidada</strong>: los reportes suman todas tus
+          sucursales. Los de caja y stock son por sucursal, así que no aparecen acá —
+          elegí una sucursal arriba para verlos.
+        </p>
+      )}
 
       <ul className="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3">
         <li>
@@ -90,7 +107,7 @@ export default function ReportesPage() {
             href="/reportes/conciliacion"
           />
         </li>
-        {manejaCaja && (
+        {manejaCaja && !consolidada && (
           <li>
             <ReportCard
               title="Caja y arqueo"
@@ -101,7 +118,7 @@ export default function ReportesPage() {
             />
           </li>
         )}
-        {manejaCaja && (
+        {manejaCaja && !consolidada && (
           <li>
             <ReportCard
               title="Cierres de caja"
@@ -112,24 +129,28 @@ export default function ReportesPage() {
             />
           </li>
         )}
-        <li>
-          <ReportCard
-            title="Proyección de inventario"
-            subtitle="Cobertura y quiebre de stock"
-            icon={TrendingDown}
-            description="Días de cobertura y fecha estimada de quiebre por producto, según el consumo de los últimos 30 días."
-            href="/reportes/proyeccion-inventario"
-          />
-        </li>
-        <li>
-          <ReportCard
-            title="Inventario crítico"
-            subtitle="Productos bajo el mínimo"
-            icon={PackageX}
-            description="Listado completo de productos de tu sucursal con stock igual o por debajo del mínimo."
-            href="/reportes/inventario-critico"
-          />
-        </li>
+        {!consolidada && (
+          <li>
+            <ReportCard
+              title="Proyección de inventario"
+              subtitle="Cobertura y quiebre de stock"
+              icon={TrendingDown}
+              description="Días de cobertura y fecha estimada de quiebre por producto, según el consumo de los últimos 30 días."
+              href="/reportes/proyeccion-inventario"
+            />
+          </li>
+        )}
+        {!consolidada && (
+          <li>
+            <ReportCard
+              title="Inventario crítico"
+              subtitle="Productos bajo el mínimo"
+              icon={PackageX}
+              description="Listado completo de productos de tu sucursal con stock igual o por debajo del mínimo."
+              href="/reportes/inventario-critico"
+            />
+          </li>
+        )}
       </ul>
     </div>
   );

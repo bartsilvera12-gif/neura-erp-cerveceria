@@ -79,7 +79,7 @@ export async function GET(
         .select("id", { count: "exact", head: true })
         .eq("cliente_id", clienteId)
         .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+      .eq("sucursal_id", exigirSucursal(auth))
         .eq("estado", "Pagado"),
       supabase
         .from("facturas")
@@ -93,7 +93,7 @@ export async function GET(
         .from("ventas")
         .select("id")
         .eq("empresa_id", auth.empresa_id)
-        .eq("sucursal_id", exigirSucursal(auth.sucursal_id))
+        .eq("sucursal_id", exigirSucursal(auth))
         .eq("cliente_id", clienteId)
         .limit(1),
       supabase.from("tipificaciones").select("id").eq("cliente_id", clienteId).limit(1),
@@ -114,7 +114,7 @@ export async function GET(
       .select("id")
       .eq("cliente_id", clienteId)
       .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id));
+      .eq("sucursal_id", exigirSucursal(auth));
 
     const facIds = (facIdsRows ?? []).map((r: { id: string }) => r.id).filter(Boolean);
     let pagosRegistradosCount = 0;
@@ -126,7 +126,7 @@ export async function GET(
         .select("id", { count: "exact", head: true })
         .in("factura_id", chunk)
         .eq("empresa_id", auth.empresa_id)
-      .eq("sucursal_id", exigirSucursal(auth.sucursal_id));
+      .eq("sucursal_id", exigirSucursal(auth));
       pagosRegistradosCount += count ?? 0;
     }
 

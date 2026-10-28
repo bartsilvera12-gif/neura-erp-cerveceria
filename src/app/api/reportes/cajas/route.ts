@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const ctx = await getTenantSupabaseFromAuth(request);
   if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
   try {
-    const sucursalId = exigirSucursal(ctx.auth.sucursal_id);
+    const sucursalId = exigirSucursal(ctx.auth);
     const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
     const sp = new URL(request.url).searchParams;
     const rango = resolverRangoCajas(sp.get("desde"), sp.get("hasta"));

@@ -7,6 +7,7 @@ import { supabaseDbSchemaOption, type AppSupabaseClient } from "@/lib/supabase/s
 import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 import {
   SUCURSAL_COOKIE,
+  esConsolidado,
   resolverSucursalActiva,
 } from "@/lib/sucursales/activa";
 
@@ -35,6 +36,13 @@ export type ApiAuthContext = {
    * dejaría al usuario sin ver NADA. Ver `aplicarFiltroSucursal`.
    */
   sucursal_id?: string | null;
+  /**
+   * Sucursales que entran en una consulta de lectura: la activa, o todas las
+   * permitidas en vista consolidada. Ver `@/lib/sucursales/filtro`.
+   */
+  sucursal_ids?: string[];
+  /** `true` en vista consolidada (Dashboard y Reportes suman; operar no se puede). */
+  sucursal_consolidada?: boolean;
 
   /** Cliente anon + JWT del usuario (cookies o Bearer). PostgREST respeta RLS en zentra_erp. */
   userScopedSupabase: AppSupabaseClient;
@@ -266,11 +274,22 @@ async function resolveApiAuthContextUncached(
    * paga la query a `usuario_sucursales` en cada request.
    */
   let sucursal_id = sucursalPorDefecto;
+  let sucursal_ids = sucursalPorDefecto ? [sucursalPorDefecto] : [];
+  let sucursal_consolidada = false;
   const sucursalPedida = await leerCookieSucursal();
 
   if (sucursalPedida && sucursalPedida !== sucursalPorDefecto && usuarioCatalogId) {
     const permitidas = await cargarSucursalesPermitidas(usuarioCatalogId, userScopedSupabase);
-    sucursal_id = resolverSucursalActiva(sucursalPedida, permitidas, sucursalPorDefecto);
+    if (esConsolidado(sucursalPedida, permitidas)) {
+      // En consolidado no hay sucursal activa: operar tiene que fallar, y
+      // `exigirSucursal` distingue este caso por el flag.
+      sucursal_consolidada = true;
+      sucursal_id = null;
+      sucursal_ids = permitidas;
+    } else {
+      sucursal_id = resolverSucursalActiva(sucursalPedida, permitidas, sucursalPorDefecto);
+      sucursal_ids = sucursal_id ? [sucursal_id] : [];
+    }
   }
 
   if (empresa_id) {
@@ -281,6 +300,8 @@ async function resolveApiAuthContextUncached(
         empresa_id,
         usuarioCatalogId,
         sucursal_id,
+        sucursal_ids,
+        sucursal_consolidada,
         userScopedSupabase,
         usuarioRol,
         usuarioNombre,
@@ -296,6 +317,8 @@ async function resolveApiAuthContextUncached(
         empresa_id: null,
         usuarioCatalogId,
         sucursal_id,
+        sucursal_ids,
+        sucursal_consolidada,
         userScopedSupabase,
         usuarioRol,
         usuarioNombre,

@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const schema = await fetchDataSchemaForEmpresaId(empresaId);
 
   try {
-    const rows = await listCompras(schema, empresaId, exigirSucursal(ctx.auth.sucursal_id));
+    const rows = await listCompras(schema, empresaId, exigirSucursal(ctx.auth));
     const buf = buildXlsxBuffer(rows, [
       { header: "NUMERO_CONTROL", value: (r) => r.numero_control, width: 16 },
       { header: "FECHA", value: (r) => r.fecha ? new Date(r.fecha) : "", width: 18 },

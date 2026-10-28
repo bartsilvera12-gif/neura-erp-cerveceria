@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!esAprobador(auth.auth.rol)) {
       return NextResponse.json(errorResponse("Solo un administrador o supervisor puede registrar pagos."), { status: 403 });
     }
-    const sucursalId = exigirSucursal(auth.auth.sucursal_id);
+    const sucursalId = exigirSucursal(auth.auth);
     const empresaId = auth.auth.empresa_id;
     const schema = await fetchDataSchemaForEmpresaId(empresaId);
     const { id } = await params;

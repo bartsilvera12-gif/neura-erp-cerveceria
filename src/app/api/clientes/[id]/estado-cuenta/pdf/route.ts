@@ -60,14 +60,14 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   };
 
   const vq = await ctx.supabase.from("ventas").select("total").eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id)).eq("cliente_id", id);
+      .eq("sucursal_id", exigirSucursal(ctx.auth)).eq("cliente_id", id);
   const totalVendido = ((vq.data ?? []) as Record<string, unknown>[]).reduce((a, r) => a + (Number(r.total) || 0), 0);
 
   const cxcQ = await ctx.supabase
     .from("cuentas_por_cobrar")
     .select("venta_id, numero_venta, fecha_emision, fecha_vencimiento, total, saldo, estado")
     .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id)).eq("cliente_id", id).order("fecha_emision", { ascending: false });
+      .eq("sucursal_id", exigirSucursal(ctx.auth)).eq("cliente_id", id).order("fecha_emision", { ascending: false });
   const cxcData = (cxcQ.data ?? []) as Record<string, unknown>[];
 
   // Factura de cada CxC (por la venta): número FAC y estado fiscal.
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     .from("cobros_clientes")
     .select("fecha_pago, monto, metodo_pago, referencia, usuario_nombre")
     .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth.sucursal_id)).eq("cliente_id", id).order("fecha_pago", { ascending: false }).limit(500);
+      .eq("sucursal_id", exigirSucursal(ctx.auth)).eq("cliente_id", id).order("fecha_pago", { ascending: false }).limit(500);
   const cobros = (cobQ.data ?? []) as Record<string, unknown>[];
 
   // Notas de crédito aprobadas (créditos a favor). Solo se listan para conciliar;

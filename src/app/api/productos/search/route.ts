@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       query = query.eq("es_vendible", true);
     }
 
-    query = aplicarFiltroSucursal(query, exigirSucursal(auth.sucursal_id));
+    query = aplicarFiltroSucursal(query, exigirSucursal(auth));
 
     if (q.length > 0) {
       const pat = `%${escapeIlikePattern(q)}%`;

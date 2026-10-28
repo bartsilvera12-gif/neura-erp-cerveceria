@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, ctxParams: { params: Promise<{ 
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
 
-    const { pedido_id } = await convertirEnPedido(ctx.supabase, ctx.auth.empresa_id, exigirSucursal(ctx.auth.sucursal_id), id);
+    const { pedido_id } = await convertirEnPedido(ctx.supabase, ctx.auth.empresa_id, exigirSucursal(ctx.auth), id);
     return NextResponse.json(successResponse({ pedido_id }));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "No se pudo convertir el presupuesto.";

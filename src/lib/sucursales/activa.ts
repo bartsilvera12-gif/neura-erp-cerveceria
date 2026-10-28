@@ -12,10 +12,11 @@
  * aparece sólo cuando el usuario tiene acceso a más de una (p. ej. el dueño de
  * un negocio con dos administraciones).
  *
- * UNA SUCURSAL A LA VEZ, NO UNA VISTA MEZCLADA: el usuario cambia de contexto,
- * no ve las dos sumadas. Mezclarlas en las pantallas operativas sería un error
- * — el mismo SKU existe en las dos sucursales como filas distintas, y cargar
- * stock o facturar "en las dos" no significa nada.
+ * CONSOLIDADO: quien tiene más de una sucursal puede además elegir
+ * `"consolidado"`, que suma las dos en Dashboard y Reportes. Es de SOLO
+ * LECTURA: las pantallas operativas exigen una sucursal concreta, porque el
+ * mismo SKU existe en las dos como filas distintas y cargar stock o facturar
+ * "en las dos" no significa nada. Ver `@/lib/sucursales/filtro`.
  *
  * La cookie NO es una credencial: nunca otorga acceso por sí sola. El servidor
  * la valida contra `usuario_sucursales` en cada request y, si no está en la
@@ -26,6 +27,14 @@
 /** Nombre de la cookie que lleva la sucursal activa. */
 export const SUCURSAL_COOKIE = "neura_sucursal";
 
+/**
+ * Valor de la cookie para la vista consolidada.
+ *
+ * No es un UUID a propósito: así nunca puede colisionar con el id de una
+ * sucursal real ni colarse en un filtro como si lo fuera.
+ */
+export const SUCURSAL_CONSOLIDADO = "consolidado";
+
 /** Un año: la elección persiste entre sesiones; cambiarla es un clic. */
 export const SUCURSAL_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
@@ -34,6 +43,17 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** `true` si el valor tiene forma de UUID canónico. No dice nada sobre el acceso. */
 export function esUuidSucursal(value: string | null | undefined): value is string {
   return typeof value === "string" && UUID_RE.test(value);
+}
+
+/**
+ * `true` si el valor pedido es la vista consolidada, y el usuario tiene más de
+ * una sucursal. Con una sola no hay nada que consolidar.
+ */
+export function esConsolidado(
+  pedida: string | null | undefined,
+  permitidas: readonly string[]
+): boolean {
+  return pedida === SUCURSAL_CONSOLIDADO && permitidas.length > 1;
 }
 
 /**

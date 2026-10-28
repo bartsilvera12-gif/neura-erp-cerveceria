@@ -203,7 +203,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const result = await createNotaCreditoBorrador({
       supabase,
       empresaId: auth.empresa_id,
-      sucursalId: exigirSucursal(auth.sucursal_id),
+      sucursalId: exigirSucursal(auth),
       facturaId: fid,
       authUserId: auth.user.id,
       authEmail: auth.user.email ?? null,
