@@ -135,6 +135,7 @@ DECLARE
     {"slug":"reposicion",                 "nombre":"Reposición",                 "activo":true},
     {"slug":"compras",                    "nombre":"Compras",                    "activo":true},
     {"slug":"recetas",                    "nombre":"Recetas",                    "activo":true},
+    {"slug":"produccion",                 "nombre":"Producción",                 "activo":true},
     {"slug":"proyectos",                  "nombre":"Pedidos",                    "activo":true},
     {"slug":"configuracion",              "nombre":"Configuración",              "activo":true},
     {"slug":"usuarios",                   "nombre":"Usuarios",                   "activo":true},

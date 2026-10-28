@@ -5,39 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  LayoutDashboard,
-  ShoppingCart,
-  Package,
-  Users,
-  FileText,
-  Settings,
-  UserCog,
-  Building2,
-  ChevronDown,
-  ChevronRight,
-  Star,
-  Sparkles,
-  PanelLeftClose,
-  PanelLeft,
-  Search,
-  Receipt,
-  Megaphone,
-  Ticket,
-  SendHorizontal,
-  MessageCircle,
-  History,
-  Activity,
-  ScrollText,
-  ListChecks,
-  Percent,
-  ChefHat,
-  Utensils,
-  BarChart3,
-  Banknote,
-  ArrowLeftRight,
-  Wallet,
-} from "lucide-react";
+import { Activity, ArrowLeftRight, Banknote, BarChart3, Building2, ChefHat, ChevronDown, ChevronRight, Factory, FileText, History, LayoutDashboard, ListChecks, Megaphone, MessageCircle, Package, PanelLeft, PanelLeftClose, Percent, Receipt, ScrollText, Search, SendHorizontal, Settings, ShoppingCart, Sparkles, Star, Ticket, UserCog, Users, Utensils, Wallet } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getCurrentUser } from "@/lib/auth";
@@ -137,6 +105,7 @@ const MENU_STRUCTURE: MenuItem[] = [
     icon: Utensils,
   },
   { key: "recetas", slug: "recetas", label: "Recetas", href: "/dashboard/recetas", icon: ChefHat },
+  { key: "produccion", slug: "produccion", label: "Producción", href: "/dashboard/produccion", icon: Factory },
   { key: "inventario", slug: "inventario", label: "Inventario", href: "/inventario", icon: Package, children: [
     { label: "Productos", href: "/inventario" },
     { label: "Movimientos", href: "/inventario/movimientos" },
