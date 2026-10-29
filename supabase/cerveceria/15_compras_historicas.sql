@@ -55,14 +55,6 @@ DECLARE
   r          record;
 BEGIN
   -- ---------------------------------------------------------------------------
-  -- Columnas obligatorias que este script no conoce
-  -- ---------------------------------------------------------------------------
-  -- `compras` tiene bastantes columnas NOT NULL que la pantalla de Compras
-  -- llena y que una carga historica no tiene (nro_timbrado, por ejemplo: estas
-  -- compras no vienen de una factura). Enumerarlas a mano era adivinar de a
-  -- una y fallar de a una, asi que se las busca en el catalogo y se las
-  -- rellena con el vacio que corresponde a su tipo.
-  -- ---------------------------------------------------------------------------
   -- Antes que nada: los insumos tienen que existir
   -- ---------------------------------------------------------------------------
   -- Los crea el script 12. Si falta alguno, conviene decirlo TODO junto y
@@ -80,6 +72,14 @@ BEGIN
       v_faltan;
   END IF;
 
+  -- ---------------------------------------------------------------------------
+  -- Columnas obligatorias que este script no conoce
+  -- ---------------------------------------------------------------------------
+  -- `compras` tiene bastantes columnas NOT NULL que la pantalla de Compras
+  -- llena y que una carga historica no tiene (nro_timbrado, por ejemplo: estas
+  -- compras no vienen de una factura). Enumerarlas a mano era adivinar de a
+  -- una y fallar de a una, asi que se las busca en el catalogo y se las
+  -- rellena con el vacio que corresponde a su tipo.
   FOR r IN
     SELECT column_name, data_type
       FROM information_schema.columns
