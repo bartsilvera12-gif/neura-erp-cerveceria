@@ -8,8 +8,6 @@ import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
 import { getClientes, clienteNombre } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
-import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
-import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
 
 import { Check, Users } from "lucide-react";
 
@@ -37,19 +35,6 @@ function BadgeEstado({ estado }: { estado: Cliente["estado"] }) {
   );
 }
 
-function BadgeOrigen({ origen }: { origen: Cliente["origen"] }) {
-  const cfg = {
-    CRM:    "bg-violet-100 text-violet-700",
-    VENTA:  "bg-blue-100 text-blue-700",
-    MANUAL: "bg-gray-100 text-gray-600",
-  };
-  return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cfg[origen]}`}>
-      {origen}
-    </span>
-  );
-}
-
 // ── Columnas configurables ────────────────────────────────────────────────────
 
 const CLIENTES_COLUMNAS_STORAGE_KEY = "neura.erp.clientes.columnas.v1";
@@ -60,8 +45,6 @@ type ClienteColumnKey =
   | "contacto"
   | "telefono"
   | "plan_activo"
-  | "origen"
-  | "tipo_servicio"
   | "estado"
   | "desde"
   | "creado_por"
@@ -85,8 +68,6 @@ const DEFAULT_VISIBLE_COLUMN_KEYS: ClienteColumnKey[] = [
   "contacto",
   "telefono",
   "plan_activo",
-  "origen",
-  "tipo_servicio",
   "estado",
   "desde",
 ];
@@ -130,7 +111,7 @@ function VendedorResponsableCell({ cliente }: { cliente: Cliente }) {
   return <span className="text-slate-400">Sin asignar</span>;
 }
 
-function buildClienteColumns(mapNombreTipo: Record<string, string>): ClienteColumnDef[] {
+function buildClienteColumns(): ClienteColumnDef[] {
   const th = "text-left text-xs font-semibold text-slate-600 px-5 py-3 whitespace-nowrap";
   const td = "px-5 py-3.5";
   return [
@@ -209,22 +190,6 @@ function buildClienteColumns(mapNombreTipo: Record<string, string>): ClienteColu
       ),
     },
     {
-      key: "origen",
-      label: "Origen",
-      visibleDefault: true,
-      headerClassName: th,
-      className: td,
-      render: (c) => <BadgeOrigen origen={c.origen} />,
-    },
-    {
-      key: "tipo_servicio",
-      label: "Tipo servicio",
-      visibleDefault: true,
-      headerClassName: th,
-      className: `${td} text-xs text-gray-600 whitespace-nowrap`,
-      render: (c) => etiquetaVisibleTipoServicio(c.tipo_servicio_cliente ?? null, mapNombreTipo),
-    },
-    {
       key: "estado",
       label: "Estado",
       visibleDefault: true,
@@ -284,19 +249,11 @@ export default function ClientesPage() {
   const [busqueda,    setBusqueda]    = useState("");
   const [bajaOk,      setBajaOk]      = useState(false);
   const [filtroEstado, setFiltroEstado] = useState<"" | "activo" | "inactivo">("");
-  const [filtroOrigen, setFiltroOrigen] = useState<"" | "CRM" | "VENTA" | "MANUAL">("");
   const [filtroTipo,   setFiltroTipo]   = useState<"" | "empresa" | "persona">("");
-  const [filtroTipoServicio, setFiltroTipoServicio] = useState<"" | string>("");
   const [columnasOpen, setColumnasOpen] = useState(false);
   const [columnasInicializadas, setColumnasInicializadas] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<ClienteColumnKey[]>(DEFAULT_VISIBLE_COLUMN_KEYS);
-  const [filasTipoCatalogo, setFilasTipoCatalogo] = useState<ClienteTipoServicioRow[]>(() => filasTiposDesdeSistemaEstatico());
-  const mapNombreTipo = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const t of filasTipoCatalogo) m[t.slug] = t.nombre;
-    return m;
-  }, [filasTipoCatalogo]);
-  const clienteColumns = useMemo(() => buildClienteColumns(mapNombreTipo), [mapNombreTipo]);
+  const clienteColumns = useMemo(() => buildClienteColumns(), []);
   const visibleColumnSet = useMemo(() => new Set(visibleColumnKeys), [visibleColumnKeys]);
   const visibleColumns = useMemo(
     () => clienteColumns.filter((col) => visibleColumnSet.has(col.key)),
@@ -308,10 +265,6 @@ export default function ClientesPage() {
       setClientes(data);
       setCargando(false);
     });
-  }, []);
-
-  useEffect(() => {
-    void fetchTiposFormCliente().then(setFilasTipoCatalogo);
   }, []);
 
   useEffect(() => {
@@ -335,16 +288,6 @@ export default function ClientesPage() {
     }
   }, [visibleColumnKeys, columnasInicializadas]);
 
-  const slugsExtraFiltro = useMemo(() => {
-    const known = new Set(filasTipoCatalogo.map((f) => f.slug));
-    const u = new Set<string>();
-    for (const c of clientes) {
-      const t = (c.tipo_servicio_cliente ?? "").trim();
-      if (t && !known.has(t)) u.add(t);
-    }
-    return Array.from(u).sort();
-  }, [clientes, filasTipoCatalogo]);
-
   useEffect(() => {
     if (searchParams?.get("baja_ok") === "1") {
       setBajaOk(true);
@@ -367,14 +310,12 @@ export default function ClientesPage() {
         (c.ciudad         ?? "").toLowerCase().includes(q);
       if (!match) return false;
     }
-    if (filtroEstado       && c.estado              !== filtroEstado) return false;
-    if (filtroOrigen       && c.origen              !== filtroOrigen) return false;
-    if (filtroTipo         && c.tipo_cliente        !== filtroTipo) return false;
-    if (filtroTipoServicio && c.tipo_servicio_cliente !== filtroTipoServicio) return false;
+    if (filtroEstado && c.estado       !== filtroEstado) return false;
+    if (filtroTipo   && c.tipo_cliente !== filtroTipo) return false;
     return true;
   });
 
-  const hayFiltros = busqueda || filtroEstado || filtroOrigen || filtroTipo || filtroTipoServicio;
+  const hayFiltros = busqueda || filtroEstado || filtroTipo;
 
   function toggleColumn(key: ClienteColumnKey) {
     const col = clienteColumns.find((c) => c.key === key);
@@ -460,37 +401,9 @@ export default function ClientesPage() {
             { value: "persona", label: "Persona" },
           ]}
         />
-        <FancySelect
-          value={filtroOrigen}
-          onChange={(v) => setFiltroOrigen(v as "" | "CRM" | "VENTA" | "MANUAL")}
-          ariaLabel="Filtrar por origen"
-          className="w-44"
-          size="sm"
-          options={[
-            { value: "", label: "Todos los orígenes" },
-            { value: "CRM", label: "CRM" },
-            { value: "VENTA", label: "Venta" },
-            { value: "MANUAL", label: "Manual" },
-          ]}
-        />
-        <FancySelect
-          value={filtroTipoServicio}
-          onChange={(v) => setFiltroTipoServicio(v)}
-          ariaLabel="Filtrar por tipo de servicio"
-          className="w-44"
-          size="sm"
-          options={[
-            { value: "", label: "Tipo servicio" },
-            ...filasTipoCatalogo.map((t) => ({ value: t.slug, label: t.nombre })),
-            ...slugsExtraFiltro.map((slug) => ({
-              value: slug,
-              label: etiquetaVisibleTipoServicio(slug, mapNombreTipo),
-            })),
-          ]}
-        />
         {hayFiltros && (
           <button
-            onClick={() => { setBusqueda(""); setFiltroEstado(""); setFiltroOrigen(""); setFiltroTipo(""); setFiltroTipoServicio(""); }}
+            onClick={() => { setBusqueda(""); setFiltroEstado(""); setFiltroTipo(""); }}
             className="text-xs text-gray-500 hover:text-gray-900 border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors"
           >
             Limpiar

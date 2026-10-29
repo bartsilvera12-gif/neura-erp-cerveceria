@@ -10,11 +10,8 @@ import {
   errorTelefono,
   primerError,
 } from "@/lib/validacion/documentos";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  addNotaCliente,
-  deleteNotaCliente,
-  updateNotaCliente,
   clienteNombre,
   getCliente,
   toggleEstado,
@@ -36,14 +33,13 @@ import {
   type EliminarClientePreview,
 } from "@/lib/api/client";
 import { getFacturas, getSuscripciones } from "@/lib/facturacion/storage";
-import { getMarketingTasks, createMarketingTask, updateTaskStatus } from "@/lib/marketing/storage";
 import { getUsuariosActivosEmpresa, type UsuarioEmpresa } from "@/lib/usuarios/empresa";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { SifenEstadoBadge } from "@/components/sifen/SifenEstadoBadge";
 import { useFacturaSifenEstados } from "@/hooks/useFacturaSifenEstados";
 import MontoInput from "@/components/ui/MontoInput";
 import { getPlanes } from "@/lib/planes/storage";
-import type { Cliente, NotaCliente } from "@/lib/clientes/types";
+import type { Cliente } from "@/lib/clientes/types";
 import {
   etiquetaVisibleTipoServicio,
   type ClienteTipoServicioRow,
@@ -57,8 +53,6 @@ import {
 } from "@/lib/gestion-clientes/estado-factura-ui";
 import type { Suscripcion } from "@/lib/facturacion/types";
 import type { Plan } from "@/lib/planes/types";
-import type { MarketingTask } from "@/lib/marketing/types";
-import { TIPOS_CONTENIDO, ESTADOS_TASK } from "@/lib/marketing/types";
 import {
   ClientePerfilTributarioForm,
   buildPerfilTributarioPutBody,
@@ -70,7 +64,7 @@ import {
 import { ClienteDatosSifenReceptorForm } from "@/components/clientes/ClienteDatosSifenReceptorForm";
 import { NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
 
-import { AlertTriangle, Clock, FolderOpen } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 
 /** Instancia monocliente Reserva: formulario/detalle de clientes simplificado (sin campos SaaS/Neura). */
 const SIMPLE_CLIENTE = NEURA_CLIENT_SCHEMA === "cerveceriaerp";
@@ -90,16 +84,17 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 // ── Tipos de pestaña ──────────────────────────────────────────────────────────
 
-type TabId = "informacion" | "estado_cuenta" | "suscripciones" | "marketing" | "proyectos" | "actividad" | "notas";
+type TabId = "informacion" | "estado_cuenta";
 
+/**
+ * La ficha del cliente quedó en lo que la cervecería usa de verdad: sus datos
+ * y su estado de cuenta. Suscripciones, Proyectos, Actividad y Notas eran de
+ * la plantilla original (una agencia con clientes por abono) y acá no tenían
+ * contenido ni quién los cargara.
+ */
 const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean }[] = [
   { id: "informacion",   label: "Información"      },
   { id: "estado_cuenta", label: "Estado de cuenta" },
-  { id: "suscripciones", label: "Suscripciones"    },
-  { id: "marketing",     label: "Marketing",        showWhen: (c) => c.tipo_servicio_cliente === "marketing" },
-  { id: "proyectos",     label: "Proyectos"         },
-  { id: "actividad",     label: "Actividad"         },
-  { id: "notas",         label: "Notas"             },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -111,25 +106,7 @@ function formatFecha(iso: string) {
   } catch { return ""; }
 }
 
-function formatFechaHora(iso: string) {
-  try {
-    const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  } catch { return ""; }
-}
-
 // ── Placeholder para pestañas futuras ─────────────────────────────────────────
-
-function PlaceholderTab({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <span className="mb-4 inline-flex text-slate-300" aria-hidden>{icon}</span>
-      <h3 className="text-base font-semibold text-gray-600 mb-2">{title}</h3>
-      <p className="text-sm text-gray-400 max-w-xs">{desc}</p>
-      <span className="mt-5 text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full">Próximamente</span>
-    </div>
-  );
-}
 
 function ClienteFichaSkeleton() {
   const bar = "animate-pulse rounded-md bg-slate-200/90";
@@ -254,29 +231,11 @@ export default function ClienteDetailPage() {
   const [formTributario, setFormTributario] = useState<TributarioFormState>(() => emptyTributarioForm());
   const [tributBlockOpen, setTributBlockOpen] = useState(false);
 
-  // Estados de notas
-  const [nuevaNota,     setNuevaNota]     = useState("");
-  const [guardandoNota, setGuardandoNota] = useState(false);
-  // Nota en edición: id + texto en curso. `null` = ninguna.
-  const [notaEditando,  setNotaEditando]  = useState<{ id: number; texto: string } | null>(null);
-  const [errorNota,     setErrorNota]     = useState<string | null>(null);
-  const notaRef = useRef<HTMLTextAreaElement>(null);
-
   // Suscripciones
   const [suscripciones, setSuscripciones] = useState<Suscripcion[]>([]);
   const [planes, setPlanes] = useState<Plan[]>([]);
-  const [modalSuscripcion, setModalSuscripcion] = useState(false);
-  const [formSusc, setFormSusc] = useState({
-    plan_id: "", precio: "", fecha_inicio: "", duracion_meses: "12", dia_facturacion: "1", dia_vencimiento: "10", generar_factura_este_mes: false,
-  });
-  const [guardandoSusc, setGuardandoSusc] = useState(false);
-  const [marketingTasks, setMarketingTasks] = useState<MarketingTask[]>([]);
   const [usuariosEmpresa, setUsuariosEmpresa] = useState<UsuarioEmpresa[]>([]);
   const [usuariosEmpresaError, setUsuariosEmpresaError] = useState<string | null>(null);
-  const [modalNuevaTarea, setModalNuevaTarea] = useState(false);
-  const [formTarea, setFormTarea] = useState({ titulo: "", descripcion: "", tipo_contenido: "post" as const, fecha_entrega: "", responsable_user_id: "", prioridad: "" as "" | "baja" | "media" | "alta" | "urgente" });
-  const [guardandoTarea, setGuardandoTarea] = useState(false);
-  const [errorTarea, setErrorTarea] = useState<string | null>(null);
 
   // Estado de cuenta
   const [facturas, setFacturas] = useState<Factura[]>([]);
@@ -510,13 +469,8 @@ export default function ClienteDetailPage() {
 
   useEffect(() => {
     if (!id.trim()) return;
-    if (activeTab === "marketing") {
-      getMarketingTasks(id).then(setMarketingTasks);
-    }
-    if (activeTab === "estado_cuenta" || activeTab === "suscripciones") {
+    if (activeTab === "estado_cuenta") {
       getFacturas(id).then(setFacturas);
-      getSuscripciones(id).then(setSuscripciones);
-      getPlanes().then(setPlanes);
     }
   }, [id, activeTab]);
 
@@ -846,88 +800,6 @@ export default function ClienteDetailPage() {
     router.push("/clientes");
   }
 
-  async function handleAgregarNota(e: React.FormEvent) {
-    e.preventDefault();
-    if (!nuevaNota.trim()) return;
-    setGuardandoNota(true);
-    setErrorNota(null);
-    try {
-      await addNotaCliente(id, nuevaNota);
-      setNuevaNota("");
-      await cargar();
-      setTimeout(() => notaRef.current?.focus(), 0);
-    } catch (err) {
-      setErrorNota(err instanceof Error ? err.message : "No se pudo guardar la nota.");
-    } finally {
-      setGuardandoNota(false);
-    }
-  }
-
-  async function handleGuardarEdicionNota() {
-    if (!notaEditando || guardandoNota) return;
-    setGuardandoNota(true);
-    setErrorNota(null);
-    try {
-      await updateNotaCliente(id, notaEditando.id, notaEditando.texto);
-      setNotaEditando(null);
-      await cargar();
-    } catch (err) {
-      setErrorNota(err instanceof Error ? err.message : "No se pudo editar la nota.");
-    } finally {
-      setGuardandoNota(false);
-    }
-  }
-
-  async function handleEliminarNota(notaId: number) {
-    if (guardandoNota) return;
-    if (!confirm("¿Eliminar esta nota? No se puede recuperar.")) return;
-    setGuardandoNota(true);
-    setErrorNota(null);
-    try {
-      await deleteNotaCliente(id, notaId);
-      if (notaEditando?.id === notaId) setNotaEditando(null);
-      await cargar();
-    } catch (err) {
-      setErrorNota(err instanceof Error ? err.message : "No se pudo eliminar la nota.");
-    } finally {
-      setGuardandoNota(false);
-    }
-  }
-
-  async function handleGuardarTarea(e: React.FormEvent) {
-    e.preventDefault();
-    setErrorTarea(null);
-    if (!formTarea.titulo.trim()) return setErrorTarea("El título es obligatorio.");
-    if (!formTarea.fecha_entrega) return setErrorTarea("La fecha de entrega es obligatoria.");
-    setGuardandoTarea(true);
-    const tarea = await createMarketingTask({
-      cliente_id: id,
-      titulo: formTarea.titulo.trim(),
-      descripcion: formTarea.descripcion.trim() || undefined,
-      tipo_contenido: formTarea.tipo_contenido,
-      fecha_entrega: formTarea.fecha_entrega,
-      responsable_user_id: formTarea.responsable_user_id || undefined,
-      prioridad: formTarea.prioridad ? (formTarea.prioridad as "baja" | "media" | "alta" | "urgente") : undefined,
-    });
-    setGuardandoTarea(false);
-    if (tarea) {
-      setMarketingTasks((prev) => [...prev, tarea].sort((a, b) => a.fecha_entrega.localeCompare(b.fecha_entrega)));
-      setFormTarea({ titulo: "", descripcion: "", tipo_contenido: "post", fecha_entrega: "", responsable_user_id: "", prioridad: "" });
-      setModalNuevaTarea(false);
-    } else {
-      setErrorTarea("No se pudo crear la tarea.");
-    }
-  }
-
-  async function handleCambiarEstadoTask(taskId: string, nuevoEstado: MarketingTask["estado"]) {
-    const actualizada = await updateTaskStatus(taskId, nuevoEstado);
-    if (actualizada) {
-      setMarketingTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? actualizada : t))
-      );
-    }
-  }
-
   function abrirRegistrarPago() {
     setActiveTab("estado_cuenta");
     const conSaldo = facturas.filter((f) => f.saldo > 0);
@@ -1123,27 +995,6 @@ export default function ClienteDetailPage() {
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setFormSusc({
-                  plan_id: "",
-                  precio: "",
-                  fecha_inicio: new Date().toISOString().slice(0, 10),
-                  duracion_meses: "12",
-                  dia_facturacion: "1",
-                  dia_vencimiento: "10",
-                  generar_factura_este_mes: false,
-                });
-                setModalSuscripcion(true);
-              }}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-3.5 py-2 rounded-lg shadow-sm shadow-[#4FAEB2]/25 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4" aria-hidden>
-                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-              </svg>
-              Nueva suscripción
-            </button>
             <button
               type="button"
               onClick={() => {
@@ -1498,14 +1349,9 @@ export default function ClienteDetailPage() {
                 activeTab === tab.id
                   ? "border-gray-900 text-gray-900"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              } ${tab.id === "notas" && cliente.notas.length > 0 ? "relative" : ""}`}
+              }`}
             >
               {tab.label}
-              {tab.id === "notas" && cliente.notas.length > 0 && (
-                <span className="ml-1.5 text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">
-                  {cliente.notas.length}
-                </span>
-              )}
             </button>
           ))}
         </div>
@@ -2238,250 +2084,6 @@ export default function ClienteDetailPage() {
             </div>
           )}
 
-          {/* ── SUSCRIPCIONES ────────────────────────────────────────────── */}
-          {activeTab === "suscripciones" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <SectionTitle>Suscripciones</SectionTitle>
-                <button
-                  type="button"
-                  onClick={() => { setFormSusc({ plan_id: "", precio: "", fecha_inicio: new Date().toISOString().slice(0, 10), duracion_meses: "12", dia_facturacion: "1", dia_vencimiento: "10", generar_factura_este_mes: false }); setModalSuscripcion(true); }}
-                  className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-4 py-2 rounded-lg text-sm font-medium"
-                >
-                  Nueva suscripción
-                </button>
-              </div>
-              {suscripciones.length === 0 ? (
-                <p className="text-sm text-gray-400 py-8 text-center">No hay suscripciones.</p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        {["Plan", "Precio", "Moneda", "Inicio", "Meses", "Día fact.", "Día venc.", "Estado"].map((h) => (
-                          <th key={h} className="text-left text-xs font-semibold text-slate-600 px-4 py-3">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {suscripciones.map((s) => (
-                        <tr key={s.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-medium text-slate-800">
-                            {planes.find((p) => p.id === s.plan_id)?.nombre ?? s.plan_nombre ?? "—"}
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">{s.precio.toLocaleString("es-PY")}</td>
-                          <td className="px-4 py-3 text-slate-600">{s.moneda}</td>
-                          <td className="px-4 py-3 text-slate-600">{formatFecha(s.fecha_inicio)}</td>
-                          <td className="px-4 py-3 text-slate-600">{s.duracion_meses}</td>
-                          <td className="px-4 py-3 text-slate-600">{s.dia_facturacion}</td>
-                          <td className="px-4 py-3 text-slate-600">{s.dia_vencimiento}</td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              s.estado === "activa" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
-                            }`}>{s.estado}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── MARKETING ───────────────────────────────────────────────── */}
-          {activeTab === "marketing" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <SectionTitle>Tareas de marketing</SectionTitle>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormTarea({ titulo: "", descripcion: "", tipo_contenido: "post", fecha_entrega: new Date().toISOString().slice(0, 10), responsable_user_id: "", prioridad: "" });
-                    setErrorTarea(null);
-                    setModalNuevaTarea(true);
-                  }}
-                  className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-4 py-2 rounded-lg text-sm font-medium"
-                >
-                  Nueva tarea
-                </button>
-              </div>
-              {marketingTasks.length === 0 ? (
-                <p className="text-sm text-gray-400 py-8 text-center">No hay tareas de marketing.</p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        {["Título", "Tipo", "Estado", "Fecha entrega", "Responsable", "Origen"].map((h) => (
-                          <th key={h} className="text-left text-xs font-semibold text-slate-600 px-4 py-3">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {marketingTasks.map((t) => {
-                        const hoy = new Date().toISOString().slice(0, 10);
-                        const atrasada = t.fecha_entrega < hoy && !["publicado", "aprobado"].includes(t.estado);
-                        return (
-                          <tr key={t.id} className={`hover:bg-slate-50 ${atrasada ? "bg-red-50/50" : ""}`}>
-                            <td className="px-4 py-3 font-medium text-slate-800">
-                              {t.titulo}
-                              {atrasada && <span className="ml-1.5 text-xs text-red-600 font-medium">(atrasada)</span>}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600 capitalize">{t.tipo_contenido}</td>
-                            <td className="px-4 py-3">
-                              <select
-                                value={t.estado}
-                                onChange={(e) => handleCambiarEstadoTask(t.id, e.target.value as MarketingTask["estado"])}
-                                className="text-xs border border-slate-200 rounded px-2 py-1 bg-white"
-                              >
-                                {ESTADOS_TASK.map((est) => (
-                                  <option key={est} value={est}>{est.replace("_", " ")}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="px-4 py-3 text-slate-600">{formatFecha(t.fecha_entrega)}</td>
-                            <td className="px-4 py-3 text-slate-600">
-                              {t.responsable_user_id
-                                ? usuariosEmpresa.find((u) => u.id === t.responsable_user_id)?.nombre ?? "—"
-                                : "—"}
-                            </td>
-                            <td className="px-4 py-3 text-xs text-slate-500">
-                              {t.generada_automaticamente ? "Plan" : "Manual"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── PROYECTOS ────────────────────────────────────────────────── */}
-          {activeTab === "proyectos" && (
-            <PlaceholderTab
-              icon={<FolderOpen className="h-12 w-12" />}
-              title="Proyectos"
-              desc="Proyectos en curso y finalizados asociados a este cliente, con etapas y responsables."
-            />
-          )}
-
-          {/* ── ACTIVIDAD ────────────────────────────────────────────────── */}
-          {activeTab === "actividad" && (
-            <PlaceholderTab
-              icon={<Clock className="h-12 w-12" />}
-              title="Actividad"
-              desc="Timeline completo de interacciones, cambios de estado, ventas y eventos del cliente."
-            />
-          )}
-
-          {/* ── NOTAS ───────────────────────────────────────────────────── */}
-          {activeTab === "notas" && (
-            <div className="max-w-2xl space-y-6">
-              <form onSubmit={handleAgregarNota}>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nueva nota</label>
-                <textarea
-                  ref={notaRef}
-                  value={nuevaNota}
-                  onChange={(e) => setNuevaNota(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                      e.preventDefault();
-                      handleAgregarNota(e as unknown as React.FormEvent);
-                    }
-                  }}
-                  rows={3}
-                  placeholder="Escribí una nota interna (Ctrl+Enter para guardar)..."
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none bg-white text-sm resize-none mb-3"
-                />
-<button
-                type="submit"
-                disabled={!nuevaNota.trim() || guardandoNota}
-                className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
-              >
-                  Agregar nota
-                </button>
-              </form>
-
-              {errorNota && (
-                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {errorNota}
-                </p>
-              )}
-
-              {cliente.notas.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">No hay notas registradas aún.</p>
-              ) : (
-                <div className="space-y-3">
-                  {[...cliente.notas].reverse().map((nota: NotaCliente) => {
-                    const editando = notaEditando?.id === Number(nota.id);
-                    return (
-                      <div
-                        key={nota.id}
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition-colors hover:border-slate-300"
-                      >
-                        {editando ? (
-                          <>
-                            <textarea
-                              value={notaEditando.texto}
-                              onChange={(e) => setNotaEditando({ id: notaEditando.id, texto: e.target.value })}
-                              rows={3}
-                              className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0EA5E9]"
-                              autoFocus
-                            />
-                            <div className="mt-2 flex justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => { setNotaEditando(null); setErrorNota(null); }}
-                                className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700"
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleGuardarEdicionNota}
-                                disabled={!notaEditando.texto.trim() || guardandoNota}
-                                className="rounded-lg bg-[#0EA5E9] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#0284C7] disabled:opacity-40"
-                              >
-                                {guardandoNota ? "Guardando…" : "Guardar"}
-                              </button>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-sm whitespace-pre-wrap text-slate-700">{nota.texto}</p>
-                            <div className="mt-2 flex items-center justify-between gap-3">
-                              <p className="text-xs text-slate-400">{formatFechaHora(nota.fecha)}</p>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => { setNotaEditando({ id: Number(nota.id), texto: nota.texto }); setErrorNota(null); }}
-                                  className="rounded-lg px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                                >
-                                  Editar
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleEliminarNota(Number(nota.id))}
-                                  disabled={guardandoNota}
-                                  className="rounded-lg px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                                >
-                                  Eliminar
-                                </button>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
         </div>
         </div>
       </div>
@@ -2565,164 +2167,6 @@ export default function ClienteDetailPage() {
                   className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40"
                 >
                   {guardandoFacturaContado ? "Guardando…" : "Emitir factura"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Nueva suscripción */}
-      {modalSuscripcion && cliente && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalSuscripcion(false)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Nueva suscripción</h3>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              setGuardandoSusc(true);
-              const plan = planes.find((p) => p.id === formSusc.plan_id);
-              await apiCreateSuscripcion({
-                cliente_id: id,
-                plan_id: formSusc.plan_id || null,
-                precio: parseFloat(formSusc.precio) || (plan?.precio ?? 0),
-                moneda: cliente.moneda_preferida ?? "GS",
-                fecha_inicio: formSusc.fecha_inicio || new Date().toISOString().slice(0, 10),
-                duracion_meses: parseInt(formSusc.duracion_meses, 10) || 12,
-                dia_facturacion: parseInt(formSusc.dia_facturacion, 10) || 1,
-                dia_vencimiento: parseInt(formSusc.dia_vencimiento, 10) || 10,
-                generar_factura_este_mes: formSusc.generar_factura_este_mes,
-              });
-              setModalSuscripcion(false);
-              getSuscripciones(id).then(setSuscripciones);
-              getFacturas(id).then(setFacturas);
-              setGuardandoSusc(false);
-            }} className="space-y-4">
-              <div>
-                <label className={labelClass}>Plan</label>
-                <select
-                  value={formSusc.plan_id}
-                  onChange={(e) => {
-                    const p = planes.find((x) => x.id === e.target.value);
-                    setFormSusc((prev) => ({ ...prev, plan_id: e.target.value, precio: p ? String(p.precio) : prev.precio }));
-                  }}
-                  className={inputClass}
-                >
-                  <option value="">— Seleccionar —</option>
-                  {planes.filter((p) => p.estado === "activo").map((p) => (
-                    <option key={p.id} value={p.id}>{p.nombre} — Gs. {p.precio.toLocaleString("es-PY")}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Precio</label>
-                <MontoInput value={formSusc.precio} onChange={(n) => setFormSusc((p) => ({ ...p, precio: String(n) }))} className={inputClass} required />
-              </div>
-              <div>
-                <label className={labelClass}>Fecha inicio</label>
-                <input type="date" value={formSusc.fecha_inicio} onChange={(e) => setFormSusc((p) => ({ ...p, fecha_inicio: e.target.value }))} className={inputClass} required />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass}>Duración (meses)</label>
-                  <input type="number" value={formSusc.duracion_meses} onChange={(e) => setFormSusc((p) => ({ ...p, duracion_meses: e.target.value }))} className={inputClass} min={1} />
-                </div>
-                <div>
-                  <label className={labelClass}>Día facturación</label>
-                  <input type="number" value={formSusc.dia_facturacion} onChange={(e) => setFormSusc((p) => ({ ...p, dia_facturacion: e.target.value }))} className={inputClass} min={1} max={28} />
-                </div>
-              </div>
-              <div>
-                <label className={labelClass}>Día vencimiento</label>
-                <input type="number" value={formSusc.dia_vencimiento} onChange={(e) => setFormSusc((p) => ({ ...p, dia_vencimiento: e.target.value }))} className={inputClass} min={1} max={31} />
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="gen_fact" checked={formSusc.generar_factura_este_mes} onChange={(e) => setFormSusc((p) => ({ ...p, generar_factura_este_mes: e.target.checked }))} />
-                <label htmlFor="gen_fact" className="text-sm text-slate-600">Emitir factura este mes</label>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={guardandoSusc} className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                  Guardar
-                </button>
-                <button type="button" onClick={() => setModalSuscripcion(false)} className="border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50">
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Nueva tarea marketing */}
-      {modalNuevaTarea && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalNuevaTarea(false)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Nueva tarea de marketing</h3>
-            <form onSubmit={handleGuardarTarea} className="space-y-4">
-              <div>
-                <label className={labelClass}>Título *</label>
-                <input
-                  type="text"
-                  value={formTarea.titulo}
-                  onChange={(e) => setFormTarea((p) => ({ ...p, titulo: e.target.value }))}
-                  className={inputClass}
-                  placeholder="Ej: Post campaña navidad"
-                  required
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Tipo de contenido</label>
-                <select
-                  value={formTarea.tipo_contenido}
-                  onChange={(e) => setFormTarea((p) => ({ ...p, tipo_contenido: e.target.value as typeof formTarea.tipo_contenido }))}
-                  className={inputClass}
-                >
-                  {TIPOS_CONTENIDO.map((tc) => (
-                    <option key={tc} value={tc}>{tc.charAt(0).toUpperCase() + tc.slice(1)}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Fecha de entrega *</label>
-                <input
-                  type="date"
-                  value={formTarea.fecha_entrega}
-                  onChange={(e) => setFormTarea((p) => ({ ...p, fecha_entrega: e.target.value }))}
-                  className={inputClass}
-                  required
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Responsable</label>
-                <select
-                  value={formTarea.responsable_user_id}
-                  onChange={(e) => setFormTarea((p) => ({ ...p, responsable_user_id: e.target.value }))}
-                  className={inputClass}
-                >
-                  <option value="">— Sin asignar —</option>
-                  {usuariosEmpresa.map((u) => (
-                    <option key={u.id} value={u.id}>{u.nombre ?? u.email}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Descripción</label>
-                <textarea
-                  value={formTarea.descripcion}
-                  onChange={(e) => setFormTarea((p) => ({ ...p, descripcion: e.target.value }))}
-                  className={inputClass}
-                  rows={3}
-                  placeholder="Detalles opcionales..."
-                />
-              </div>
-              {errorTarea && (
-                <p className="text-sm text-red-600">{errorTarea}</p>
-              )}
-              <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={guardandoTarea} className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                  Guardar
-                </button>
-                <button type="button" onClick={() => setModalNuevaTarea(false)} className="border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50">
-                  Cancelar
                 </button>
               </div>
             </form>

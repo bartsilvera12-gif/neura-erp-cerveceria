@@ -10,6 +10,7 @@ import { productoExiste, saveProducto } from "@/lib/inventario/storage";
 import type { MetodoValuacion, TipoIvaProducto } from "@/lib/inventario/types";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
 
+import CrearRapidoModal, { type CrearRapidoTipo } from "@/components/inventario/CrearRapidoModal";
 // Opciones estándar de unidad de medida para gastro
 const UNIDADES_OPCIONES = [
   "UNIDAD","KG","G","LT","ML","CAJA","BOLSA","PAQUETE","DOCENA","LATA","BOTELLA","PORCION","COMBO",
@@ -98,6 +99,11 @@ export default function NuevoProductoPage() {
   const [categorias, setCategorias] = useState<CatRow[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbiRow[]>([]);
   const [proveedores, setProveedores] = useState<ProvRow[]>([]);
+  /**
+   * Alta rápida de categoría o proveedor. El "+ Crear" era un link a otra
+   * pantalla: el operador perdía el producto a medio cargar.
+   */
+  const [crearRapido, setCrearRapido] = useState<CrearRapidoTipo | null>(null);
 
   useEffect(() => {
     let cancel = false;
@@ -830,12 +836,13 @@ export default function NuevoProductoPage() {
                   <span className="text-xs text-gray-400 truncate">
                     {categorias.length === 0 ? "Todavía no cargaste categorías." : `${categorias.length} disponibles`}
                   </span>
-                  <Link
-                    href="/inventario/categorias"
+                  <button
+                    type="button"
+                    onClick={() => setCrearRapido("categoria")}
                     className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 border border-sky-200 hover:bg-sky-50 px-2.5 py-1 rounded-md transition-colors"
                   >
                     + Crear
-                  </Link>
+                  </button>
                 </div>
               </div>
 
@@ -852,12 +859,13 @@ export default function NuevoProductoPage() {
                   <span className="text-xs text-gray-400 truncate">
                     {proveedores.length === 0 ? "Todavía no cargaste proveedores." : `${proveedores.length} disponibles`}
                   </span>
-                  <Link
-                    href="/proveedores/nuevo"
+                  <button
+                    type="button"
+                    onClick={() => setCrearRapido("proveedor")}
                     className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 border border-sky-200 hover:bg-sky-50 px-2.5 py-1 rounded-md transition-colors"
                   >
                     + Crear
-                  </Link>
+                  </button>
                 </div>
               </div>
 
@@ -1092,6 +1100,23 @@ export default function NuevoProductoPage() {
 
         </form>
       </div>
+
+      <CrearRapidoModal
+        tipo={crearRapido ?? "categoria"}
+        open={crearRapido !== null}
+        onClose={() => setCrearRapido(null)}
+        onCreado={(creado) => {
+          // Se agrega a la lista local y queda elegido: así el operador sigue
+          // con el producto sin recargar ni volver a buscar lo que creó.
+          if (crearRapido === "categoria") {
+            setCategorias((prev) => [...prev, { id: creado.id, nombre: creado.nombre } as CatRow]);
+            setCategoriaId(creado.id);
+          } else {
+            setProveedores((prev) => [...prev, { id: creado.id, nombre: creado.nombre } as ProvRow]);
+            setProveedorId(creado.id);
+          }
+        }}
+      />
 
     </div>
   );

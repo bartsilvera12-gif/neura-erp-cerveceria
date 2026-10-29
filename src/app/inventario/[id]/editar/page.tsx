@@ -12,6 +12,7 @@ import ProveedoresCostos from "@/components/inventario/ProveedoresCostos";
 import { MargenPorCanal } from "@/components/inventario/MargenPorCanal";
 import { AlertTriangle, Boxes, ClipboardList, ShoppingBag, type LucideIcon } from "lucide-react";
 
+import CrearRapidoModal, { type CrearRapidoTipo } from "@/components/inventario/CrearRapidoModal";
 // Opciones estándar de unidad de medida (UX simplificada gastro)
 const UNIDADES_OPCIONES = [
   "UNIDAD","KG","G","LT","ML","CAJA","BOLSA","PAQUETE","DOCENA","LATA","BOTELLA","PORCION","COMBO",
@@ -70,6 +71,8 @@ export default function EditarProductoPage() {
   const [categorias, setCategorias] = useState<CatRow[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbiRow[]>([]);
   const [proveedores, setProveedores] = useState<ProvRow[]>([]);
+  /** Alta rápida de categoría o proveedor, sin perder el producto en edición. */
+  const [crearRapido, setCrearRapido] = useState<CrearRapidoTipo | null>(null);
 
   // Clasificación gastronómica
   const [esVendible, setEsVendible] = useState(true);
@@ -661,12 +664,13 @@ export default function EditarProductoPage() {
                   <span className="text-xs text-gray-400 truncate">
                     {categorias.length === 0 ? "Todavía no cargaste categorías." : `${categorias.length} disponibles`}
                   </span>
-                  <Link
-                    href="/inventario/categorias"
+                  <button
+                    type="button"
+                    onClick={() => setCrearRapido("categoria")}
                     className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 border border-sky-200 hover:bg-sky-50 px-2.5 py-1 rounded-md transition-colors"
                   >
                     + Crear
-                  </Link>
+                  </button>
                 </div>
               </div>
               <div className={`md:col-span-4 min-w-0 ${tipoGastro === "menu" ? "hidden" : ""}`}>
@@ -681,12 +685,13 @@ export default function EditarProductoPage() {
                   <span className="text-xs text-gray-400 truncate">
                     {proveedores.length === 0 ? "Todavía no cargaste proveedores." : `${proveedores.length} disponibles`}
                   </span>
-                  <Link
-                    href="/proveedores/nuevo"
+                  <button
+                    type="button"
+                    onClick={() => setCrearRapido("proveedor")}
                     className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 border border-sky-200 hover:bg-sky-50 px-2.5 py-1 rounded-md transition-colors"
                   >
                     + Crear
-                  </Link>
+                  </button>
                 </div>
               </div>
               {/* Ubicación principal — oculta en instancia En lo de Mari (no aplica para gastronomía). */}
@@ -983,6 +988,21 @@ export default function EditarProductoPage() {
       </div>
 
       {id && <ProveedoresCostos productoId={id} />}
+
+      <CrearRapidoModal
+        tipo={crearRapido ?? "categoria"}
+        open={crearRapido !== null}
+        onClose={() => setCrearRapido(null)}
+        onCreado={(creado) => {
+          if (crearRapido === "categoria") {
+            setCategorias((prev) => [...prev, { id: creado.id, nombre: creado.nombre }]);
+            setCategoriaId(creado.id);
+          } else {
+            setProveedores((prev) => [...prev, { id: creado.id, nombre: creado.nombre }]);
+            setProveedorId(creado.id);
+          }
+        }}
+      />
     </div>
   );
 }
