@@ -257,19 +257,50 @@ $compras$;
 -- ---------------------------------------------------------------------------
 -- Costo de cada insumo: el de su ULTIMA compra, igual que hace la pantalla
 -- ---------------------------------------------------------------------------
--- Se escribe aparte y no dentro del bucle para que el resultado no dependa del
--- orden en que se recorrieron las compras.
+-- El costo va ESCRITO, no deducido de las filas recien insertadas.
+--
+-- Antes esto era un DISTINCT ON sobre los movimientos ordenado por
+-- `fecha DESC, id DESC`. El problema: varios insumos se compraron el MISMO DIA
+-- en dos presentaciones a distinto precio por gramo (Magnum en pack de 200 g a
+-- 505 y de 50 g a 540; lo mismo Centennial y Cascade). Con la misma fecha el
+-- desempate caia en el `id`, que es un uuid aleatorio, asi que cual de los dos
+-- precios quedaba cambiaba en cada corrida. Dos bases con los mismos datos
+-- costeaban distinto.
+--
+-- Ahora el criterio esta fijado donde se puede leer y discutir: gana la ULTIMA
+-- linea de la ULTIMA compra de ese insumo, en el orden en que estan en la
+-- planilla. Si alguna vez conviene otro criterio (por ejemplo promediar las
+-- compras del mismo dia), se cambia aca y se ve en el diff.
 UPDATE cerveceriaerp.productos p
    SET costo_promedio = u.costo, updated_at = now()
-  FROM (
-    SELECT DISTINCT ON (producto_id) producto_id, costo_unitario AS costo
-      FROM cerveceriaerp.movimientos_inventario
-     WHERE empresa_id = '0cbefe95-4007-402c-97de-70147f9d39bb'
-       AND tipo = 'ENTRADA' AND origen = 'compra'
-     ORDER BY producto_id, fecha DESC, id DESC
-  ) u
- WHERE p.id = u.producto_id
-   AND p.empresa_id = '0cbefe95-4007-402c-97de-70147f9d39bb'
+  FROM (VALUES
+    ('CL-IRISH', 500.0::numeric),
+    ('CL-WHIRLFLOC', 4000.0::numeric),
+    ('ES-CEDRON', 400.0::numeric),
+    ('ES-NARANJA', 200.0::numeric),
+    ('LU-AMARILLO', 608.0::numeric),
+    ('LU-CASCADE', 538.0::numeric),
+    ('LU-CENTENNIAL', 538.0::numeric),
+    ('LU-CITRACRYO', 445.0::numeric),
+    ('LU-EKG', 1000.0::numeric),
+    ('LU-HALLER', 484.0::numeric),
+    ('LU-MAGNUM', 540.0::numeric),
+    ('LV-NEWE', 63545.454545::numeric),
+    ('LV-US05', 1422.0::numeric),
+    ('MP-CARA30', 11000.0::numeric),
+    ('MP-CARACLAIR', 22300.0::numeric),
+    ('MP-CARAMEL20', 20000.0::numeric),
+    ('MP-CARAMEL60', 20000.0::numeric),
+    ('MP-CARAPILS', 16000.0::numeric),
+    ('MP-MELANOID', 11000.0::numeric),
+    ('MP-MUNICH', 16000.0::numeric),
+    ('MP-PALEALE', 14000.0::numeric),
+    ('MP-PILSEN', 8600.0::numeric),
+    ('MP-VIENNA', 11000.0::numeric)
+  ) AS u(sku, costo)
+ WHERE p.empresa_id = '0cbefe95-4007-402c-97de-70147f9d39bb'
+   AND p.sucursal_id = '37907a1a-5283-4b65-ae4e-4254924a1a82'
+   AND p.sku = u.sku
    AND p.costo_promedio IS DISTINCT FROM u.costo;
 
 COMMIT;

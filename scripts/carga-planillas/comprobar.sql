@@ -75,3 +75,10 @@ SELECT r.nombre,
        round((cerveceriaerp.fn_receta_costeo(r.id)->>'costo_total')::numeric)    AS costo_lote,
        round((cerveceriaerp.fn_receta_costeo(r.id)->>'costo_unitario')::numeric) AS por_litro
   FROM cerveceriaerp.recetas r WHERE r.activa ORDER BY r.nombre;
+
+\echo '>> el costo no puede depender del azar: tiene que dar esto siempre'
+SELECT sku, round(costo_promedio, 2) AS costo
+  FROM cerveceriaerp.productos
+ WHERE es_insumo AND sku IN ('LU-MAGNUM','LU-CENTENNIAL','LU-CASCADE','LV-NEWE')
+ ORDER BY sku;
+-- Esperado: LU-CASCADE 538 · LU-CENTENNIAL 538 · LU-MAGNUM 540 · LV-NEWE 63545.45

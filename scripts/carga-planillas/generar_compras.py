@@ -260,19 +260,28 @@ $compras$;
 -- ---------------------------------------------------------------------------
 -- Costo de cada insumo: el de su ULTIMA compra, igual que hace la pantalla
 -- ---------------------------------------------------------------------------
--- Se escribe aparte y no dentro del bucle para que el resultado no dependa del
--- orden en que se recorrieron las compras.
+-- El costo va ESCRITO, no deducido de las filas recien insertadas.
+--
+-- Antes esto era un DISTINCT ON sobre los movimientos ordenado por
+-- `fecha DESC, id DESC`. El problema: varios insumos se compraron el MISMO DIA
+-- en dos presentaciones a distinto precio por gramo (Magnum en pack de 200 g a
+-- 505 y de 50 g a 540; lo mismo Centennial y Cascade). Con la misma fecha el
+-- desempate caia en el `id`, que es un uuid aleatorio, asi que cual de los dos
+-- precios quedaba cambiaba en cada corrida. Dos bases con los mismos datos
+-- costeaban distinto.
+--
+-- Ahora el criterio esta fijado donde se puede leer y discutir: gana la ULTIMA
+-- linea de la ULTIMA compra de ese insumo, en el orden en que estan en la
+-- planilla. Si alguna vez conviene otro criterio (por ejemplo promediar las
+-- compras del mismo dia), se cambia aca y se ve en el diff.
 UPDATE cerveceriaerp.productos p
    SET costo_promedio = u.costo, updated_at = now()
-  FROM (
-    SELECT DISTINCT ON (producto_id) producto_id, costo_unitario AS costo
-      FROM cerveceriaerp.movimientos_inventario
-     WHERE empresa_id = '""" + EMPRESA + """'
-       AND tipo = 'ENTRADA' AND origen = 'compra'
-     ORDER BY producto_id, fecha DESC, id DESC
-  ) u
- WHERE p.id = u.producto_id
-   AND p.empresa_id = '""" + EMPRESA + """'
+  FROM (VALUES
+%COSTOS%
+  ) AS u(sku, costo)
+ WHERE p.empresa_id = '""" + EMPRESA + """'
+   AND p.sucursal_id = '""" + SUCURSAL + """'
+   AND p.sku = u.sku
    AND p.costo_promedio IS DISTINCT FROM u.costo;
 
 COMMIT;
@@ -315,8 +324,11 @@ SELECT r.nombre,
  ORDER BY r.nombre;""")
 
 skus = sorted({l["sku"] for c in compras for l in c["lineas"]})
+costos = ",\n".join(
+    f"    ('{sku}', {round(ultimo[sku], 6)}::numeric)" for sku in skus)
 texto = "\n".join(P)
 texto = texto.replace("%SKUS%", ", ".join(f"('{s}')" for s in skus))
+texto = texto.replace("%COSTOS%", costos)
 
 salida = pathlib.Path("supabase/cerveceria/15_compras_historicas.sql")
 salida.write_text(texto + "\n")

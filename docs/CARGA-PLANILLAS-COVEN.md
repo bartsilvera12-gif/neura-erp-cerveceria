@@ -139,7 +139,26 @@ dónde se cargó.
 Por eso una receta puede costar algo distinto que el lote que la originó: el
 lote pagó cada pack a su precio (el de 200 g sale más barato por gramo que el
 de 50 g) y la receta usa un único costo por gramo, el último. En la Session IPA
-500 L son 3.250 Gs sobre 3.143.320, o sea 0,1 %.
+500 L son 13.000 Gs sobre 3.143.320, o sea 0,41 %.
+
+**El costo queda escrito, no deducido.** La primera versión sacaba el costo de
+los movimientos recién insertados con `ORDER BY fecha DESC, id DESC`. Varios
+insumos se compraron el mismo día en dos presentaciones a distinto precio por
+gramo (Magnum en pack de 200 g a 505 y de 50 g a 540; lo mismo Centennial y
+Cascade), así que con la misma fecha el desempate caía en el `id`, que es un
+uuid aleatorio: dos bases con los mismos datos costeaban distinto. Ahora el
+script escribe una tabla explícita de sku → costo, con el criterio fijado donde
+se puede leer: gana la última línea de la última compra de ese insumo, en el
+orden de la planilla.
+
+### Las recetas "Servido:" del bar dan 0, y está bien
+
+Las tres recetas que crea el script 09 (`Servido: Chop Coven Blonde 500 ml` y
+las otras dos) consumen el producto **a granel**, no insumos. El granel no se
+compra: se produce. Su costo lo calcula el ERP cuando se fabrica un lote de
+verdad desde Producción, y recién ahí esas recetas dejan de dar 0. Los lotes
+históricos del script 12 entraron como historia cerrada justamente para no
+tocar stock, así que no le ponen costo al granel.
 
 ### Dos insumos quedan sin costo
 
@@ -153,7 +172,7 @@ las planillas los compró nunca:
 - **LV-AY4** es la levadura Fermoale AY4 que dice la receta, pero los tres
   lotes de 500 L usaron Safale US-05.
 
-Mientras sigan en 0, la receta Coven Blonde Ale 500 L costea 1.422.474 Gs
+Mientras sigan en 0, la receta Coven Blonde Ale 500 L costea 1.434.984 Gs
 cuando el lote real costó 2.244.729. Un insumo sin costo no rompe nada: deja la
 receta más barata de lo que es, que es peor, porque no se nota. La última
 consulta del script 15 los lista.
