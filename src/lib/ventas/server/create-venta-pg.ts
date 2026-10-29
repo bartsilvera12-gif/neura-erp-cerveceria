@@ -2,6 +2,7 @@ import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data
 import type { PagosDesglose } from "@/lib/ventas/types";
 import { convertirCantidad } from "@/lib/unidades/convert";
 import { asuncionYmd } from "@/lib/fecha/asuncion";
+import { resolverDestinoPedido } from "@/lib/proyectos/server/destino-pedido";
 
 /** Un faltante de stock detectado al validar la venta. */
 export interface FaltanteStock {
@@ -601,29 +602,8 @@ export async function createVentaTransaccionalPg(
 
     // 8) Pedido cocina (tarjeta en proyectos)
     if (params.pedidoCocina) {
-      const tipoQ = await sb
-        .from("proyecto_tipos")
-        .select("id")
-        .eq("empresa_id", params.empresaId)
-        .eq("codigo", "pedido")
-        .eq("activo", true)
-        .limit(1)
-        .maybeSingle();
-      if (tipoQ.error) throw new Error(tipoQ.error.message);
-      if (!tipoQ.data) throw new Error("Tipo de proyecto 'pedido' no configurado para esta empresa.");
-      const tipoId = (tipoQ.data as { id: string }).id;
-
-      const estadoQ = await sb
-        .from("proyecto_estados")
-        .select("id")
-        .eq("empresa_id", params.empresaId)
-        .eq("codigo", "nuevo")
-        .eq("activo", true)
-        .limit(1)
-        .maybeSingle();
-      if (estadoQ.error) throw new Error(estadoQ.error.message);
-      if (!estadoQ.data) throw new Error("Estado 'nuevo' no configurado para esta empresa.");
-      const estadoId = (estadoQ.data as { id: string }).id;
+      // Tipo de proyecto y columna inicial del tablero (ver destino-pedido.ts).
+      const { tipoId, estadoId } = await resolverDestinoPedido(sb, params.empresaId);
 
       const itemsSnapshot = items.map((it) => ({
         producto_id: it.producto_id,

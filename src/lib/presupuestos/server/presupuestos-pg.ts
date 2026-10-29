@@ -4,6 +4,7 @@ import {
   createVentaTransaccionalPg,
   type CreateVentaItemInput,
 } from "@/lib/ventas/server/create-venta-pg";
+import { resolverDestinoPedido } from "@/lib/proyectos/server/destino-pedido";
 
 /** Item crudo que llega del cliente; los totales se recalculan en el server. */
 export interface PresupuestoItemInput {
@@ -396,30 +397,8 @@ export async function convertirEnPedido(
   if (itq.error) throw new Error(itq.error.message);
   const items = (itq.data ?? []) as Record<string, unknown>[];
 
-  // Resolver tipo 'pedido' + estado inicial 'nuevo'.
-  const tipoQ = await sb
-    .from("proyecto_tipos")
-    .select("id")
-    .eq("empresa_id", empresaId)
-    .eq("codigo", "pedido")
-    .eq("activo", true)
-    .limit(1)
-    .maybeSingle();
-  if (tipoQ.error) throw new Error(tipoQ.error.message);
-  if (!tipoQ.data) throw new Error("Tipo de proyecto 'pedido' no configurado para esta empresa.");
-  const tipoId = (tipoQ.data as { id: string }).id;
-
-  const estadoQ = await sb
-    .from("proyecto_estados")
-    .select("id")
-    .eq("empresa_id", empresaId)
-    .eq("codigo", "nuevo")
-    .eq("activo", true)
-    .limit(1)
-    .maybeSingle();
-  if (estadoQ.error) throw new Error(estadoQ.error.message);
-  if (!estadoQ.data) throw new Error("Estado 'nuevo' no configurado para esta empresa.");
-  const estadoId = (estadoQ.data as { id: string }).id;
+  // Tipo de proyecto y columna inicial del tablero (ver destino-pedido.ts).
+  const { tipoId, estadoId } = await resolverDestinoPedido(sb, empresaId);
 
   const fechaIso = new Date().toISOString();
   const itemsSnapshot = items.map((it) => ({

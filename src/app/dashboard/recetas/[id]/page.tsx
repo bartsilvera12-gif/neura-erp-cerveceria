@@ -114,6 +114,80 @@ type ProduccionPreview = {
   hay_faltantes: boolean;
 };
 
+/**
+ * Margen objetivo de un formato, en porcentaje.
+ *
+ * El `%` va DENTRO del campo y no al lado: afuera, con el input angosto, el
+ * signo caía al renglón de abajo y la columna quedaba de dos pisos.
+ *
+ * Guarda al salir del campo y no en cada tecla: cada guardado es un PATCH que
+ * recalcula el costeo entero de la receta, y escribir "45" dispararía dos.
+ */
+function MargenInput({
+  valor,
+  disabled,
+  onGuardar,
+}: {
+  /** Fracción guardada (0,45), no porcentaje. */
+  valor: number | null;
+  disabled?: boolean;
+  onGuardar: (nuevo: number | null) => void;
+}) {
+  const inicial = valor == null ? "" : String(Number((valor * 100).toFixed(2)));
+  const [texto, setTexto] = useState(inicial);
+  const [ultimo, setUltimo] = useState(inicial);
+
+  // Si el costeo vuelve con otro margen (lo cambió otro, o falló el guardado),
+  // el campo tiene que reflejarlo en vez de quedarse con lo que se tipeó.
+  if (inicial !== ultimo) {
+    setUltimo(inicial);
+    setTexto(inicial);
+  }
+
+  function guardar() {
+    const limpio = texto.trim().replace(",", ".");
+    if (limpio === "") {
+      if (valor != null) onGuardar(null);
+      return;
+    }
+    const pct = Number(limpio);
+    if (!Number.isFinite(pct) || pct < 0 || pct >= 100) {
+      setTexto(inicial); // fuera de rango: se descarta, no se guarda a medias
+      return;
+    }
+    const nuevo = pct / 100;
+    if (Math.abs(nuevo - (valor ?? -1)) < 1e-9) return;
+    onGuardar(nuevo);
+  }
+
+  return (
+    <div className="relative inline-block w-[4.75rem]">
+      <input
+        type="text"
+        inputMode="decimal"
+        value={texto}
+        disabled={disabled}
+        placeholder="—"
+        onChange={(e) => {
+          const v = e.target.value;
+          if (/^[0-9]*[.,]?[0-9]*$/.test(v)) setTexto(v);
+        }}
+        onFocus={(e) => e.target.select()}
+        onBlur={guardar}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") setTexto(inicial);
+        }}
+        aria-label="Margen objetivo en porcentaje"
+        className="w-full rounded-md border border-gray-200 py-1 pl-2 pr-6 text-right text-sm tabular-nums outline-none transition-colors focus:border-[#4FAEB2] focus:ring-1 focus:ring-[#4FAEB2] disabled:opacity-50"
+      />
+      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+        %
+      </span>
+    </div>
+  );
+}
+
 function fmtGs(n: number | null | undefined) {
   if (n == null) return "—";
   return "Gs. " + Number(n).toLocaleString("es-PY", { maximumFractionDigits: 0 });
@@ -603,68 +677,89 @@ export default function EditarRecetaPage() {
             </div>
           )}
 
+          {/* Sin compras de los insumos el costeo da 0 y la tabla entera se ve
+              vacía. Mejor decir por qué que dejar al operador adivinando. */}
+          {formatos.length > 0 && !costeo?.costo_total && (
+            <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+              Los insumos de esta receta todavía no tienen compras cargadas, así que el costo da 0
+              y no se puede sugerir un precio. El costo se llena solo con la primera compra de
+              cada insumo.
+            </div>
+          )}
+
           {formatos.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-gray-400">
               Sin formatos cargados. Agregá uno abajo para ver el precio sugerido.
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wide text-gray-400">
                   <tr>
-                    <th className="px-4 py-2 font-medium">Formato</th>
-                    <th className="px-4 py-2 font-medium">Capacidad</th>
-                    <th className="px-4 py-2 text-right font-medium">Por lote</th>
-                    <th className="px-4 py-2 text-right font-medium">Costo</th>
-                    <th className="px-4 py-2 text-right font-medium">Margen obj.</th>
-                    <th className="px-4 py-2 text-right font-medium">Precio sugerido</th>
-                    <th className="px-4 py-2 text-right font-medium">Precio actual</th>
-                    <th className="px-4 py-2 text-right font-medium">Margen real</th>
-                    {puedeEditar && <th className="px-4 py-2" />}
+                    <th className="px-4 py-2.5 font-medium">Formato</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Por lote</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Costo</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Margen</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Precio sugerido</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Precio actual</th>
+                    {puedeEditar && <th className="px-4 py-2.5" />}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-50">
                   {formatos.map((f) => {
                     const ocupado = fmtBusy === f.formato_id;
+                    const aplicable =
+                      f.precio_sugerido != null &&
+                      Math.round(f.precio_sugerido) !== Math.round(f.precio_venta);
                     return (
-                      <tr key={f.formato_id} className="border-b border-gray-50 last:border-0">
-                        <td className="px-4 py-2 font-medium text-gray-800">{f.producto_nombre}</td>
-                        <td className="px-4 py-2 text-gray-600">
-                          {fmtNum(f.capacidad)} {formatUnidad(f.capacidad_unidad)}
-                          {f.unidad_incompatible && (
-                            <span
-                              className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"
-                              title="La capacidad no se puede convertir a la unidad de rendimiento de la receta."
-                            >
-                              <AlertTriangle className="mr-1 h-2.5 w-2.5" aria-hidden />
-                              unidad incompatible
+                      <tr key={f.formato_id} className="hover:bg-slate-50/60">
+                        {/* Nombre y capacidad juntos: son el mismo dato, y separarlos
+                            gastaba una columna en "500 Ml". */}
+                        <td className="px-4 py-2.5">
+                          <div className="font-medium text-gray-800">{f.producto_nombre}</div>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-400">
+                            <span className="tabular-nums">
+                              {fmtNum(f.capacidad)} {formatUnidad(f.capacidad_unidad)}
                             </span>
+                            {f.unidad_incompatible && (
+                              <span
+                                className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                                title="La capacidad no se puede convertir a la unidad de rendimiento de la receta."
+                              >
+                                <AlertTriangle className="mr-0.5 h-2.5 w-2.5" aria-hidden />
+                                unidad incompatible
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">
+                          {f.unidades_por_lote == null ? (
+                            <span className="text-gray-300">—</span>
+                          ) : (
+                            fmtNum(f.unidades_por_lote)
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-gray-600">
-                          {f.unidades_por_lote == null ? "—" : fmtNum(f.unidades_por_lote)}
+
+                        {/* Un costo en 0 no es un costo: es que todavía no hay compras
+                            del insumo. Mostrar "Gs. 0" hacía parecer que la cerveza
+                            sale gratis. */}
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">
+                          {!f.costo_unitario ? (
+                            <span className="text-gray-300" title="Sin costo: los insumos todavía no tienen compras cargadas.">
+                              —
+                            </span>
+                          ) : (
+                            fmtGs(f.costo_unitario)
+                          )}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums">{fmtGs(f.costo_unitario)}</td>
-                        <td className="px-4 py-2 text-right">
+
+                        <td className="px-3 py-2.5 text-right">
                           {puedeEditar ? (
-                            <input
-                              type="number"
-                              step="1"
-                              min="0"
-                              max="99"
+                            <MargenInput
+                              valor={f.margen_objetivo_pct}
                               disabled={ocupado}
-                              defaultValue={
-                                f.margen_objetivo_pct == null
-                                  ? ""
-                                  : Number((f.margen_objetivo_pct * 100).toFixed(2))
-                              }
-                              placeholder="—"
-                              onBlur={(e) => {
-                                const txt = e.target.value.trim();
-                                const pct = txt === "" ? null : Number(txt);
-                                if (pct !== null && (!Number.isFinite(pct) || pct < 0 || pct >= 100)) return;
-                                const nuevo = pct === null ? null : pct / 100;
-                                if (nuevo === (f.margen_objetivo_pct ?? null)) return;
+                              onGuardar={(nuevo) =>
                                 void formatoRequest(
                                   `/api/recetas/${id}/formatos/${f.formato_id}`,
                                   {
@@ -677,68 +772,79 @@ export default function EditarRecetaPage() {
                                   },
                                   f.formato_id,
                                   "No se pudo guardar el margen."
-                                );
-                              }}
-                              className="w-16 rounded border border-gray-300 px-2 py-1 text-right text-sm"
+                                )
+                              }
                             />
                           ) : f.margen_objetivo_pct == null ? (
-                            "—"
+                            <span className="text-gray-300">—</span>
                           ) : (
-                            `${Number((f.margen_objetivo_pct * 100).toFixed(1))}%`
+                            <span className="tabular-nums text-gray-600">
+                              {Number((f.margen_objetivo_pct * 100).toFixed(1))} %
+                            </span>
                           )}
-                          <span className="ml-1 text-[11px] text-gray-400">%</span>
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums font-semibold text-gray-900">
+
+                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-900">
                           {f.precio_sugerido == null ? (
-                            <span className="text-xs font-normal text-gray-400">sin margen objetivo</span>
+                            <span className="text-xs font-normal text-gray-300">
+                              {f.margen_objetivo_pct == null ? "falta el margen" : "falta el costo"}
+                            </span>
                           ) : (
                             fmtGs(f.precio_sugerido)
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-gray-600">
-                          {fmtGs(f.precio_venta)}
+
+                        {/* El margen real cuelga del precio actual: es el margen DE ese
+                            precio, no un dato aparte. */}
+                        <td className="px-3 py-2.5 text-right">
+                          <div className="tabular-nums text-gray-600">
+                            {f.precio_venta ? fmtGs(f.precio_venta) : <span className="text-gray-300">sin precio</span>}
+                          </div>
+                          {f.margen_pct != null && (
+                            <span
+                              className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${
+                                f.margen_pct >= 0
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-red-50 text-red-700"
+                              }`}
+                              title="Margen real del precio cargado hoy."
+                            >
+                              {f.margen_pct} % real
+                            </span>
+                          )}
                         </td>
-                        <td
-                          className={`px-4 py-2 text-right tabular-nums ${
-                            f.margen_pct == null
-                              ? "text-gray-400"
-                              : f.margen_pct >= 0
-                                ? "text-green-700"
-                                : "text-red-700"
-                          }`}
-                        >
-                          {f.margen_pct == null ? "—" : `${f.margen_pct}%`}
-                        </td>
+
                         {puedeEditar && (
-                          <td className="whitespace-nowrap px-4 py-2 text-right">
-                            {f.precio_sugerido != null &&
-                              Math.round(f.precio_sugerido) !== Math.round(f.precio_venta) && (
-                                <button
-                                  type="button"
-                                  disabled={ocupado}
-                                  onClick={() =>
-                                    void formatoRequest(
-                                      `/api/recetas/${id}/formatos/${f.formato_id}`,
-                                      {
-                                        method: "PATCH",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({
-                                          producto_id: f.producto_id,
-                                          precio_venta: Math.round(f.precio_sugerido ?? 0),
-                                        }),
-                                      },
-                                      f.formato_id,
-                                      "No se pudo aplicar el precio."
-                                    )
-                                  }
-                                  className="mr-2 rounded border border-[#4FAEB2] px-2 py-1 text-xs font-medium text-[#2F6F72] hover:bg-[#4FAEB2]/10 disabled:opacity-50"
-                                >
-                                  Aplicar
-                                </button>
-                              )}
+                          <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                            {aplicable && (
+                              <button
+                                type="button"
+                                disabled={ocupado}
+                                title={`Dejar el precio en ${fmtGs(f.precio_sugerido)}`}
+                                onClick={() =>
+                                  void formatoRequest(
+                                    `/api/recetas/${id}/formatos/${f.formato_id}`,
+                                    {
+                                      method: "PATCH",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({
+                                        producto_id: f.producto_id,
+                                        precio_venta: Math.round(f.precio_sugerido ?? 0),
+                                      }),
+                                    },
+                                    f.formato_id,
+                                    "No se pudo aplicar el precio."
+                                  )
+                                }
+                                className="mr-1.5 rounded-md bg-[#4FAEB2] px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-[#3F8E91] disabled:opacity-50"
+                              >
+                                Aplicar
+                              </button>
+                            )}
                             <button
                               type="button"
                               disabled={ocupado}
+                              aria-label={`Quitar ${f.producto_nombre}`}
                               onClick={() =>
                                 void formatoRequest(
                                   `/api/recetas/${id}/formatos/${f.formato_id}`,
@@ -747,9 +853,9 @@ export default function EditarRecetaPage() {
                                   "No se pudo quitar el formato."
                                 )
                               }
-                              className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                              className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                             >
-                              Quitar
+                              <Trash2 className="h-4 w-4" aria-hidden />
                             </button>
                           </td>
                         )}
