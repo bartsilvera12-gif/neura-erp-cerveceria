@@ -49,6 +49,7 @@ DECLARE
   v_nombre   text;
   v_sku      text;
   v_n        int := 0;
+  v_faltan   text;
   v_extra_c  text := '';
   v_extra_v  text := '';
   r          record;
@@ -61,6 +62,24 @@ BEGIN
   -- compras no vienen de una factura). Enumerarlas a mano era adivinar de a
   -- una y fallar de a una, asi que se las busca en el catalogo y se las
   -- rellena con el vacio que corresponde a su tipo.
+  -- ---------------------------------------------------------------------------
+  -- Antes que nada: los insumos tienen que existir
+  -- ---------------------------------------------------------------------------
+  -- Los crea el script 12. Si falta alguno, conviene decirlo TODO junto y
+  -- antes de empezar: fallar en la tercera linea de la primera compra obliga a
+  -- correr, corregir y volver a correr para enterarse del siguiente.
+  SELECT string_agg(f.sku, ', ' ORDER BY f.sku) INTO v_faltan
+    FROM (VALUES ('CL-IRISH'), ('CL-WHIRLFLOC'), ('ES-CEDRON'), ('ES-NARANJA'), ('LU-AMARILLO'), ('LU-CASCADE'), ('LU-CENTENNIAL'), ('LU-CITRACRYO'), ('LU-EKG'), ('LU-HALLER'), ('LU-MAGNUM'), ('LV-NEWE'), ('LV-US05'), ('MP-CARA30'), ('MP-CARACLAIR'), ('MP-CARAMEL20'), ('MP-CARAMEL60'), ('MP-CARAPILS'), ('MP-MELANOID'), ('MP-MUNICH'), ('MP-PALEALE'), ('MP-PILSEN'), ('MP-VIENNA')) AS f(sku)
+   WHERE NOT EXISTS (
+     SELECT 1 FROM cerveceriaerp.productos p
+      WHERE p.empresa_id = v_empresa AND p.sucursal_id = v_sucursal AND p.sku = f.sku
+   );
+
+  IF v_faltan IS NOT NULL THEN
+    RAISE EXCEPTION 'Faltan insumos que este script necesita (%). Los crea 12_carga_coven_planillas.sql: hay que correr ese primero.',
+      v_faltan;
+  END IF;
+
   FOR r IN
     SELECT column_name, data_type
       FROM information_schema.columns
