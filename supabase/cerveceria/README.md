@@ -14,6 +14,7 @@ Ejecutar con un rol administrador (`postgres` / `supabase_admin`).
 | 7 | `07_receta_coven_blonde_ale.sql` | Carga la receta COVEN Blonde Ale 500 L con sus insumos y formatos. |
 | 8 | `08_produccion_lotes_fermentadores.sql` | Producción por lotes: fermentadores, etapas, envasado y trazabilidad. Activa el módulo **Producción**. |
 | 9 | `09_bar_presentaciones.sql` | Chop, botella y litro en el Bar: vender uno descuenta sus litros del granel. |
+| 10 | `10_pago_mixto.sql` | Pago mixto en ventas: columna `pagos_desglose`, `mixto` permitido en `metodo_pago`, y el detalle de conciliación acepta una fila por método. Sin esto la parte en efectivo de un cobro mixto no entra al arqueo y la caja no cierra. |
 
 El paso 4 crea la **ficha** de cada usuario en el ERP; el **login** lo crean el
 3 (para el dueño) y el 5 (para los dos operativos). Sin el login, el usuario

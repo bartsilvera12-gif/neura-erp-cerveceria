@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { FacturaElectronicaPanel } from "@/components/sifen/FacturaElectronicaPanel";
+import { METODO_PAGO_LABEL, desgloseUsado, type MetodoPago, type PagosDesglose } from "@/lib/ventas/types";
 import type {
   FacturaElectronicaDTO,
   SifenCancelacionPreviewDTO,
@@ -25,6 +26,8 @@ type FacturaApiRow = {
   cliente_display?: string;
   /** Si la factura fue creada por el puente venta→factura, tiene el uuid de la venta origen. */
   origen_venta_id?: string | null;
+  /** Cómo se cobró la venta que originó la factura. Null si no vino de una venta. */
+  cobro?: { metodo_pago: string | null; pagos_desglose: PagosDesglose | null } | null;
 };
 
 type SifenResumen = {
@@ -273,6 +276,26 @@ function FacturaDetalleInner() {
             <dt className="text-slate-400 text-xs">Estado</dt>
             <dd className="font-medium text-slate-800">{factura.estado}</dd>
           </div>
+          {/* Cobro: cuando fue mixto, el desglose. Antes el pago mixto se veía
+              en el recibo pero no acá. */}
+          {factura.cobro?.metodo_pago && (
+            <div>
+              <dt className="text-slate-400 text-xs">Cobro</dt>
+              <dd className="font-medium text-slate-800">
+                {METODO_PAGO_LABEL[factura.cobro.metodo_pago as MetodoPago] ?? factura.cobro.metodo_pago}
+                {factura.cobro.metodo_pago === "mixto" && (
+                  <ul className="mt-0.5 space-y-0.5 text-xs font-normal text-slate-500">
+                    {desgloseUsado(factura.cobro.pagos_desglose).map(({ metodo, monto }) => (
+                      <li key={metodo} className="tabular-nums">
+                        {METODO_PAGO_LABEL[metodo]}: {monedaLabel}{" "}
+                        {monto.toLocaleString(factura.moneda === "USD" ? "en-US" : "es-PY")}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </dd>
+            </div>
+          )}
         </dl>
 
         {ncResumen && ncResumen.cantidad_ncs > 0 && (

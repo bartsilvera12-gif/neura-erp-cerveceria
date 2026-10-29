@@ -5,6 +5,12 @@ import { createVentaTransaccionalPg, StockInsuficienteError } from "@/lib/ventas
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 import type { CreateVentaItemInput } from "@/lib/ventas/server/create-venta-pg";
 import { insertVentaPagoDetalle } from "@/lib/ventas/server/pago-detalle-pg";
+import {
+  errorDesglose,
+  metodoEfectivoDeVenta,
+  normalizarDesglose,
+} from "@/lib/ventas/pago-mixto";
+import { desgloseUsado } from "@/lib/ventas/types";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta } from "@/lib/ventas/types";
@@ -79,6 +85,7 @@ function toVentaResponse(
     tipo_venta: Venta["tipo_venta"];
     plazo_dias?: number;
     metodo_pago?: Venta["metodo_pago"];
+    pagos_desglose?: Venta["pagos_desglose"];
     subtotal: number;
     monto_iva: number;
     total: number;
@@ -111,6 +118,7 @@ function toVentaResponse(
     tipo_venta: meta.tipo_venta,
     plazo_dias: meta.plazo_dias,
     metodo_pago: meta.metodo_pago,
+    pagos_desglose: meta.pagos_desglose ?? null,
     genera_nota_remision: meta.genera_nota_remision === true,
     nota_remision_numero: meta.nota_remision_numero ?? null,
     fecha: meta.fechaIso,
@@ -147,8 +155,26 @@ export async function POST(request: NextRequest) {
       tipoVenta === "CREDITO" && o.plazo_dias != null && String(o.plazo_dias).trim() !== ""
         ? parseInt(String(o.plazo_dias), 10)
         : null;
-    const metodoPago: "efectivo" | "tarjeta" | "transferencia" =
-      o.metodo_pago === "tarjeta" || o.metodo_pago === "transferencia" ? o.metodo_pago : "efectivo";
+    /**
+     * Método de cobro y, si es mixto, el reparto.
+     *
+     * La validación se repite acá aunque la pantalla ya la haga: una llamada
+     * directa a la API podía grabar `mixto` con un reparto que no suma el
+     * total, y eso descuadra el arqueo de caja sin que nada avise. El total
+     * contra el que se valida es el declarado, que unas líneas más abajo se
+     * verifica contra la suma de los ítems.
+     */
+    const desgloseRaw = normalizarDesglose(o.pagos_desglose);
+    const { metodo: metodoPago, desglose: pagosDesglose } = metodoEfectivoDeVenta(
+      typeof o.metodo_pago === "string" ? o.metodo_pago : "efectivo",
+      desgloseRaw
+    );
+    if (metodoPago === "mixto") {
+      const eDesglose = errorDesglose(pagosDesglose, Number(o.total) || 0);
+      if (eDesglose) {
+        return NextResponse.json(errorResponse(eDesglose), { status: 400 });
+      }
+    }
     const clienteRaw = o.cliente_id;
     const clienteId =
       clienteRaw === null || clienteRaw === undefined || clienteRaw === ""
@@ -281,6 +307,7 @@ export async function POST(request: NextRequest) {
       tipoVenta,
       plazoDias: Number.isFinite(plazoDias as number) ? plazoDias : null,
       metodoPago,
+      pagosDesglose,
       items,
       subtotalDeclarado,
       montoIvaDeclarado,
@@ -322,9 +349,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Detalle de cobro (conciliación) — best-effort, FUERA de la transacción de
-    // venta. Si falla, la venta queda igual (no se rompe ni se afectan recetas).
-    // 1 detalle por venta: método = metodoPago; monto = total (suma = total).
+    /**
+     * Detalle de cobro (conciliación bancaria) — best-effort, FUERA de la
+     * transacción de venta. Si falla, la venta queda igual.
+     *
+     * Que sea best-effort es seguro para la conciliación, que tolera huecos,
+     * pero NO lo sería para la caja: por eso el reparto del cobro mixto ya se
+     * guardó en la propia venta (`pagos_desglose`) y el arqueo lo lee de ahí,
+     * no de acá.
+     *
+     * Un cobro mixto deja una fila por método; el resto, una sola por el total.
+     * Los datos bancarios (entidad, referencia, titular) acompañan al método
+     * que no es efectivo: es el único que los necesita.
+     */
     try {
       const pd = (o.pago_detalle ?? null) as Record<string, unknown> | null;
       const str = (v: unknown, max = 200) =>
@@ -333,16 +370,30 @@ export async function POST(request: NextRequest) {
         const v = pd?.fecha_acreditacion;
         return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
       })();
-      await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
-        metodo_pago: metodoPago,
-        entidad_bancaria_id: pd?.entidad_bancaria_id ? String(pd.entidad_bancaria_id) : null,
-        entidad_nombre_snapshot: str(pd?.entidad_nombre_snapshot),
-        monto: totalDeclarado,
-        referencia: str(pd?.referencia),
-        titular: str(pd?.titular),
-        fecha_acreditacion: fechaAcred,
-        observacion: str(pd?.observacion, 500),
-      });
+      const entidadId = pd?.entidad_bancaria_id ? String(pd.entidad_bancaria_id) : null;
+      const entidadNombre = str(pd?.entidad_nombre_snapshot);
+      const referencia = str(pd?.referencia);
+      const titular = str(pd?.titular);
+      const observacion = str(pd?.observacion, 500);
+
+      const filas =
+        metodoPago === "mixto" && pagosDesglose
+          ? desgloseUsado(pagosDesglose).map(({ metodo, monto }) => ({ metodo, monto }))
+          : [{ metodo: metodoPago as "efectivo" | "transferencia" | "tarjeta", monto: totalDeclarado }];
+
+      for (const f of filas) {
+        const esEfectivo = f.metodo === "efectivo";
+        await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
+          metodo_pago: f.metodo,
+          entidad_bancaria_id: esEfectivo ? null : entidadId,
+          entidad_nombre_snapshot: esEfectivo ? null : entidadNombre,
+          monto: f.monto,
+          referencia: esEfectivo ? null : referencia,
+          titular: esEfectivo ? null : titular,
+          fecha_acreditacion: esEfectivo ? null : fechaAcred,
+          observacion,
+        });
+      }
     } catch (e) {
       console.error("[ventas/create] pago_detalle best-effort fallo (venta OK):", e instanceof Error ? e.message : e);
     }
@@ -365,6 +416,7 @@ export async function POST(request: NextRequest) {
       tipo_venta: tipoVenta,
       plazo_dias: tipoVenta === "CREDITO" ? plazoDias ?? undefined : undefined,
       metodo_pago: metodoPago,
+      pagos_desglose: pagosDesglose,
       subtotal: sub,
       monto_iva: iv,
       total: tot,

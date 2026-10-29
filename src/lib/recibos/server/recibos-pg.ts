@@ -79,7 +79,7 @@ export async function crearOReusarRecibo(
     if (!ventaId) throw new ReciboError("Falta venta_id.");
     const vq = await sb
       .from("ventas")
-      .select("id, numero_control, total, moneda, cliente_id, tipo_venta, metodo_pago")
+      .select("id, numero_control, total, moneda, cliente_id, tipo_venta, metodo_pago, pagos_desglose")
       .eq("empresa_id", empresaId)
       .eq("id", ventaId)
       .maybeSingle();
@@ -98,16 +98,32 @@ export async function crearOReusarRecibo(
     if (ex.data) return { recibo: ex.data as unknown as Record<string, unknown>, existed: true };
 
     const { nombre, documento } = await nombreYDoc(sb, empresaId, v.cliente_id ? String(v.cliente_id) : null);
-    // Detalle de pago (método/referencia/entidad) si existe.
+    /**
+     * Detalle de pago (método/referencia/entidad) si existe.
+     *
+     * Un cobro mixto deja una fila por método, así que NO se puede tomar "la
+     * última": el recibo diría que todo entró por transferencia cuando la
+     * mitad fue en efectivo. En ese caso el método del recibo es "mixto" y el
+     * desglose sale de la venta; los datos bancarios se toman de la fila que
+     * no es efectivo, que es la única que los tiene.
+     */
+    const esMixto = (v.metodo_pago as string) === "mixto";
     const pd = await sb
       .from("ventas_pagos_detalle")
       .select("metodo_pago, entidad_bancaria_id, referencia")
       .eq("empresa_id", empresaId)
       .eq("venta_id", ventaId)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    const det = (pd.data?.[0] ?? {}) as unknown as Record<string, unknown>;
-    const metodo = (det.metodo_pago as string) || (v.metodo_pago as string) || "efectivo";
+      .order("created_at", { ascending: false });
+    const filasDet = (pd.data ?? []) as unknown as Array<Record<string, unknown>>;
+    const det =
+      (esMixto
+        ? filasDet.find((f) => f.metodo_pago !== "efectivo" && (f.entidad_bancaria_id || f.referencia))
+        : filasDet[0]) ??
+      filasDet[0] ??
+      {};
+    const metodo = esMixto
+      ? "mixto"
+      : (det.metodo_pago as string) || (v.metodo_pago as string) || "efectivo";
 
     return await insertarRecibo(sb, empresaId, usuario, {
       cliente_id: v.cliente_id ? String(v.cliente_id) : null,

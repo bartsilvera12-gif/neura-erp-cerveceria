@@ -44,7 +44,32 @@ export async function GET(
       return NextResponse.json(errorResponse("Factura no encontrada"), { status: 404 });
     }
 
-    const row = factura as { cliente_id: string };
+    const row = factura as { cliente_id: string; origen_venta_id?: string | null };
+
+    /**
+     * Cómo se cobró, leído de la venta que originó la factura.
+     *
+     * La factura no guarda el método de cobro (no es un dato fiscal del
+     * documento), pero cuando el cobro fue mixto el operador necesita verlo
+     * acá: era el reclamo de que "el pago mixto figura en el recibo pero no en
+     * la factura". No corta la respuesta si falla.
+     */
+    let cobro: { metodo_pago: string | null; pagos_desglose: unknown } | null = null;
+    if (row.origen_venta_id) {
+      const { data: v } = await supabase
+        .from("ventas")
+        .select("metodo_pago, pagos_desglose")
+        .eq("id", row.origen_venta_id)
+        .eq("empresa_id", auth.empresa_id)
+        .maybeSingle();
+      const vv = v as { metodo_pago?: string | null; pagos_desglose?: unknown } | null;
+      if (vv) {
+        cobro = {
+          metodo_pago: vv.metodo_pago ?? null,
+          pagos_desglose: vv.pagos_desglose ?? null,
+        };
+      }
+    }
     const { data: cli } = await supabase
       .from("clientes")
       .select("nombre_contacto, empresa")
@@ -60,6 +85,7 @@ export async function GET(
       successResponse({
         ...factura,
         cliente_display,
+        cobro,
       })
     );
   } catch (err) {

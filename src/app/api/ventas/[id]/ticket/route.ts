@@ -132,7 +132,32 @@ function metodoPagoLabel(m: string | null | undefined): string {
   if (m === "tarjeta") return "Tarjeta";
   if (m === "transferencia") return "Transferencia";
   if (m === "efectivo") return "Efectivo";
+  if (m === "mixto") return "Mixto";
   return "—";
+}
+
+/**
+ * Filas de pago del ticket. En un cobro mixto el cliente tiene que poder leer
+ * cuánto puso en cada cosa: "Mixto" solo no le sirve para controlar el vuelto.
+ */
+function filasPagoHtml(
+  metodo: string | null | undefined,
+  desglose: unknown
+): string {
+  const fila = (lbl: string, val: string) =>
+    `<tr><td class="lbl">${lbl}</td><td class="val">${val}</td></tr>`;
+  if (metodo !== "mixto" || desglose == null || typeof desglose !== "object") {
+    return fila("Pago", metodoPagoLabel(metodo));
+  }
+  const d = desglose as Record<string, unknown>;
+  const partes = (["efectivo", "transferencia", "tarjeta"] as const)
+    .map((m) => ({ m, monto: Number(d[m]) || 0 }))
+    .filter((x) => x.monto > 0);
+  if (partes.length === 0) return fila("Pago", "Mixto");
+  return (
+    fila("Pago", "Mixto") +
+    partes.map((p) => fila(`· ${metodoPagoLabel(p.m)}`, formatGs(p.monto))).join("")
+  );
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -147,6 +172,7 @@ interface VentaRow {
   total: number | string;
   observaciones: string | null;
   metodo_pago: string | null;
+  pagos_desglose: unknown;
   cliente_id: string | null;
   genera_nota_remision: boolean | null;
   nota_remision_numero: string | null;
@@ -242,7 +268,7 @@ function renderCopia(opts: {
            <tr><td class="lbl">Subtotal</td><td class="val">${formatGs(subtotal)}</td></tr>
            ${ivaTotal > 0 ? `<tr><td class="lbl">IVA</td><td class="val">${formatGs(ivaTotal)}</td></tr>` : ""}
            <tr class="total-row"><td class="lbl">TOTAL</td><td class="val">${formatGs(total)}</td></tr>
-           <tr><td class="lbl">Pago</td><td class="val">${metodoPagoLabel(venta.metodo_pago)}</td></tr>
+           ${filasPagoHtml(venta.metodo_pago, venta.pagos_desglose)}
          </tbody>
        </table>`
     : "";
@@ -373,7 +399,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   // Venta
   const vQ = await ctx.supabase
     .from("ventas")
-    .select("id, sucursal_id, numero_control, fecha, subtotal, monto_iva, total, observaciones, metodo_pago, cliente_id, genera_nota_remision, nota_remision_numero, estado, anulada_at, anulacion_motivo")
+    .select("id, sucursal_id, numero_control, fecha, subtotal, monto_iva, total, observaciones, metodo_pago, pagos_desglose, cliente_id, genera_nota_remision, nota_remision_numero, estado, anulada_at, anulacion_motivo")
     .eq("id", id)
     .eq("empresa_id", empresaId)
     .maybeSingle();

@@ -60,7 +60,7 @@ function numeroCorto(numero: unknown): string {
   return m ? m[1]! : s;
 }
 
-const METODO_LBL: Record<string, string> = { efectivo: "Efectivo", transferencia: "Transferencia", tarjeta: "Tarjeta", cheque: "Cheque", otro: "Otro" };
+const METODO_LBL: Record<string, string> = { efectivo: "Efectivo", transferencia: "Transferencia", tarjeta: "Tarjeta", cheque: "Cheque", otro: "Otro", mixto: "Mixto" };
 
 export async function GET(request: NextRequest, ctxParams: { params: Promise<{ id: string }> }) {
   const { id } = await ctxParams.params;
@@ -172,6 +172,28 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 
   const moneda = String(r.moneda ?? "PYG");
   const metodo = METODO_LBL[String(r.metodo_pago ?? "")] ?? (r.metodo_pago ?? "—");
+
+  /**
+   * Cobro mixto: el reparto por método, para marcar más de una casilla de
+   * "Forma de pago" con su monto. Sin esto el recibo de una venta mixta salía
+   * con todas las casillas vacías y el cliente no podía controlar su vuelto.
+   */
+  const desgloseMixto: Record<string, number> = {};
+  if (String(r.metodo_pago ?? "") === "mixto" && r.venta_id) {
+    const vq = await ctx.supabase
+      .from("ventas")
+      .select("pagos_desglose")
+      .eq("empresa_id", ctx.auth.empresa_id)
+      .eq("id", String(r.venta_id))
+      .maybeSingle();
+    const d = (vq.data as { pagos_desglose?: unknown } | null)?.pagos_desglose;
+    if (d && typeof d === "object") {
+      for (const [k, v] of Object.entries(d as Record<string, unknown>)) {
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) desgloseMixto[k] = n;
+      }
+    }
+  }
 
   // Datos adicionales del receptor para paridad con el KUDE de facturas
   // (dirección y teléfono), y override del nombre con `nombre_facturacion`
@@ -538,8 +560,12 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
         <div class="metodos">
           <div class="tt">Forma de pago</div>
           ${["efectivo","transferencia","tarjeta","cheque"].map((k) => {
-            const on = String(r.metodo_pago ?? "").toLowerCase() === k;
-            return `<div class="it${on ? " on" : ""}"><span class="bx">${on ? "&times;" : ""}</span>${esc(METODO_LBL[k] ?? k)}</div>`;
+            // En un cobro mixto se marca cada método que recibió plata, con su
+            // monto al lado; en el resto, el único método del recibo.
+            const montoMixto = desgloseMixto[k] ?? 0;
+            const on = montoMixto > 0 || String(r.metodo_pago ?? "").toLowerCase() === k;
+            const sufijo = montoMixto > 0 ? ` ${fmtMonto(montoMixto, moneda)}` : "";
+            return `<div class="it${on ? " on" : ""}"><span class="bx">${on ? "&times;" : ""}</span>${esc((METODO_LBL[k] ?? k) + sufijo)}</div>`;
           }).join("")}
         </div>
         <div class="cobrador">${r.usuario_nombre ? `Cobrador: <b>${esc(r.usuario_nombre)}</b>` : ""}${r.referencia ? `<br>Ref.: ${esc(r.referencia)}` : ""}</div>

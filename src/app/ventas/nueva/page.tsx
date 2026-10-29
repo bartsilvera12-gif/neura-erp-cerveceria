@@ -8,7 +8,22 @@ import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload }
 import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
 import { getProductos } from "@/lib/inventario/storage";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
-import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
+import type {
+  TipoIvaVenta,
+  TipoVenta,
+  MonedaVenta,
+  LineaVenta,
+  MetodoPago,
+  MetodoPagoSimple,
+  PagosDesglose,
+  TipoPrecioVenta,
+} from "@/lib/ventas/types";
+import {
+  METODOS_PAGO_SIMPLES,
+  METODO_PAGO_LABEL,
+  totalDesglose,
+} from "@/lib/ventas/types";
+import { errorDesglose } from "@/lib/ventas/pago-mixto";
 import type { Producto } from "@/lib/inventario/types";
 
 import { AlertTriangle, CheckCircle2, ChevronDown, Image as ImageIcon, Plus, Search, X } from "lucide-react";
@@ -307,6 +322,16 @@ export default function NuevaVentaPage() {
   // ── Cobro (solo CONTADO, no se persiste — solo ayuda al cajero) ───────────
   const [montoRecibido, setMontoRecibido] = useState("");
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
+  /**
+   * Reparto del cobro mixto, como texto: se tipea, así que no puede vivir como
+   * número (ver `NumeroInput` — un campo numérico controlado contra un número
+   * no se deja vaciar).
+   */
+  const [mixto, setMixto] = useState<Record<MetodoPagoSimple, string>>({
+    efectivo: "",
+    transferencia: "",
+    tarjeta: "",
+  });
 
   // ── Detalle de cobro (conciliación bancaria) ──────────────────────────────
   const [entidades, setEntidades] = useState<{ id: string; codigo: string | null; nombre: string; tipo: string | null }[]>([]);
@@ -659,19 +684,56 @@ export default function NuevaVentaPage() {
    */
   const comboResultados = comboHits;
 
-  /** Selecciona método de cobro. Efectivo no pide datos; transferencia/tarjeta abren modal. */
+  /**
+   * Selecciona método de cobro. Efectivo no pide datos; transferencia y tarjeta
+   * abren el modal de entidad. Mixto NO lo abre: primero hay que repartir el
+   * monto, y el modal se ofrece después para la parte que no es efectivo.
+   */
   function handleSelectMetodo(m: MetodoPago) {
     setMetodoPago(m);
+    setErrorVenta(null);
     if (m === "efectivo") {
       setCobroModalOpen(false);
       // "Caja efectivo" por defecto si existe una entidad tipo caja.
       const caja = entidades.find((e) => e.tipo === "caja");
       setPagoEntidadId(caja ? caja.id : "");
       setPagoTitular("");
+    } else if (m === "mixto") {
+      setCobroModalOpen(false);
+      /**
+       * Arranca con todo en efectivo: el caso real es "me paga casi todo en
+       * efectivo y el resto con tarjeta", así que el cajero toca un solo campo
+       * y el efectivo se ajusta solo con "poner el resto acá".
+       */
+      setMixto({ efectivo: String(Math.round(totalGeneral)), transferencia: "", tarjeta: "" });
     } else {
       setEntidadQuery("");
       setCobroModalOpen(true);
     }
+  }
+
+  // ── Cobro mixto ───────────────────────────────────────────────────────────
+
+  /** El reparto tipeado, como números. */
+  const desgloseMixto: PagosDesglose = METODOS_PAGO_SIMPLES.reduce<PagosDesglose>((acc, m) => {
+    const n = Number(mixto[m]);
+    if (Number.isFinite(n) && n > 0) acc[m] = n;
+    return acc;
+  }, {});
+  const mixtoSuma = totalDesglose(desgloseMixto);
+  /** Lo que falta (positivo) o sobra (negativo) para llegar al total. */
+  const mixtoResto = Math.round((totalGeneral - mixtoSuma) * 100) / 100;
+  const mixtoError = metodoPago === "mixto" ? errorDesglose(desgloseMixto, totalGeneral) : null;
+  /** Métodos del reparto que necesitan datos de entidad (todo menos efectivo). */
+  const mixtoNecesitaEntidad =
+    metodoPago === "mixto" && ((desgloseMixto.transferencia ?? 0) > 0 || (desgloseMixto.tarjeta ?? 0) > 0);
+
+  /** Pone el resto que falta en el método indicado. */
+  function completarMixto(m: MetodoPagoSimple) {
+    const actual = Number(mixto[m]) || 0;
+    const objetivo = Math.max(0, Math.round(actual + mixtoResto));
+    setMixto((prev) => ({ ...prev, [m]: String(objetivo) }));
+    setErrorVenta(null);
   }
 
   // ── Agregar productos desde el buscador ───────────────────────────────────
@@ -811,6 +873,7 @@ export default function NuevaVentaPage() {
           tipo_venta:   tipoVenta,
           plazo_dias:   tipoVenta === "CREDITO" ? plazoDiasNum : undefined,
           metodo_pago:  metodoPago,
+          pagos_desglose: metodoPago === "mixto" ? desgloseMixto : null,
           cliente_id:   clienteId || null,
           genera_nota_remision: !!clienteId && generaNotaRemision,
           emitir_factura: tipoDocumento === "factura",
@@ -820,7 +883,11 @@ export default function NuevaVentaPage() {
           entidad_bancaria_id: pagoEntidadId || null,
           entidad_nombre_snapshot: entidades.find((e) => e.id === pagoEntidadId)?.nombre ?? null,
           referencia: pagoReferencia.trim() || null,
-          titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
+          titular:
+            metodoPago === "transferencia" ||
+            (metodoPago === "mixto" && (desgloseMixto.transferencia ?? 0) > 0)
+              ? pagoTitular.trim() || null
+              : null,
           observacion: pagoObservacion.trim() || null,
         },
         { permitirSinStock, pedidoId, cajaId: cajaVentaId }
@@ -878,6 +945,12 @@ export default function NuevaVentaPage() {
     e.preventDefault();
     setErrorVenta(null);
     if (!ventaValida) return;
+    /**
+     * El reparto se valida acá y en la ruta con la misma función: la pantalla
+     * para no dejar cobrar algo que el servidor va a rechazar, el servidor para
+     * que una llamada directa a la API no descuadre el arqueo.
+     */
+    if (metodoPago === "mixto" && mixtoError) return setErrorVenta(mixtoError);
     await enviarVenta(false);
   }
 
@@ -1348,11 +1421,12 @@ export default function NuevaVentaPage() {
                   {tipoVenta === "CONTADO" && (
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
                       <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Cobro</p>
-                      <div className="grid grid-cols-3 gap-1.5">
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                         {([
                           { v: "efectivo", label: "Efectivo" },
                           { v: "transferencia", label: "Transferencia" },
                           { v: "tarjeta", label: "Tarjeta/Débito" },
+                          { v: "mixto", label: "Mixto" },
                         ] as { v: MetodoPago; label: string }[]).map((m) => (
                           <button
                             key={m.v}
@@ -1385,6 +1459,83 @@ export default function NuevaVentaPage() {
                               <span className={`font-bold tabular-nums ${vuelto >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                                 {formatGs(Math.abs(vuelto))}
                               </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Mixto: cuánto entra por cada método. La suma tiene que
+                          dar el total — de ahí sale el efectivo del arqueo. */}
+                      {metodoPago === "mixto" && (
+                        <div className="space-y-2">
+                          {METODOS_PAGO_SIMPLES.map((m) => (
+                            <div key={m} className="flex items-center gap-2">
+                              <label className="w-24 shrink-0 text-xs text-slate-600" htmlFor={`mixto-${m}`}>
+                                {METODO_PAGO_LABEL[m]}
+                              </label>
+                              <MontoInput
+                                id={`mixto-${m}`}
+                                value={mixto[m]}
+                                onChange={(n) => {
+                                  setMixto((prev) => ({ ...prev, [m]: n > 0 ? String(n) : "" }));
+                                  setErrorVenta(null);
+                                }}
+                                placeholder="0"
+                                className={`${inputClass} text-right tabular-nums`}
+                                decimals={false}
+                              />
+                              {mixtoResto !== 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => completarMixto(m)}
+                                  title={
+                                    mixtoResto > 0
+                                      ? `Sumar los ${formatGs(mixtoResto)} que faltan acá`
+                                      : `Descontar los ${formatGs(-mixtoResto)} que sobran de acá`
+                                  }
+                                  className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-600 hover:border-[#0EA5E9] hover:text-[#0284C7]"
+                                >
+                                  {mixtoResto > 0 ? "El resto" : "Ajustar"}
+                                </button>
+                              )}
+                            </div>
+                          ))}
+
+                          <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm">
+                            <span className="text-slate-600">Repartido</span>
+                            <span className="font-semibold tabular-nums text-slate-800">{formatGs(mixtoSuma)}</span>
+                          </div>
+                          {mixtoResto !== 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-slate-600">{mixtoResto > 0 ? "Falta repartir" : "Sobra"}</span>
+                              <span className="font-bold tabular-nums text-red-600">
+                                {formatGs(Math.abs(mixtoResto))}
+                              </span>
+                            </div>
+                          )}
+                          {mixtoError && <p className="text-xs text-red-600">{mixtoError}</p>}
+
+                          {mixtoNecesitaEntidad && (
+                            <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-slate-700">Datos de la parte no efectiva</span>
+                                <button
+                                  type="button"
+                                  onClick={() => { setEntidadQuery(""); setCobroModalOpen(true); }}
+                                  className="font-medium text-sky-600 hover:underline"
+                                >
+                                  Editar
+                                </button>
+                              </div>
+                              <p className="text-slate-500">
+                                Entidad: <span className="text-slate-700">{entidadSel ? `${entidadSel.codigo ? entidadSel.codigo + " · " : ""}${entidadSel.nombre}` : "— sin especificar —"}</span>
+                              </p>
+                              {pagoReferencia.trim() && (
+                                <p className="text-slate-500">Comprobante: <span className="text-slate-700">{pagoReferencia}</span></p>
+                              )}
+                              {pagoTitular.trim() && (
+                                <p className="text-slate-500">Titular: <span className="text-slate-700">{pagoTitular}</span></p>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1460,13 +1611,18 @@ export default function NuevaVentaPage() {
         tipoPrecioDefault={clienteSel?.nivel_precio ?? "minorista"}
       />
 
-      {/* Modal de cobro (transferencia / tarjeta-débito) */}
-      {cobroModalOpen && (metodoPago === "transferencia" || metodoPago === "tarjeta") && (
+      {/* Modal de cobro (transferencia / tarjeta-débito, y la parte no efectiva
+          de un cobro mixto) */}
+      {cobroModalOpen && (metodoPago === "transferencia" || metodoPago === "tarjeta" || metodoPago === "mixto") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setCobroModalOpen(false)}>
           <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl space-y-3" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-800">
-                {metodoPago === "transferencia" ? "Datos de transferencia" : "Datos de tarjeta / débito"}
+                {metodoPago === "transferencia"
+                  ? "Datos de transferencia"
+                  : metodoPago === "tarjeta"
+                  ? "Datos de tarjeta / débito"
+                  : "Datos del cobro no efectivo"}
               </h3>
               <button type="button" onClick={() => setCobroModalOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="Cerrar"><X className="h-5 w-5" aria-hidden /></button>
             </div>
@@ -1503,7 +1659,8 @@ export default function NuevaVentaPage() {
               {entidadSel && <p className="mt-1 text-[11px] text-emerald-600">Seleccionada: {entidadSel.nombre}</p>}
             </div>
 
-            {metodoPago === "transferencia" && (
+            {(metodoPago === "transferencia" ||
+              (metodoPago === "mixto" && (desgloseMixto.transferencia ?? 0) > 0)) && (
               <div>
                 <label className="block text-xs text-gray-600 mb-1">Titular que transfirió</label>
                 <input type="text" value={pagoTitular} onChange={(e) => setPagoTitular(e.target.value)} placeholder="Nombre del titular" className={inputClass} />

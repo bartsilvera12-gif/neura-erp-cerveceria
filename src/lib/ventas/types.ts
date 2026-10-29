@@ -1,7 +1,58 @@
 export type TipoIvaVenta = "EXENTA" | "5%" | "10%";
 export type TipoVenta   = "CONTADO" | "CREDITO";
 export type MonedaVenta = "GS" | "USD";
-export type MetodoPago  = "efectivo" | "tarjeta" | "transferencia";
+/**
+ * Cómo se cobró la venta.
+ *
+ * `mixto` significa que el cobro se repartió entre dos o más de los otros tres;
+ * el reparto va en `Venta.pagos_desglose` y es obligatorio. Sin el reparto, la
+ * parte en efectivo no entraría al arqueo y la caja no cerraría.
+ */
+export type MetodoPago  = "efectivo" | "tarjeta" | "transferencia" | "mixto";
+
+/** Los métodos concretos entre los que se puede repartir un cobro mixto. */
+export type MetodoPagoSimple = Exclude<MetodoPago, "mixto">;
+
+export const METODOS_PAGO_SIMPLES: readonly MetodoPagoSimple[] = [
+  "efectivo",
+  "transferencia",
+  "tarjeta",
+] as const;
+
+export const METODO_PAGO_LABEL: Record<MetodoPago, string> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  tarjeta: "Tarjeta/Débito",
+  mixto: "Mixto",
+};
+
+/**
+ * Reparto de un cobro mixto, en guaraníes y por método. Los métodos que no se
+ * usaron pueden venir en 0 o directamente ausentes.
+ *
+ * La suma tiene que dar el total de la venta: lo valida la app al registrar, y
+ * es lo que hace que el arqueo de caja cuadre.
+ */
+export type PagosDesglose = Partial<Record<MetodoPagoSimple, number>>;
+
+/** Suma del reparto, tolerante a claves ausentes o basura. */
+export function totalDesglose(d: PagosDesglose | null | undefined): number {
+  if (!d) return 0;
+  return METODOS_PAGO_SIMPLES.reduce((acc, m) => {
+    const n = Number(d[m]);
+    return acc + (Number.isFinite(n) && n > 0 ? n : 0);
+  }, 0);
+}
+
+/** Solo los métodos con monto > 0, en el orden en que se muestran. */
+export function desgloseUsado(
+  d: PagosDesglose | null | undefined
+): Array<{ metodo: MetodoPagoSimple; monto: number }> {
+  if (!d) return [];
+  return METODOS_PAGO_SIMPLES.map((m) => ({ metodo: m, monto: Number(d[m]) || 0 })).filter(
+    (x) => x.monto > 0
+  );
+}
 export type EstadoVenta = "pendiente" | "completada" | "anulada";
 /** Nivel de precio elegido para la línea de venta.
  *  'costo' se conserva SOLO como histórico (ventas viejas); ya no se ofrece en la UI. */
@@ -41,7 +92,17 @@ export interface Venta {
   tipo_venta: TipoVenta;
   plazo_dias?: number;       // solo si tipo_venta === "CREDITO"
 
-  metodo_pago?: MetodoPago;  // En lo de Mari: efectivo/tarjeta/transferencia
+  metodo_pago?: MetodoPago;
+
+  /**
+   * Reparto del cobro cuando `metodo_pago === "mixto"`. `null` en el resto.
+   *
+   * Vive en la venta (no solo en `ventas_pagos_detalle`) a propósito: el
+   * detalle de conciliación se escribe después de la venta y en best-effort,
+   * y el arqueo de caja no puede depender de eso. Un detalle que no se grabó
+   * haría cerrar la caja con menos plata de la que hay en el cajón.
+   */
+  pagos_desglose?: PagosDesglose | null;
 
   /** La venta emite nota de remisión (documento no fiscal). */
   genera_nota_remision?: boolean;

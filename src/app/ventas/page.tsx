@@ -15,6 +15,7 @@ import AnularVentaModal from "./AnularVentaModal";
 import { esMismoDiaAsuncion } from "@/lib/fecha/asuncion";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
 
+import { METODO_PAGO_LABEL, desgloseUsado } from "@/lib/ventas/types";
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatGs(valor: number) {
@@ -566,10 +567,23 @@ export default function VentasPage() {
                         </span>
                       </td>
                       <td className="hidden py-4 pr-4 align-middle text-xs text-gray-600 lg:table-cell">
-                        {v.metodo_pago === "tarjeta" ? "Tarjeta"
-                          : v.metodo_pago === "transferencia" ? "Transfer."
-                          : v.metodo_pago === "efectivo" ? "Efectivo"
-                          : "—"}
+                        {v.metodo_pago ? (
+                          <span
+                            title={
+                              v.metodo_pago === "mixto"
+                                ? desgloseUsado(v.pagos_desglose)
+                                    .map((p) => `${METODO_PAGO_LABEL[p.metodo]}: ${formatGs(p.monto)}`)
+                                    .join(" · ")
+                                : undefined
+                            }
+                          >
+                            {v.metodo_pago === "transferencia"
+                              ? "Transfer."
+                              : METODO_PAGO_LABEL[v.metodo_pago]}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums align-middle">
                         {formatFecha(v.fecha)}

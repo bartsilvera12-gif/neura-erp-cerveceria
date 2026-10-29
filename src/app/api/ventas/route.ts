@@ -5,6 +5,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta, TipoIvaVenta, TipoPrecioVenta } from "@/lib/ventas/types";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 
+import type { MetodoPago, PagosDesglose } from "@/lib/ventas/types";
 interface VentaRow {
   id: string;
   empresa_id: string;
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
       const pageQ = await ctx.supabase
         .from("ventas")
         .select(
-          "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha, genera_nota_remision, nota_remision_numero, estado, anulada_at, anulacion_motivo, factura_id, cliente_id"
+          "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, pagos_desglose, fecha, genera_nota_remision, nota_remision_numero, estado, anulada_at, anulacion_motivo, factura_id, cliente_id"
         )
         .eq("empresa_id", empresaId)
         .eq("sucursal_id", sucursalIdVentas)
@@ -261,13 +262,14 @@ export async function GET(request: NextRequest) {
         total: num(r.total),
         tipo_venta: r.tipo_venta === "CREDITO" ? "CREDITO" : "CONTADO",
         plazo_dias: r.plazo_dias ?? undefined,
-        metodo_pago: (r as unknown as { metodo_pago?: string }).metodo_pago === "tarjeta"
-          ? "tarjeta"
-          : (r as unknown as { metodo_pago?: string }).metodo_pago === "transferencia"
-          ? "transferencia"
-          : (r as unknown as { metodo_pago?: string }).metodo_pago === "efectivo"
-          ? "efectivo"
-          : undefined,
+        metodo_pago: ((): MetodoPago | undefined => {
+          const m = (r as unknown as { metodo_pago?: string }).metodo_pago;
+          return m === "tarjeta" || m === "transferencia" || m === "efectivo" || m === "mixto"
+            ? m
+            : undefined;
+        })(),
+        pagos_desglose:
+          (r as unknown as { pagos_desglose?: PagosDesglose | null }).pagos_desglose ?? null,
         genera_nota_remision: (r as unknown as { genera_nota_remision?: boolean }).genera_nota_remision === true,
         nota_remision_numero: (r as unknown as { nota_remision_numero?: string | null }).nota_remision_numero ?? null,
         fecha: r.fecha,

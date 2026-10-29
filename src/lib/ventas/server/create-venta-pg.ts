@@ -1,4 +1,5 @@
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
+import type { PagosDesglose } from "@/lib/ventas/types";
 import { convertirCantidad } from "@/lib/unidades/convert";
 import { asuncionYmd } from "@/lib/fecha/asuncion";
 
@@ -68,7 +69,13 @@ export interface CreateVentaPgParams {
   plazoDias: number | null;
   /** Fecha de vencimiento explícita (YYYY-MM-DD) para crédito. Si falta, se calcula con plazoDias. */
   fechaVencimiento?: string | null;
-  metodoPago: "efectivo" | "tarjeta" | "transferencia" | null;
+  metodoPago: "efectivo" | "tarjeta" | "transferencia" | "mixto" | null;
+  /**
+   * Reparto del cobro cuando `metodoPago === "mixto"`. Se graba en la MISMA
+   * fila de la venta: el arqueo de caja lo lee de ahí, así que no puede quedar
+   * sujeto a una escritura posterior que podría fallar.
+   */
+  pagosDesglose?: PagosDesglose | null;
   items: CreateVentaItemInput[];
   subtotalDeclarado: number;
   montoIvaDeclarado: number;
@@ -445,6 +452,7 @@ export async function createVentaTransaccionalPg(
         tipo_venta: params.tipoVenta,
         plazo_dias: params.plazoDias,
         metodo_pago: params.metodoPago,
+        pagos_desglose: params.metodoPago === "mixto" ? (params.pagosDesglose ?? null) : null,
         genera_nota_remision: generaNota,
         nota_remision_numero: notaRemisionNumero,
         fecha: fechaIso,

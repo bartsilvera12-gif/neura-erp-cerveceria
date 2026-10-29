@@ -105,12 +105,30 @@ export async function calcularArqueoCaja(
    */
   // Ventas de la caja: por caja_id, más el fallback por ventana para ventas sin
   // etiquetar cuando esta es la única caja activa.
+  /**
+   * Una venta con `metodo_pago='mixto'` se cobró en parte en efectivo y en
+   * parte no, y el reparto vive en `pagos_desglose`. Si se la contara solo por
+   * su `metodo_pago`, su efectivo no entraría a `ventas_efectivo` y el
+   * efectivo esperado saldría más bajo que la plata del cajón: la caja no
+   * cerraría. Por eso cada método suma lo propio MÁS la porción que le toca de
+   * las ventas mixtas.
+   *
+   * `pagos_desglose` es jsonb y puede no tener la clave del método; de ahí los
+   * COALESCE. Una venta mixta sin reparto es imposible (la base lo rechaza con
+   * el CHECK `ventas_mixto_exige_desglose`), pero el COALESCE la contaría como
+   * 0 en vez de romper el arqueo.
+   */
+  const porMetodo = (metodo: string) =>
+    `COALESCE(SUM(total) FILTER (WHERE tipo_venta='CONTADO' AND metodo_pago='${metodo}'),0)
+     + COALESCE(SUM(COALESCE((pagos_desglose->>'${metodo}')::numeric, 0))
+                FILTER (WHERE tipo_venta='CONTADO' AND metodo_pago='mixto'),0)`;
+
   const qVentas = q.query(
     `SELECT
        COUNT(*) cantidad,
-       COALESCE(SUM(total) FILTER (WHERE tipo_venta='CONTADO' AND metodo_pago='efectivo'),0) ventas_efectivo,
-       COALESCE(SUM(total) FILTER (WHERE tipo_venta='CONTADO' AND metodo_pago='tarjeta'),0) ventas_tarjeta,
-       COALESCE(SUM(total) FILTER (WHERE tipo_venta='CONTADO' AND metodo_pago='transferencia'),0) ventas_transferencia,
+       ${porMetodo("efectivo")} ventas_efectivo,
+       ${porMetodo("tarjeta")} ventas_tarjeta,
+       ${porMetodo("transferencia")} ventas_transferencia,
        COALESCE(SUM(total) FILTER (WHERE tipo_venta='CREDITO'),0) ventas_credito,
        COALESCE(SUM(total),0) ventas_total
      FROM ${tV}

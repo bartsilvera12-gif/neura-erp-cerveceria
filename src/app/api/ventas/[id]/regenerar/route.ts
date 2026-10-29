@@ -10,6 +10,7 @@ import {
 } from "@/lib/ventas/server/create-venta-pg";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 
+import { errorDesglose, normalizarDesglose } from "@/lib/ventas/pago-mixto";
 /**
  * POST /api/ventas/[id]/regenerar
  *
@@ -44,7 +45,7 @@ export async function POST(
     const vQ = await sb
       .from("ventas")
       .select(
-        "id, numero_control, estado, cliente_id, moneda, tipo_cambio, tipo_venta, plazo_dias, metodo_pago, subtotal, monto_iva, total, genera_nota_remision, factura_id"
+        "id, numero_control, estado, cliente_id, moneda, tipo_cambio, tipo_venta, plazo_dias, metodo_pago, pagos_desglose, subtotal, monto_iva, total, genera_nota_remision, factura_id"
       )
       .eq("empresa_id", empresaId)
       .eq("id", id)
@@ -63,6 +64,7 @@ export async function POST(
       tipo_venta: string;
       plazo_dias: number | null;
       metodo_pago: string | null;
+      pagos_desglose: unknown;
       subtotal: number | string;
       monto_iva: number | string;
       total: number | string;
@@ -127,11 +129,29 @@ export async function POST(
     const tipoVenta = (venta.tipo_venta === "CREDITO" ? "CREDITO" : "CONTADO") as
       | "CONTADO"
       | "CREDITO";
+    /**
+     * Se conserva el método de la venta original, incluido el reparto de un
+     * cobro mixto: regenerar una venta mixta como "efectivo" movería plata al
+     * arqueo que nunca entró al cajón.
+     */
     const metodoPago = (() => {
       const m = venta.metodo_pago;
-      if (m === "tarjeta" || m === "transferencia" || m === "efectivo") return m;
+      if (m === "tarjeta" || m === "transferencia" || m === "efectivo" || m === "mixto") return m;
       return null;
     })();
+    const pagosDesglose =
+      metodoPago === "mixto" ? normalizarDesglose(venta.pagos_desglose) : null;
+    if (metodoPago === "mixto") {
+      const eDesglose = errorDesglose(pagosDesglose, total);
+      if (eDesglose) {
+        return NextResponse.json(
+          errorResponse(
+            `La venta original tiene un cobro mixto que no se puede reconstruir: ${eDesglose}`
+          ),
+          { status: 409 }
+        );
+      }
+    }
 
     // Respeta el tipo de documento de la venta original: si tenía factura_id
     // fue "Factura electrónica" → emitirFactura=true. Si no, fue "Solo ticket"
@@ -156,6 +176,7 @@ export async function POST(
         tipoVenta,
         plazoDias: tipoVenta === "CREDITO" ? venta.plazo_dias ?? null : null,
         metodoPago,
+        pagosDesglose,
         items,
         subtotalDeclarado: subtotal,
         montoIvaDeclarado: montoIva,
