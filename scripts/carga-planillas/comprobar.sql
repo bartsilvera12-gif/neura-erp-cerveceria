@@ -42,3 +42,30 @@ SELECT (SELECT sum(stock_actual) FROM cerveceriaerp.productos WHERE sku LIKE 'FA
 \echo '>> la cerveza sigue sin mover stock'
 SELECT count(*) AS movimientos_no_planta FROM cerveceriaerp.movimientos_inventario
  WHERE producto_sku NOT LIKE 'FAB-%';
+
+\echo '>> compras historicas (iguales tras las dos corridas)'
+SELECT (SELECT count(*) FROM cerveceriaerp.compras WHERE numero_control LIKE 'HIST-%') AS compras,
+       (SELECT count(DISTINCT numero_control) FROM cerveceriaerp.compras WHERE numero_control LIKE 'HIST-%') AS lotes,
+       (SELECT count(*) FROM cerveceriaerp.movimientos_inventario WHERE usuario_nombre='Carga historica') AS movimientos;
+
+\echo '>> el stock de los insumos tiene que quedar en 0: lo que entro salio'
+SELECT count(*) FILTER (WHERE round(stock_actual,6) <> 0) AS insumos_con_stock_distinto_de_cero,
+       count(*) FILTER (WHERE costo_promedio > 0)         AS insumos_con_costo,
+       count(*)                                           AS insumos
+  FROM cerveceriaerp.productos WHERE es_insumo;
+
+\echo '>> entradas y salidas de insumos tienen que cuadrar'
+SELECT tipo, round(sum(cantidad),4) AS cantidad, count(*) AS n
+  FROM cerveceriaerp.movimientos_inventario
+ WHERE usuario_nombre='Carga historica' GROUP BY tipo ORDER BY tipo;
+
+\echo '>> total comprado por lote (tiene que dar igual que la planilla)'
+SELECT numero_control, round(sum(total)) AS total_gs
+  FROM cerveceriaerp.compras WHERE numero_control LIKE 'HIST-%'
+ GROUP BY numero_control ORDER BY numero_control;
+
+\echo '>> y el costeo de las recetas activas ya no da 0'
+SELECT r.nombre,
+       round((cerveceriaerp.fn_receta_costeo(r.id)->>'costo_total')::numeric)    AS costo_lote,
+       round((cerveceriaerp.fn_receta_costeo(r.id)->>'costo_unitario')::numeric) AS por_litro
+  FROM cerveceriaerp.recetas r WHERE r.activa ORDER BY r.nombre;

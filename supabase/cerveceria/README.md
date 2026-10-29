@@ -19,6 +19,7 @@ Ejecutar con un rol administrador (`postgres` / `supabase_admin`).
 | 12 | `12_carga_coven_planillas.sql` | Carga de las planillas de COVEN: 2 proveedores, 25 insumos con su costo, 4 productos a granel, 4 recetas y los 15 lotes históricos de las planillas de cocción. No mueve stock ni pisa el costo de un insumo que ya tenga compras. Supuestos y pendientes en `docs/CARGA-PLANILLAS-COVEN.md`. |
 | 13 | `13_inventario_fabrica.sql` | Inventario de planta: 57 artículos de ferretería y repuestos con su ubicación física. Carga stock con un movimiento `inventario_inicial`; los 10 artículos que la planilla no contó quedan sin control de stock en vez de en cero. |
 | 14 | `14_costeo_operacion_packaging.sql` | Costeo completo: líneas de costo de hacer el lote (mano de obra, energía, overhead), costos de envasado por formato y los márgenes objetivo por canal. El cálculo vive en `src/lib/recetas/costeo-completo.ts`. |
+| 15 | `15_compras_historicas.sql` | Las 15 compras (129 líneas) que están en las planillas de cocción, con su entrada y la salida del consumo del lote, así el stock no queda inflado. Llena el `costo_promedio` de 23 insumos: sin eso el costeo de las recetas da 0. Requiere el 12. |
 
 El paso 4 crea la **ficha** de cada usuario en el ERP; el **login** lo crean el
 3 (para el dueño) y el 5 (para los dos operativos). Sin el login, el usuario

@@ -223,3 +223,30 @@ CREATE TABLE IF NOT EXISTS cerveceriaerp.inventario_ubicaciones (
   nombre text NOT NULL, codigo text, tipo text NOT NULL DEFAULT 'deposito',
   parent_id uuid, descripcion text, activo boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz);
+
+CREATE TABLE IF NOT EXISTS cerveceriaerp.compras (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id uuid NOT NULL REFERENCES cerveceriaerp.empresas(id) ON DELETE CASCADE,
+  sucursal_id uuid REFERENCES cerveceriaerp.sucursales(id) ON DELETE RESTRICT,
+  proveedor_id uuid, proveedor_nombre text,
+  producto_id uuid NOT NULL REFERENCES cerveceriaerp.productos(id) ON DELETE RESTRICT,
+  producto_nombre text NOT NULL,
+  cantidad numeric NOT NULL, moneda text NOT NULL DEFAULT 'PYG', tipo_cambio numeric,
+  costo_unitario_original numeric, costo_unitario numeric NOT NULL,
+  iva_tipo text NOT NULL DEFAULT '10', subtotal numeric, monto_iva numeric, total numeric,
+  precio_venta numeric, margen_venta numeric,
+  tipo_pago text NOT NULL DEFAULT 'contado', plazo_dias integer,
+  nro_timbrado text, numero_control text, estado text NOT NULL DEFAULT 'registrada',
+  fecha timestamptz NOT NULL DEFAULT now(), fecha_factura date, metodo_pago text,
+  comprobante_url text, comprobante_storage_path text, comprobante_nombre text,
+  comprobante_mime_type text, created_by uuid, usuario_nombre text,
+  numero_factura_proveedor text);
+
+CREATE TABLE IF NOT EXISTS cerveceriaerp.proveedor_productos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id uuid NOT NULL REFERENCES cerveceriaerp.empresas(id) ON DELETE CASCADE,
+  producto_id uuid NOT NULL REFERENCES cerveceriaerp.productos(id) ON DELETE CASCADE,
+  proveedor_id uuid NOT NULL REFERENCES cerveceriaerp.proveedores(id) ON DELETE CASCADE,
+  costo_habitual numeric, es_principal boolean NOT NULL DEFAULT false,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT proveedor_productos_uq UNIQUE (empresa_id, producto_id, proveedor_id));

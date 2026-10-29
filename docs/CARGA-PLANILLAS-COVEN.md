@@ -1,16 +1,17 @@
 # Carga de las planillas de COVEN
 
-Qué carga `supabase/cerveceria/12_carga_coven_planillas.sql`, de dónde sale cada
-número y qué quedó pendiente de confirmar.
+Qué cargan los scripts 12, 13 y 15, de dónde sale cada número y qué quedó
+pendiente de confirmar.
 
 Las planillas de origen son `coccion-grande.xlsx` (3 lotes de 500 L),
 `coccion-pequena.xlsx` (12 lotes piloto), `coven_costeo_500l_y_precios.xlsx` y
-`inventario-fabrica.xlsx`. El script carga **las dos de cocción**. El inventario
-de planta y el modelo de costeo todavía no.
+`inventario-fabrica.xlsx`. Las cuatro ya están cargadas, con los scripts 12
+(insumos, recetas y lotes), 13 (inventario de planta) y 15 (compras).
 
-El script no se escribió a mano: lo genera `scripts/carga-planillas/generar.py`
-desde el catálogo de `catalogo.py` y el parseo de `lotes.py`, así que se puede
-volver a generar si cambian las planillas.
+Los scripts no se escribieron a mano: los generan los `generar*.py` de
+`scripts/carga-planillas/`, desde el catálogo de `catalogo.py` y el parseo de
+`lotes.py`, `inventario.py` y `compras.py`. Se pueden volver a generar si
+cambian las planillas.
 
 ## Lo que deja
 
@@ -24,10 +25,11 @@ volver a generar si cambian las planillas.
 
 ## Decisiones que conviene conocer
 
-**No mueve stock.** Los 15 lotes ya se produjeron y sus insumos ya se
-consumieron. Si el script generara movimientos de inventario descontaría otra
-vez una malta que no está en el depósito y dejaría el stock en negativo. Entran
-como historia cerrada, con el consumo y el costo en `observaciones`.
+**Los lotes no inflan el stock.** Los 15 ya se produjeron y sus insumos ya se
+consumieron. El script 12 los carga como historia cerrada, con el consumo y el
+costo en `observaciones`, sin tocar inventario. El 15 sí mueve stock, pero las
+dos puntas: entra por la compra y sale por el cocimiento, la misma cantidad el
+mismo día, así que el neto es cero.
 
 **No pisa un costo que ya exista.** Si un insumo ya tiene `costo_promedio`
 distinto de 0 (porque hubo compras), el script no lo toca: el CPP del ERP manda
@@ -45,11 +47,13 @@ la receta. El redondeo de esa división representa 0,1 % del costo de un lote.
 
 ## Pendientes de confirmar con el cliente
 
-1. **Levadura New England.** La planilla dice 699.000 Gs por "NEW E 11GR". A
-   63.545 Gs/g no parece el precio de un sachet de 11 g. Se cargó con **costo
-   0** en vez de propagar un número que creemos equivocado: por eso el costeo
-   de la receta Session IPA 500 L da 2.441.070 Gs y el lote real de la planilla
-   3.143.320 Gs. La diferencia es exactamente esos 699.000 más el redondeo.
+1. **Levadura New England.** La planilla dice 699.000 Gs por "NEW E 11GR", o
+   sea 63.545 Gs/g, que no parece el precio de un sachet de 11 g. Igual se
+   cargó tal cual con el script 15: la receta usa los mismos 11 g que dice la
+   planilla, así que el costo del lote sale bien aunque el peso del envase esté
+   mal escrito. Si el envase resulta ser de otro tamaño, hay que corregir la
+   cantidad en los dos lados a la vez (la compra y la receta); corregir uno
+   solo rompe el total.
 
 2. **Citra Cryo.** La planilla lo mide en "1 LITRO" y es un lúpulo, que se pesa.
    Se cargó asumiendo **1 litro = 1 kg** (445 Gs/g). Si el envase es de otro
@@ -89,13 +93,56 @@ la receta. El redondeo de esa división representa 0,1 % del costo de un lote.
    En `coccion-pequena` el lote 7 es posterior al 8 y no hay lote 1. Los códigos
    del ERP (`COC-G-nn`, `COC-P-nn`) respetan la numeración de la planilla.
 
+## Compras históricas (script 15)
+
+El costeo de una receta multiplica cantidad por el `costo_promedio` del insumo,
+y ese costo lo llena el ERP con las compras. Sin ninguna compra cargada todo el
+costeo daba 0. El script 15 carga las 15 compras (129 líneas) que están en las
+planillas de cocción, una por lote.
+
+**El stock no queda inflado.** Cada fila de las planillas es lo que se compró
+*para* ese lote, así que compra y consumo son la misma cantidad: el script
+carga las dos puntas, la entrada por la compra y la salida por el cocimiento.
+Cargando sólo las compras, el depósito quedaría con 1.400 kg de malta que se
+usó hace meses.
+
+**El IVA no se inventa.** Las planillas traen un importe y nada más. Las
+compras entran como `exenta` con IVA 0, y se reconocen porque su
+`numero_control` empieza con `HIST-`. **No sirven para el libro de IVA**: están
+para costear.
+
+**El costo que queda es el de la última compra**, no un promedio. Es lo que
+hace el ERP cuando se carga una compra desde la pantalla, pese al nombre de la
+columna `costo_promedio`. Se replicó igual para que el número no dependa de por
+dónde se cargó.
+
+Por eso una receta puede costar algo distinto que el lote que la originó: el
+lote pagó cada pack a su precio (el de 200 g sale más barato por gramo que el
+de 50 g) y la receta usa un único costo por gramo, el último. En la Session IPA
+500 L son 3.250 Gs sobre 3.143.320, o sea 0,1 %.
+
+### Dos insumos quedan sin costo
+
+`MP-CARADEX` y `LV-AY4`. Los usa la receta del script 07 pero ningún lote de
+las planillas los compró nunca:
+
+- **MP-CARADEX** es la "Caradextrina" del script 07, que probablemente sea la
+  misma malta que las planillas compran como "Cara Clair" (ver el punto 3 de
+  arriba). Las dos aparecen en la misma línea de la misma receta y en la misma
+  cantidad, 4,17 kg.
+- **LV-AY4** es la levadura Fermoale AY4 que dice la receta, pero los tres
+  lotes de 500 L usaron Safale US-05.
+
+Mientras sigan en 0, la receta Coven Blonde Ale 500 L costea 1.422.474 Gs
+cuando el lote real costó 2.244.729. Un insumo sin costo no rompe nada: deja la
+receta más barata de lo que es, que es peor, porque no se nota. La última
+consulta del script 15 los lista.
+
 ## Lo que todavía no se cargó
 
-- **`inventario-fabrica.xlsx`**: 57 ítems de ferretería y repuestos con su
-  ubicación física. Hay 8 con cantidad `0000`, que parece "sin contar" y no
-  "cero"; hay que decidirlo antes de cargarlos.
-- **El modelo de costeo**: mano de obra, energía, agua y overhead por lote, y el
-  simulador de precio por formato. Hoy vive sólo en la planilla.
+- **El modelo de costeo operativo**: mano de obra, energía, agua y overhead por
+  lote. El ERP ya tiene dónde ponerlos (script 14, pantalla *Costeo completo y
+  precios*), pero los números de la planilla todavía no se cargaron.
 
 ## Cómo se probó
 
