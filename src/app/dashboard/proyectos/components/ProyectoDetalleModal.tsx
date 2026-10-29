@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ProyectoDetalleInner from "./ProyectoDetalleInner";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 export default function ProyectoDetalleModal({
   projectId,
@@ -14,18 +15,25 @@ export default function ProyectoDetalleModal({
   onClose: () => void;
   onUpdated: () => void;
 }) {
+  const { confirmar } = useDialogos();
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     if (!open) setDirty(false);
   }, [open]);
 
-  const requestClose = useCallback(() => {
+  const requestClose = useCallback(async () => {
     if (dirty) {
-      if (!window.confirm("Hay cambios sin guardar en Datos. ¿Cerrar igualmente?")) return;
+      const seguir = await confirmar({
+        titulo: "Hay cambios sin guardar",
+        mensaje: "Los cambios en Datos se pierden si cerrás ahora.",
+        confirmar: "Cerrar sin guardar",
+        tono: "peligro",
+      });
+      if (!seguir) return;
     }
     onClose();
-  }, [dirty, onClose]);
+  }, [dirty, onClose, confirmar]);
 
   useEffect(() => {
     if (!open) return;

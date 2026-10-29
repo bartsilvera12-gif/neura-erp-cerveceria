@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import AppShell from "../components/AppShell";
 import { ThemeProvider } from "../components/ThemeProvider";
 import AuthGuard from "../components/AuthGuard";
+import DialogosProvider from "../components/ui/Dialogos";
 import "./globals.css";
 
 /**
@@ -45,9 +46,13 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <body className={`${plusJakarta.variable} ${geistMono.variable} antialiased`}>
         <ThemeProvider>
-          <AuthGuard>
-            <AppShell>{children}</AppShell>
-          </AuthGuard>
+          {/* Envuelve a toda la app: los avisos y confirmaciones del ERP se
+              piden desde cualquier pantalla con useDialogos(). */}
+          <DialogosProvider>
+            <AuthGuard>
+              <AppShell>{children}</AppShell>
+            </AuthGuard>
+          </DialogosProvider>
         </ThemeProvider>
       </body>
     </html>

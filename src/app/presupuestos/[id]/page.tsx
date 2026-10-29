@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, Copy, Download, FileCheck2, FileText, Loader2, Pencil, Receipt } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { ESTADO_LABEL, type EstadoPresupuesto } from "@/lib/presupuestos/types";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 type Presu = {
   id: string;
@@ -70,6 +71,7 @@ function fmtFecha(iso: string | null) {
 }
 
 export default function PresupuestoDetallePage() {
+  const { confirmar } = useDialogos();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params.id;
@@ -131,7 +133,11 @@ export default function PresupuestoDetallePage() {
 
   async function convertir() {
     if (busy) return;
-    if (!confirm("¿Crear un pedido desde este presupuesto? No se descuenta stock ni se genera venta.")) return;
+    if (!(await confirmar({
+      titulo: "Crear pedido",
+      mensaje: "Se crea un pedido desde este presupuesto. No se descuenta stock ni se genera la venta.",
+      confirmar: "Crear pedido",
+    }))) return;
     setBusy(true);
     setError(null);
     setOk(null);
@@ -153,7 +159,13 @@ export default function PresupuestoDetallePage() {
 
   async function facturarDirecto() {
     if (busy) return;
-    if (!confirm("¿Facturar directamente este presupuesto? Se generará la venta, se descontará el stock y se emitirá la factura electrónica en un solo paso.")) return;
+    if (!(await confirmar({
+      titulo: "Facturar el presupuesto",
+      mensaje:
+        "En un solo paso se genera la venta, se descuenta el stock y se emite la factura electrónica.",
+      confirmar: "Facturar",
+      tono: "peligro",
+    }))) return;
     setBusy(true);
     setError(null);
     setOk(null);

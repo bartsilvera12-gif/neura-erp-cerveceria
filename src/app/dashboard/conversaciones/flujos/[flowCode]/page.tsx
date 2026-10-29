@@ -16,6 +16,7 @@ import {
   validateQuickReplyGroupsMaxThree,
 } from "@/lib/chat/flow-button-groups";
 import NumeroInput from "@/components/ui/NumeroInput";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 type FlowNodeOption = {
   id: string;
@@ -328,6 +329,7 @@ function buildPayloadFromSimple(
 }
 
 export default function FlowEditorPage() {
+  const { confirmar } = useDialogos();
   const params = useParams<{ flowCode: string }>();
   const flowCode = decodeURIComponent(params?.flowCode ?? "");
   const [nodes, setNodes] = useState<FlowNode[]>([]);
@@ -1067,9 +1069,12 @@ export default function FlowEditorPage() {
 
   async function deleteNode(node: FlowNode) {
     if (
-      !globalThis.confirm(
-        `¿Eliminar el paso «${node.node_code}»? Las opciones y bloques de este paso se borrarán. No se puede deshacer.`
-      )
+      !(await confirmar({
+        titulo: `Eliminar el paso «${node.node_code}»`,
+        mensaje: "Se borran también sus opciones y bloques. No se puede deshacer.",
+        confirmar: "Eliminar",
+        tono: "peligro",
+      }))
     ) {
       return;
     }

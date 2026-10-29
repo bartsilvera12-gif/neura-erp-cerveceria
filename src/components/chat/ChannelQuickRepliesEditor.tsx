@@ -8,6 +8,7 @@ import {
   updateChannelQuickReply,
   type ChannelQuickReplyRow,
 } from "@/lib/chat/quick-replies-actions";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 type Props = {
   channelId: string;
@@ -186,6 +187,7 @@ function QuickReplyRowEditor({
   onBusy: (id: string | null) => void;
   onReload: () => void;
 }) {
+  const { confirmar } = useDialogos();
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState(row.title);
   const [body, setBody] = useState(row.body);
@@ -229,7 +231,7 @@ function QuickReplyRowEditor({
   }
 
   async function remove() {
-    if (!confirm("¿Eliminar esta respuesta rápida?")) return;
+    if (!(await confirmar({ mensaje: "¿Eliminar esta respuesta rápida?", confirmar: "Eliminar", tono: "peligro" }))) return;
     onBusy(row.id);
     try {
       await deleteChannelQuickReply(row.id);

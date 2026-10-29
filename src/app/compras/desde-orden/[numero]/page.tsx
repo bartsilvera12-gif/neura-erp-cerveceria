@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { uploadComprobante } from "@/lib/compras/storage";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 type OcCab = { id: string; numero: string; proveedor_nombre: string; estado: string; fecha: string; moneda: string; tipo_pago: string; plazo_dias: number | null };
 type OcItem = { id: string; producto_nombre: string; sku_snapshot: string | null; cantidad_solicitada: number; cantidad_recibida: number; costo_estimado: number };
@@ -24,6 +25,8 @@ const labelClass = "mb-1 block text-xs font-semibold text-slate-600";
 const RECEPTIBLES = ["emitida", "aprobada", "parcialmente_recibida"];
 
 export default function DesdeOrdenRecepcionPage() {
+  // `confirmar` ya es el nombre de la accion de esta pantalla.
+  const { confirmar: pedirConfirmacion } = useDialogos();
   const params = useParams<{ numero: string }>();
   const router = useRouter();
   const numeroOc = decodeURIComponent(String(params.numero));
@@ -96,7 +99,11 @@ export default function DesdeOrdenRecepcionPage() {
       return { item_id: it.id, cantidad: cant, costo_unitario: Number(r?.costo) || 0 };
     }).filter((x) => x.cantidad > 0);
     if (recepciones.length === 0) { setErr("Marcá al menos un producto como recibido."); return; }
-    if (!window.confirm("¿Confirmar la recepción? Se crea la compra real y suma stock por lo recibido.")) return;
+    if (!(await pedirConfirmacion({
+      titulo: "Confirmar la recepción",
+      mensaje: "Se crea la compra real y suma al stock lo que se recibió.",
+      confirmar: "Confirmar",
+    }))) return;
 
     setProcesando(true);
     try {

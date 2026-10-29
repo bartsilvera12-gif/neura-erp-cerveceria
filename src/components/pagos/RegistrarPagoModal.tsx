@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import MontoInput, { parseMontoInput } from "@/components/ui/MontoInput";
 import { apiCreatePago } from "@/lib/api/client";
 import { hoyYmdLocal } from "@/lib/fechas/calendario";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 const inputClass =
   "w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none bg-white text-sm";
@@ -39,6 +40,7 @@ export function RegistrarPagoModal({
   onClose: () => void;
   onExito: () => void | Promise<void>;
 }) {
+  const { avisar } = useDialogos();
   const [monto, setMonto] = useState("");
   const [fechaPago, setFechaPago] = useState("");
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
@@ -62,11 +64,14 @@ export function RegistrarPagoModal({
     e.preventDefault();
     const m = parseMontoInput(String(monto));
     if (m > f.saldo) {
-      window.alert("El monto del pago no puede superar el saldo pendiente de la factura.");
+      await avisar({
+        mensaje: "El monto del pago no puede superar el saldo pendiente de la factura.",
+        tono: "peligro",
+      });
       return;
     }
     if (m <= 0) {
-      window.alert("Ingresá un monto mayor a cero.");
+      await avisar({ mensaje: "Ingresá un monto mayor a cero.", tono: "peligro" });
       return;
     }
     setGuardando(true);
@@ -82,7 +87,10 @@ export function RegistrarPagoModal({
       await Promise.resolve(onExito());
       onClose();
     } else {
-      window.alert("Error al registrar el pago. Verificá el monto y vuelve a intentar.");
+      await avisar({
+        mensaje: "No se pudo registrar el pago. Revisá el monto y volvé a intentar.",
+        tono: "peligro",
+      });
     }
   }
 

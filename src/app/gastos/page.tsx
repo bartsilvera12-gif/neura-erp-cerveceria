@@ -6,6 +6,7 @@ import { getGastos, deleteGasto } from "@/lib/gastos/actions";
 import type { Gasto } from "@/lib/gastos/actions";
 
 import { ClipboardList } from "lucide-react";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 function formatGs(valor: number) {
   return `${valor.toLocaleString("es-PY")} ₲`;
@@ -41,6 +42,7 @@ const metodoPagoBadge: Record<string, { label: string; className: string }> = {
 };
 
 export default function GastosPage() {
+  const { confirmar } = useDialogos();
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [errorAccion, setErrorAccion] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -91,7 +93,11 @@ export default function GastosPage() {
   }, []);
 
   async function handleEliminar(g: Gasto) {
-    if (!confirm(`¿Eliminar el gasto "${g.descripcion || g.categoria || "sin descripción"}"?`)) return;
+    if (!(await confirmar({
+      mensaje: `¿Eliminar el gasto "${g.descripcion || g.categoria || "sin descripción"}"?`,
+      confirmar: "Eliminar",
+      tono: "peligro",
+    }))) return;
     setEliminando(g.id);
     setErrorAccion(null);
     try {

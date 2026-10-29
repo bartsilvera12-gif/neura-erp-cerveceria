@@ -75,6 +75,7 @@ import {
   resolveAttachmentUrl,
   tabClass,
 } from "./_components/utils";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 export type ConversacionesClientMode = "inbox" | "historial";
 
@@ -103,6 +104,7 @@ export function ConversacionesClient({
   /** Rol operativo omnicanal (precargado para mensajes UX de alcance). */
   initialOmnicanalRole?: OmnicanalOperatorRole | null;
 }) {
+  const { confirmar } = useDialogos();
   const supabaseChat = useMemo(
     () => createBrowserClientForSchema(chatDataSchema),
     [chatDataSchema]
@@ -1023,9 +1025,11 @@ export function ConversacionesClient({
 
     let confirmHumanOverride = false;
     if (sel.human_taken_over || sel.flow_status === "human") {
-      const ok = window.confirm(
-        "La conversación está en modo humano. ¿Reenviar igualmente el mensaje del paso actual del bot?"
-      );
+      const ok = await confirmar({
+        titulo: "La conversación está en modo humano",
+        mensaje: "¿Reenviar igualmente el mensaje del paso actual del bot?",
+        confirmar: "Reenviar",
+      });
       if (!ok) return;
       confirmHumanOverride = true;
     }
@@ -1053,9 +1057,11 @@ export function ConversacionesClient({
     try {
       let { res, json } = await postOnce(confirmHumanOverride);
       if (res.status === 409 && json.needs_human_override_confirmation) {
-        const ok = window.confirm(
-          "La conversación está en modo humano. ¿Reenviar igualmente el mensaje del paso actual del bot?"
-        );
+      const ok = await confirmar({
+          titulo: "La conversación está en modo humano",
+          mensaje: "¿Reenviar igualmente el mensaje del paso actual del bot?",
+          confirmar: "Reenviar",
+        });
         if (!ok) return;
         ({ res, json } = await postOnce(true));
       }

@@ -20,6 +20,7 @@ import {
   errorTelefono as validarTelefono,
   primerError,
 } from "@/lib/validacion/documentos";
+import { useDialogos } from "@/components/ui/Dialogos";
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatGs(valor: number) {
@@ -98,6 +99,7 @@ function SegmentedControl<T extends string>({
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export default function NuevaCompraPage() {
+  const { avisar } = useDialogos();
   const router = useRouter();
 
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -309,7 +311,7 @@ export default function NuevaCompraPage() {
         items
       );
       if (!res.success) { setErrorSubmit(res.error); return; }
-      if (res.warning) alert(res.warning);
+      if (res.warning) await avisar(res.warning);
       router.push("/compras");
     } finally {
       setSubmitting(false);

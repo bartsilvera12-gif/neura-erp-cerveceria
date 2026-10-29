@@ -372,6 +372,19 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(r.numero_recibo)} — Recibo de dinero</title>
 <style>
+/* Diálogo propio de esta página (ver el comentario del script). */
+.dlg-fondo{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.4);padding:16px}
+.dlg-fondo[hidden]{display:none}
+.dlg{width:100%;max-width:420px;background:#fff;border-radius:12px;box-shadow:0 20px 50px rgba(15,23,42,.25);padding:20px;font-family:inherit}
+.dlg h3{margin:0 0 6px;font-size:14px;font-weight:600;color:#0f172a}
+.dlg p{margin:0 0 12px;font-size:14px;line-height:1.5;color:#475569}
+.dlg textarea{width:100%;box-sizing:border-box;resize:none;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;font:inherit;font-size:14px}
+.dlg textarea:focus{outline:none;border-color:#4FAEB2;box-shadow:0 0 0 1px #4FAEB2}
+.dlg-error{margin:6px 0 0;font-size:12px;color:#dc2626}
+.dlg-botones{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.dlg-botones button{border:0;border-radius:8px;padding:8px 14px;font:inherit;font-size:14px;cursor:pointer;background:none;color:#64748b}
+.dlg-botones .dlg-ok{background:#dc2626;color:#fff;font-weight:500}
+.dlg-botones .dlg-ok:hover{background:#b91c1c}
   *{box-sizing:border-box} html,body{margin:0;padding:0}
   body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;background:#f3f4f6}
   /* Apaisado (como el talonario del cliente): mas ancho que alto. */
@@ -462,6 +475,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   @media print{
     body{background:#fff}
     .toolbar{display:none}
+    .no-print{display:none !important}
     .page{width:auto;min-height:auto;margin:0;padding:6mm}
     @page{size:A4 landscape;margin:8mm}
     .marco{box-shadow:none}
@@ -585,17 +599,86 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     : ""}
 </div>
 
+<div id="dlgFondo" class="dlg-fondo no-print" hidden>
+  <div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitulo">
+    <h3 id="dlgTitulo"></h3>
+    <p id="dlgMensaje"></p>
+    <textarea id="dlgTexto" rows="3" placeholder="Ej: cargado por error" hidden></textarea>
+    <p id="dlgError" class="dlg-error" hidden></p>
+    <div class="dlg-botones">
+      <button type="button" id="dlgCancelar">Cancelar</button>
+      <button type="button" id="dlgAceptar" class="dlg-ok">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 try{ if (${auto ? "true" : "false"}) window.print(); }catch(e){}
+
+/* Esta página se sirve suelta desde la API, fuera del bundle de React, así que
+   no puede usar los diálogos del ERP. Se replican acá en chico: lo que no se
+   puede compartir es el código, pero el operador tiene que ver lo mismo y no
+   un cartel del navegador que diga "esta página dice". */
+function dialogo(op){
+  return new Promise(function(resolver){
+    var fondo = document.getElementById("dlgFondo");
+    var txt = document.getElementById("dlgTexto");
+    var err = document.getElementById("dlgError");
+    var ok = document.getElementById("dlgAceptar");
+    var cancelar = document.getElementById("dlgCancelar");
+    document.getElementById("dlgTitulo").textContent = op.titulo || "Confirmar";
+    document.getElementById("dlgMensaje").textContent = op.mensaje || "";
+    ok.textContent = op.confirmar || "Confirmar";
+    cancelar.hidden = !!op.soloAviso;
+    txt.hidden = !op.pedirTexto;
+    txt.value = "";
+    err.hidden = true;
+    fondo.hidden = false;
+    setTimeout(function(){ (op.pedirTexto ? txt : ok).focus(); }, 30);
+
+    function cerrar(valor){
+      fondo.hidden = true;
+      document.removeEventListener("keydown", onKey);
+      ok.onclick = null; cancelar.onclick = null; fondo.onmousedown = null;
+      resolver(valor);
+    }
+    function aceptar(){
+      if (op.pedirTexto) {
+        var v = String(txt.value || "").trim();
+        if (v.length < (op.minimo || 0)) {
+          err.textContent = "Escribí al menos " + op.minimo + " caracteres (van " + v.length + ").";
+          err.hidden = false;
+          return;
+        }
+        return cerrar(v);
+      }
+      cerrar(true);
+    }
+    function onKey(e){
+      if (e.key === "Escape") { e.preventDefault(); cerrar(op.pedirTexto ? null : false); }
+      if (e.key === "Enter" && !op.pedirTexto) { e.preventDefault(); aceptar(); }
+    }
+    ok.onclick = aceptar;
+    cancelar.onclick = function(){ cerrar(op.pedirTexto ? null : false); };
+    fondo.onmousedown = function(e){ if (e.target === fondo) cerrar(op.pedirTexto ? null : false); };
+    document.addEventListener("keydown", onKey);
+  });
+}
+function avisar(mensaje, titulo){
+  return dialogo({ titulo: titulo || "Aviso", mensaje: mensaje, soloAviso: true, confirmar: "Entendido" });
+}
 
 // Anulación de recibo (solo admin: el botón se pinta condicionalmente).
 async function anularRecibo(){
   const btn = document.getElementById("btnAnular");
-  const motivo = window.prompt("Anular este recibo. Escribí el motivo (mínimo 5 caracteres):", "");
-  if (motivo === null) return; // canceló
-  const m = String(motivo).trim();
-  if (m.length < 5) { alert("El motivo debe tener al menos 5 caracteres."); return; }
-  if (!window.confirm("¿Confirmás anular este recibo? Esta acción no se puede deshacer.")) return;
+  const m = await dialogo({
+    titulo: "Anular el recibo",
+    mensaje: "Escribí el motivo de la anulación. Queda registrado y no se puede deshacer.",
+    pedirTexto: true,
+    minimo: 5,
+    confirmar: "Anular recibo",
+  });
+  if (m === null) return; // canceló
 
   if (btn) { btn.disabled = true; btn.textContent = "Anulando…"; }
 
@@ -628,14 +711,14 @@ async function anularRecibo(){
     });
     const body = await res.json().catch(function(){ return {}; });
     if (!res.ok || body.success === false) {
-      alert("No se pudo anular: " + (body.error || res.status));
+      await avisar(String(body.error || ("Error " + res.status)), "No se pudo anular");
       if (btn) { btn.disabled = false; btn.textContent = "Anular recibo"; }
       return;
     }
     // Refrescar para mostrar la marca ANULADO.
     window.location.reload();
   } catch(e) {
-    alert("Error de red al anular el recibo.");
+    await avisar("Error de red al anular el recibo.", "No se pudo anular");
     if (btn) { btn.disabled = false; btn.textContent = "Anular recibo"; }
   }
 }

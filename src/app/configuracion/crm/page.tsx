@@ -13,6 +13,7 @@ import {
   type EtapaCrm,
 } from "@/lib/crm/etapas";
 import type { ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 /** Mensaje de error de respuestas JSON `{ success, error }` o texto. */
 async function leerErrorApiClientes(r: Response): Promise<string> {
@@ -30,6 +31,7 @@ const FUENTE_ETAPAS_CONFIG =
   "GET /api/crm/etapas?config=1 → tabla crm_etapas (misma capa de datos que el Funnel; el dashboard no define etapas)";
 
 export default function ConfiguracionCrmPipelinePage() {
+  const { confirmar } = useDialogos();
   const [rolCargado, setRolCargado] = useState(false);
   const [puedeConfig, setPuedeConfig] = useState(false);
   const [rolDetectado, setRolDetectado] = useState<string | null>(null);
@@ -326,7 +328,14 @@ export default function ConfiguracionCrmPipelinePage() {
                     <button
                       type="button"
                       onClick={async () => {
-                        if (confirm("¿Eliminar esta etapa? Los prospectos en esta etapa quedarán sin etapa asignada.")) {
+                        if (
+                          await confirmar({
+                            mensaje:
+                              "Se elimina la etapa. Los prospectos que estaban en ella quedan sin etapa asignada.",
+                            confirmar: "Eliminar",
+                            tono: "peligro",
+                          })
+                        ) {
                           await deleteEtapa(e.id);
                           loadEtapas();
                         }
@@ -673,7 +682,14 @@ export default function ConfiguracionCrmPipelinePage() {
                           className="whitespace-nowrap text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
                           disabled={busyTipoServ}
                           onClick={async () => {
-                            if (!window.confirm("¿Eliminar permanentemente este segmento? (sin clientes vinculados)")) {
+                            if (
+                              !(await confirmar({
+                                mensaje:
+                                  "Se elimina el segmento de forma permanente. Sólo se puede si no tiene clientes vinculados.",
+                                confirmar: "Eliminar",
+                                tono: "peligro",
+                              }))
+                            ) {
                               return;
                             }
                             setMensajeTipos({ err: undefined, ok: undefined });

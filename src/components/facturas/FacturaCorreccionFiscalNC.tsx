@@ -7,6 +7,7 @@ import type { NotaCreditoListItemDTO, SifenPrevueloFacturaNcDTO } from "@/lib/no
 
 import { ChevronRight } from "lucide-react";
 import NumeroInput from "@/components/ui/NumeroInput";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 const MSG_BLOQUEO_TIMBRADO_ORIGEN =
   "No se puede generar la NC porque el timbrado de la factura origen es inválido o inconsistente.";
@@ -241,6 +242,7 @@ export function FacturaCorreccionFiscalNC({
   /** Rutas XML, SET test, payload técnico, etc. */
   debugUi?: boolean;
 }) {
+  const { confirmar } = useDialogos();
   const [loading, setLoading] = useState(true);
   /** True una vez que reload() completó por primera vez. Evita que refetches
    *  posteriores (poll SIFEN del panel padre, acciones que disparan reload)
@@ -644,7 +646,11 @@ export function FacturaCorreccionFiscalNC({
   }
 
   async function anularBorrador(nc: NotaCreditoListItemDTO) {
-    if (!confirm("¿Anular esta nota de crédito en borrador? Podrás crear otra después.")) return;
+    if (!(await confirmar({
+      mensaje: "¿Anular esta nota de crédito en borrador? Podés crear otra después.",
+      confirmar: "Anular",
+      tono: "peligro",
+    }))) return;
     setFlash(null);
     try {
       const res = await fetchWithSupabaseSession(`/api/facturas/${facturaId}/notas-credito/${nc.id}`, {

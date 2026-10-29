@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { Plus, X, Search, Loader2, Paperclip } from "lucide-react";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 type Resumen = {
@@ -469,6 +470,7 @@ function ModalCrear({ onClose, onCreada }: { onClose: () => void; onCreada: () =
 
 // ── Modal: detalle + anular ───────────────────────────────────────────────────
 function ModalDetalle({ id, onClose, onCambio }: { id: string; onClose: () => void; onCambio: () => void }) {
+  const { pedirTexto } = useDialogos();
   const [cab, setCab] = useState<Record<string, unknown> | null>(null);
   const [items, setItems] = useState<Array<Record<string, unknown>>>([]);
   const [cargando, setCargando] = useState(true);
@@ -498,8 +500,15 @@ function ModalDetalle({ id, onClose, onCambio }: { id: string; onClose: () => vo
   const moneda = String(g("moneda") ?? "PYG");
 
   async function anular() {
-    const motivo = window.prompt("Motivo de la anulación (mín. 5 caracteres):");
-    if (!motivo || motivo.trim().length < 5) return;
+    const motivo = await pedirTexto({
+      titulo: "Anular la nota de crédito",
+      mensaje: "Escribí el motivo de la anulación.",
+      placeholder: "Ej: cargada por error",
+      minimo: 5,
+      confirmar: "Anular",
+      multilinea: true,
+    });
+    if (!motivo) return;
     setAnulando(true);
     setErr(null);
     try {

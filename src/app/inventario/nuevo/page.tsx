@@ -11,6 +11,7 @@ import type { MetodoValuacion, TipoIvaProducto } from "@/lib/inventario/types";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
 
 import CrearRapidoModal, { type CrearRapidoTipo } from "@/components/inventario/CrearRapidoModal";
+import { useDialogos } from "@/components/ui/Dialogos";
 // Opciones estándar de unidad de medida para gastro
 const UNIDADES_OPCIONES = [
   "UNIDAD","KG","G","LT","ML","CAJA","BOLSA","PAQUETE","DOCENA","LATA","BOTELLA","PORCION","COMBO",
@@ -27,6 +28,7 @@ interface UbiRow { id: string; nombre: string; tipo: string }
 interface ProvRow { id: string; nombre: string }
 
 export default function NuevoProductoPage() {
+  const { avisar } = useDialogos();
   const router = useRouter();
   const [errorDuplicado, setErrorDuplicado] = useState<string | null>(null);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
@@ -383,13 +385,19 @@ export default function NuevoProductoPage() {
           if (!up.ok || !upJson?.success) {
             // Producto creado, imagen falló. No perder el producto: ir a editar con aviso.
             const msg = upJson?.error ?? "No se pudo subir la imagen.";
-            alert(`Producto creado correctamente, pero la imagen no pudo subirse: ${msg}\n\nPodés intentar subirla nuevamente desde la edición del producto.`);
+            await avisar({
+              titulo: "El producto se creó, la imagen no",
+              mensaje: `${msg}\n\nPodés subirla de nuevo desde la edición del producto.`,
+            });
             router.push(`/inventario/${guardado.id}/editar`);
             return;
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Error de red";
-          alert(`Producto creado correctamente, pero la imagen no pudo subirse: ${msg}\n\nPodés intentar subirla nuevamente desde la edición del producto.`);
+          await avisar({
+              titulo: "El producto se creó, la imagen no",
+              mensaje: `${msg}\n\nPodés subirla de nuevo desde la edición del producto.`,
+            });
           router.push(`/inventario/${guardado.id}/editar`);
           return;
         }

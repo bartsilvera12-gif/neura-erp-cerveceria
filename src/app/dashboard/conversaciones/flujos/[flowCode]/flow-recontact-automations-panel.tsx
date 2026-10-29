@@ -13,6 +13,7 @@ import {
 } from "@/lib/chat/recontact-dry-run-shared";
 import { WA_META_REPLY_BUTTON_MAX, WA_META_REPLY_TITLE_MAX } from "@/lib/chat/whatsapp-send-service";
 import NumeroInput from "@/components/ui/NumeroInput";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 export type FlowRecontactPickerNode = {
   node_code: string;
@@ -311,6 +312,7 @@ export function FlowRecontactAutomationsPanel(props: {
   flowCode: string;
   nodePickerOptions: FlowRecontactPickerNode[];
 }) {
+  const { confirmar } = useDialogos();
   const { flowCode, nodePickerOptions } = props;
   const currentFlowNodeCodes = useMemo(
     () => new Set(nodePickerOptions.map((n) => n.node_code)),
@@ -475,7 +477,11 @@ export function FlowRecontactAutomationsPanel(props: {
   }
 
   async function removeRule(row: RecontactRuleRowOut) {
-    if (!window.confirm(`¿Eliminar la automatización «${row.nombre}»?`)) return;
+    if (!(await confirmar({
+      mensaje: `¿Eliminar la automatización «${row.nombre}»?`,
+      confirmar: "Eliminar",
+      tono: "peligro",
+    }))) return;
     setError(null);
     try {
       const res = await fetchWithSupabaseSession(`${baseUrl}/${encodeURIComponent(row.id)}`, {

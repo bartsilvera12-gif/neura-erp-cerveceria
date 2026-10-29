@@ -15,12 +15,14 @@ import {
   type ChatChannelRow,
 } from "@/lib/chat/actions";
 import { getMisModulos } from "@/lib/empresas/actions";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 function hasOmnichannel(slugs: string[]) {
   return slugs.includes("conversaciones") || slugs.includes("omnicanal");
 }
 
 export default function EditarCanalPage() {
+  const { confirmar, avisar } = useDialogos();
   const params = useParams();
   const router = useRouter();
   const channelId = typeof params?.channelId === "string" ? params.channelId : "";
@@ -53,7 +55,15 @@ export default function EditarCanalPage() {
   }, [allowed, channelId, load]);
 
   async function handleDelete() {
-    if (!channelId || !confirm("¿Eliminar este canal? Las conversaciones asociadas pueden quedar huérfanas.")) {
+    if (
+      !channelId ||
+      !(await confirmar({
+        titulo: "Eliminar el canal",
+        mensaje: "Las conversaciones asociadas pueden quedar sin canal.",
+        confirmar: "Eliminar",
+        tono: "peligro",
+      }))
+    ) {
       return;
     }
     setDeleting(true);
@@ -61,7 +71,10 @@ export default function EditarCanalPage() {
       await deleteChatChannel(channelId);
       router.push("/configuracion/canales");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "No se pudo eliminar");
+      await avisar({
+        mensaje: e instanceof Error ? e.message : "No se pudo eliminar el canal.",
+        tono: "peligro",
+      });
     } finally {
       setDeleting(false);
     }

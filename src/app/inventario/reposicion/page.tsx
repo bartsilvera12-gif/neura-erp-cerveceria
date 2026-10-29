@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { ArrowLeftRight, Plus, X, Search, Clock, CheckCircle2, Truck, PackageCheck, Loader2, PackageSearch, Check, Printer } from "lucide-react";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 // ── Tipos que devuelve la API ────────────────────────────────────────────────
 type Resumen = {
@@ -604,6 +605,8 @@ function ModalDetalle({
   onClose: () => void;
   onCambio: () => void;
 }) {
+  // `confirmar` es el nombre del parametro de `accionar`, de ahi el alias.
+  const { confirmar: pedirConfirmacion, pedirTexto } = useDialogos();
   const [cab, setCab] = useState<Resumen | null>(null);
   const [items, setItems] = useState<ItemDet[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -640,7 +643,7 @@ function ModalDetalle({
   const faltaEquivalencia = items.some((i) => i.cantidad_solicitada > 0 && !i.tiene_equivalencia);
 
   async function accionar(path: string, body?: unknown, confirmar?: string) {
-    if (confirmar && !window.confirm(confirmar)) return;
+    if (confirmar && !(await pedirConfirmacion({ mensaje: confirmar, confirmar: "Continuar" }))) return;
     setAccion(path);
     setErr(null);
     try {
@@ -781,9 +784,16 @@ function ModalDetalle({
             {esOrigen && esAprobador && estado === "pendiente" && (
               <>
                 <button
-                  onClick={() => {
-                    const motivo = window.prompt("Motivo del rechazo:");
-                    if (motivo && motivo.trim()) accionar("rechazar", { motivo: motivo.trim() });
+                  onClick={async () => {
+                    const motivo = await pedirTexto({
+                      titulo: "Rechazar la reposición",
+                      mensaje: "Escribí por qué se rechaza. Lo ve quien la pidió.",
+                      placeholder: "Ej: no hay stock en origen",
+                      minimo: 1,
+                      confirmar: "Rechazar",
+                      multilinea: true,
+                    });
+                    if (motivo) accionar("rechazar", { motivo });
                   }}
                   disabled={!!accion}
                   className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"

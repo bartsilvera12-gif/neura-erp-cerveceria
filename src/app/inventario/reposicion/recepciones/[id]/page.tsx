@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, PackageCheck, Pencil, Truck } from "lucide-react";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 type Cabecera = {
   id: string;
@@ -36,6 +37,8 @@ function fmtFecha(iso: string | null): string {
 }
 
 export default function RecepcionDetallePage({ params }: { params: Promise<{ id: string }> }) {
+  // `confirmar` ya es el nombre de la accion de esta pantalla.
+  const { confirmar: pedirConfirmacion } = useDialogos();
   const { id } = usePromise(params);
   const router = useRouter();
 
@@ -114,7 +117,11 @@ export default function RecepcionDetallePage({ params }: { params: Promise<{ id:
   }
 
   async function confirmar() {
-    if (!window.confirm("¿Confirmar la recepción? Esto suma a tu stock las cantidades recibidas.")) return;
+    if (!(await pedirConfirmacion({
+      titulo: "Confirmar la recepción",
+      mensaje: "Suma a tu stock las cantidades recibidas.",
+      confirmar: "Confirmar",
+    }))) return;
     setConfirmando(true);
     setError(null);
     try {

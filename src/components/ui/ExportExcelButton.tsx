@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 interface Props {
   url: string;
@@ -13,6 +14,7 @@ interface Props {
  * recibe blob xlsx y lo descarga via link temporal.
  */
 export default function ExportExcelButton({ url, label = "Exportar Excel", className = "" }: Props) {
+  const { avisar } = useDialogos();
   const [busy, setBusy] = useState(false);
 
   async function handleClick() {
@@ -21,7 +23,7 @@ export default function ExportExcelButton({ url, label = "Exportar Excel", class
     try {
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) {
-        alert(`No se pudo exportar (${res.status}).`);
+        await avisar({ mensaje: `No se pudo exportar el archivo (error ${res.status}).`, tono: "peligro" });
         return;
       }
       const blob = await res.blob();
@@ -37,7 +39,10 @@ export default function ExportExcelButton({ url, label = "Exportar Excel", class
       document.body.removeChild(a);
       URL.revokeObjectURL(objUrl);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Error de red al exportar.");
+      await avisar({
+        mensaje: e instanceof Error ? e.message : "Error de red al exportar.",
+        tono: "peligro",
+      });
     } finally {
       setBusy(false);
     }

@@ -9,11 +9,13 @@ import {
   updateCategoriaProveedor,
 } from "@/lib/proveedores/storage";
 import type { ProveedorCategoria } from "@/lib/proveedores/types";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 const inputClass =
   "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#0EA5E9]";
 
 export default function ProveedorCategoriasPage() {
+  const { confirmar } = useDialogos();
   const [lista, setLista] = useState<ProveedorCategoria[]>([]);
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
@@ -79,7 +81,7 @@ export default function ProveedorCategoriasPage() {
 
   async function handleBorrar(c: ProveedorCategoria) {
     if (borrandoId) return;
-    if (!confirm(`¿Borrar el rubro "${c.nombre}"?`)) return;
+    if (!(await confirmar({ mensaje: `¿Borrar el rubro "${c.nombre}"?`, confirmar: "Borrar", tono: "peligro" }))) return;
     setBorrandoId(c.id);
     setError(null);
     const res = await deleteCategoriaProveedor(c.id);

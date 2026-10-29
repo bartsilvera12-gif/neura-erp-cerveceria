@@ -11,6 +11,7 @@ import {
 } from "@/lib/chat/supervision-admin-actions";
 import { listAgentesForEquiposPick, listSupervisoresForEquiposPick } from "@/lib/chat/queue-admin-actions";
 import type { UsuarioPickRow } from "@/lib/chat/queue-admin-repo";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 function hasOmnichannelFromModuleAccess(body: {
   superAdmin?: boolean;
@@ -28,6 +29,7 @@ function labelUsuario(u: UsuarioPickRow): string {
 }
 
 export default function OmnicanalEquiposPage() {
+  const { confirmar } = useDialogos();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [supervisores, setSupervisores] = useState<UsuarioPickRow[]>([]);
   const [agentes, setAgentes] = useState<UsuarioPickRow[]>([]);
@@ -99,7 +101,7 @@ export default function OmnicanalEquiposPage() {
   }
 
   async function handleRemove(id: string) {
-    if (!window.confirm("¿Quitar este agente del supervisor?")) return;
+    if (!(await confirmar({ mensaje: "¿Quitar este agente del supervisor?", confirmar: "Quitar" }))) return;
     setError(null);
     try {
       await removeSupervisionLink(id);

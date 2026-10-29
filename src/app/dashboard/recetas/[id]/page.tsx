@@ -13,6 +13,7 @@ import { useRolErp } from "@/lib/auth/use-rol-erp";
 import { puedeEditarRecetas } from "@/lib/roles/erp-role-access";
 
 import NumeroInput from "@/components/ui/NumeroInput";
+import { useDialogos } from "@/components/ui/Dialogos";
 /** Reserva monocliente: receta pertenece al producto; nombre interno oculto (autogenera). */
 const RECETA_SIMPLE = NEURA_CLIENT_SCHEMA === "cerveceriaerp";
 
@@ -123,6 +124,7 @@ function fmtNum(n: number | null | undefined) {
 }
 
 export default function EditarRecetaPage() {
+  const { confirmar } = useDialogos();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params.id;
@@ -302,7 +304,7 @@ export default function EditarRecetaPage() {
   }
 
   async function removeItem(itemId: string) {
-    if (!confirm("¿Eliminar este insumo de la receta?")) return;
+    if (!(await confirmar({ mensaje: "¿Eliminar este insumo de la receta?", confirmar: "Eliminar", tono: "peligro" }))) return;
     const res = await fetchWithSupabaseSession(`/api/recetas/${id}/items/${itemId}`, {
       method: "DELETE",
     });
@@ -315,7 +317,12 @@ export default function EditarRecetaPage() {
   }
 
   async function deleteReceta() {
-    if (!confirm("¿Eliminar receta completa? Esta acción no se puede deshacer.")) return;
+    if (!(await confirmar({
+      titulo: "Eliminar la receta",
+      mensaje: "Se borra la receta completa con todos sus insumos. No se puede deshacer.",
+      confirmar: "Eliminar",
+      tono: "peligro",
+    }))) return;
     const res = await fetchWithSupabaseSession(`/api/recetas/${id}`, { method: "DELETE" });
     const body = await res.json();
     if (!res.ok || body?.success === false) {

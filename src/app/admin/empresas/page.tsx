@@ -6,6 +6,7 @@ import { eliminarEmpresa, getEmpresas } from "@/lib/empresas/actions";
 import type { Empresa } from "@/lib/empresas/actions";
 
 import { Building2 } from "lucide-react";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 function formatFecha(iso: string) {
   try {
@@ -27,6 +28,7 @@ function BadgeEstado({ estado }: { estado: string }) {
 }
 
 export default function AdminEmpresasPage() {
+  const { confirmar } = useDialogos();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [cargando, setCargando] = useState(true);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
@@ -41,10 +43,13 @@ export default function AdminEmpresasPage() {
 
   async function handleEliminar(e: Empresa) {
     setErrorLista(null);
-    const ok = window.confirm(
-      `¿Eliminar la empresa «${e.nombre_empresa}»?\n\n` +
-        "Se borrarán usuarios del ERP, el esquema de datos de esa empresa (tablas tenant) y las cuentas de inicio de sesión asociadas en Auth. No se puede deshacer."
-    );
+    const ok = await confirmar({
+      titulo: `Eliminar «${e.nombre_empresa}»`,
+      mensaje:
+        "Se borran los usuarios del ERP, el esquema de datos de la empresa y las cuentas de inicio de sesión.\n\nNo se puede deshacer.",
+      confirmar: "Eliminar la empresa",
+      tono: "peligro",
+    });
     if (!ok) return;
     setEliminandoId(e.id);
     try {

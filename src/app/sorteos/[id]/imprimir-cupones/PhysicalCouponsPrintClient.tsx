@@ -9,6 +9,7 @@ import type {
   PhysicalCouponPrintRow,
 } from "@/lib/sorteos/physical-coupons-print";
 import type { SorteoEntradaEstadoPago } from "@/lib/sorteos/types";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 type PrintFormat = "thermal_58" | "thermal_80" | "a4" | "oficio";
 
@@ -322,6 +323,7 @@ export default function PhysicalCouponsPrintClient({
   entradaId: string | null;
   entradaContext: EntradaImpresionContext | null;
 }) {
+  const { avisar } = useDialogos();
   const router = useRouter();
 
   const [selectedPrintFormat, setSelectedPrintFormat] = useState<PrintFormat>(DEFAULT_PRINT_FORMAT);
@@ -388,7 +390,7 @@ export default function PhysicalCouponsPrintClient({
   const perPage = layout.cols * layout.rows;
   const pages = isThermal ? [rows] : chunk(rows, perPage);
 
-  function handlePrint() {
+  async function handlePrint() {
     if (rows.length === 0) return;
     const title = sorteoNombre.trim() || "Cupones sorteo";
     const html = buildPhysicalCouponsPrintDocument(
@@ -400,9 +402,12 @@ export default function PhysicalCouponsPrintClient({
     /* Sin noopener en features: si no, algunos navegadores devuelven null y no podemos llamar a print(). */
     const w = window.open("", "_blank");
     if (!w) {
-      window.alert(
-        "No se pudo abrir la ventana de impresión. Permití ventanas emergentes para este sitio, o usá Ctrl+P en esta página."
-      );
+      await avisar({
+        titulo: "No se abrió la ventana de impresión",
+        mensaje:
+          "El navegador bloqueó la ventana emergente. Permitilas para este sitio, o imprimí con Ctrl+P desde esta misma página.",
+        tono: "peligro",
+      });
       return;
     }
     w.document.open();
@@ -664,7 +669,7 @@ export default function PhysicalCouponsPrintClient({
         <div className="no-print flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <button
             type="button"
-            onClick={handlePrint}
+            onClick={() => void handlePrint()}
             disabled={rows.length === 0}
             className="rounded-lg bg-[#0EA5E9] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 disabled:pointer-events-none"
           >

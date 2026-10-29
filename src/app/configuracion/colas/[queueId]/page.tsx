@@ -29,6 +29,7 @@ import {
 import { queueEditorRouteId } from "../queue-route-params";
 import { getMisModulos } from "@/lib/empresas/actions";
 import NumeroInput from "@/components/ui/NumeroInput";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 function hasOmnichannel(slugs: string[]) {
   return slugs.includes("conversaciones") || slugs.includes("omnicanal");
@@ -53,6 +54,7 @@ const STRATS: { value: string; label: string; hint: string }[] = [
 ];
 
 export default function EditarColaPage() {
+  const { confirmar } = useDialogos();
   const router = useRouter();
   const params = useParams();
   const queueId = queueEditorRouteId(params?.queueId as string | string[] | undefined);
@@ -185,7 +187,12 @@ export default function EditarColaPage() {
   }
 
   async function handleDeleteQueue() {
-    if (!confirm("¿Eliminar esta cola? Los agentes asociados se eliminarán.")) return;
+    if (!(await confirmar({
+      titulo: "Eliminar la cola",
+      mensaje: "También se eliminan los agentes asociados a ella.",
+      confirmar: "Eliminar",
+      tono: "peligro",
+    }))) return;
     try {
       await apiDeleteQueue(queueId);
       router.push("/configuracion/colas");
@@ -754,6 +761,7 @@ function AgentEditorRow({
   agent: QueueAgentRow;
   onChange: () => void;
 }) {
+  const { confirmar } = useDialogos();
   const [maxC, setMaxC] = useState(agent.max_conversations);
   const [prio, setPrio] = useState(agent.priority_in_queue);
   const [recv, setRecv] = useState(agent.receives_new_chats);
@@ -771,7 +779,7 @@ function AgentEditorRow({
   }
 
   async function remove() {
-    if (!confirm("¿Quitar este agente de la cola?")) return;
+    if (!(await confirmar({ mensaje: "¿Quitar este agente de la cola?", confirmar: "Quitar" }))) return;
     await apiRemoveQueueAgent(queueId, agent.id);
     onChange();
   }

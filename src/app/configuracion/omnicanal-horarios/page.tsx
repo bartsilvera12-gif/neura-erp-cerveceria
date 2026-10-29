@@ -10,6 +10,7 @@ import {
   type OmnicanalWorkScheduleRow,
 } from "@/lib/chat/omnicanal-schedule-actions";
 import { CalendarClock, Plus, Trash2 } from "lucide-react";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 const DOW: { v: number; l: string }[] = [
   { v: 1, l: "Lun" },
@@ -40,6 +41,7 @@ function sliceTime(t: string): string {
 }
 
 export default function OmnicanalHorariosPage() {
+  const { confirmar } = useDialogos();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [rows, setRows] = useState<OmnicanalWorkScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +126,11 @@ export default function OmnicanalHorariosPage() {
   }
 
   async function eliminar(id: string) {
-    if (!confirm("¿Eliminar este horario? Los usuarios que lo usaban quedarán sin turno asignado.")) return;
+    if (!(await confirmar({
+      mensaje: "Se elimina el horario. Los usuarios que lo usaban quedan sin turno asignado.",
+      confirmar: "Eliminar",
+      tono: "peligro",
+    }))) return;
     setSaving(true);
     try {
       await deleteOmnicanalWorkSchedule(id);

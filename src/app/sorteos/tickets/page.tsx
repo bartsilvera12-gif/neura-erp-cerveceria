@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 type TicketRow = {
   id: string;
@@ -17,6 +18,7 @@ type TicketRow = {
 };
 
 export default function SorteosTicketsPage() {
+  const { confirmar } = useDialogos();
   const [rows, setRows] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export default function SorteosTicketsPage() {
   }
 
   async function resendTicket(ticketId: string) {
-    if (!confirm("¿Reenviar la imagen por WhatsApp al cliente?")) return;
+    if (!(await confirmar({ mensaje: "¿Reenviar la imagen por WhatsApp al cliente?", confirmar: "Reenviar" }))) return;
     setBusyId(ticketId);
     setErr(null);
     try {
@@ -92,7 +94,10 @@ export default function SorteosTicketsPage() {
   }
 
   async function regenerateTicket(ticketId: string) {
-    if (!confirm("¿Regenerar el PNG (nueva revisión)? No se reenvía solo.")) return;
+    if (!(await confirmar({
+      mensaje: "Se genera una nueva revisión del PNG. No se reenvía solo.",
+      confirmar: "Regenerar",
+    }))) return;
     setBusyId(ticketId);
     setErr(null);
     try {
