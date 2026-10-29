@@ -9,10 +9,16 @@ UNION ALL SELECT 'lotes',    count(*) FROM cerveceriaerp.produccion_lotes WHERE 
 UNION ALL SELECT 'etapas',   count(*) FROM cerveceriaerp.produccion_lote_etapas WHERE empresa_id = :'empresa'
 ORDER BY 1;
 
-\echo '>> NINGUN movimiento de inventario y NINGUN stock tocado'
-SELECT count(*) AS movimientos FROM cerveceriaerp.movimientos_inventario;
-SELECT count(*) AS productos_con_stock_distinto_de_cero
-  FROM cerveceriaerp.productos WHERE stock_actual <> 0;
+\echo '>> el script 12 no mueve stock: los lotes entran como historia'
+-- Los movimientos que SI tiene que haber son los del inventario de planta
+-- (script 13) y los de las compras historicas (15). Ningun otro.
+SELECT count(*) AS movimientos_inesperados
+  FROM cerveceriaerp.movimientos_inventario
+ WHERE usuario_nombre IS DISTINCT FROM 'Carga historica'
+   AND producto_sku NOT LIKE 'FAB-%';
+SELECT count(*) AS graneles_o_vendibles_con_stock
+  FROM cerveceriaerp.productos
+ WHERE stock_actual <> 0 AND NOT es_insumo AND sku NOT LIKE 'FAB-%';
 
 \echo '>> recetas: cuales quedan activas'
 SELECT nombre, rendimiento_cantidad, rendimiento_unidad, activa

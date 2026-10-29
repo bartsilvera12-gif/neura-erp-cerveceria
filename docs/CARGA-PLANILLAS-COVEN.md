@@ -111,6 +111,11 @@ compras entran como `exenta` con IVA 0, y se reconocen porque su
 `numero_control` empieza con `HIST-`. **No sirven para el libro de IVA**: están
 para costear.
 
+**El proveedor se crea si falta.** `compras.proveedor_id` es NOT NULL, así que
+el proveedor no es opcional: si el script 12 no lo dejó, el 15 lo crea y avisa
+por `NOTICE`. La primera versión del 15 lo daba por hecho y fallaba con un
+error de constraint que no decía qué hacer.
+
 **El costo que queda es el de la última compra**, no un promedio. Es lo que
 hace el ERP cuando se carga una compra desde la pantalla, pese al nombre de la
 columna `costo_promedio`. Se replicó igual para que el número no dependa de por

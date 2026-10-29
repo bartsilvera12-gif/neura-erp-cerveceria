@@ -26,6 +26,11 @@ $PSQL -f "$RAIZ/supabase/cerveceria/08_produccion_lotes_fermentadores.sql" >/dev
 echo "--- corrida 1"
 $PSQL -f "$RAIZ/supabase/cerveceria/12_carga_coven_planillas.sql" >/dev/null
 $PSQL -f "$RAIZ/supabase/cerveceria/13_inventario_fabrica.sql"    >/dev/null
+# El caso que fallo en produccion: el 15 corrido sin los proveedores cargados.
+# `compras.proveedor_id` es NOT NULL, asi que el 15 tiene que crearlos solo.
+echo "--- se borran los proveedores a proposito"
+$PSQL -c "DELETE FROM cerveceriaerp.proveedor_productos" >/dev/null
+$PSQL -c "DELETE FROM cerveceriaerp.proveedores" >/dev/null
 $PSQL -f "$RAIZ/supabase/cerveceria/15_compras_historicas.sql"   >/dev/null
 echo "--- corrida 2 (idempotencia)"
 $PSQL -f "$RAIZ/supabase/cerveceria/12_carga_coven_planillas.sql" >/dev/null

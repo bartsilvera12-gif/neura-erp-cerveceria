@@ -90,9 +90,21 @@ BEGIN
        WHERE empresa_id = v_empresa AND numero_control = c.numero
     );
 
+    -- `compras.proveedor_id` es NOT NULL, asi que el proveedor no es opcional:
+    -- si no esta, se crea. Antes este script asumia que ya lo habia dejado el
+    -- 12 y, cuando no, fallaba recien en el INSERT con un error de constraint
+    -- que no dice que hacer.
     SELECT id INTO v_prov FROM cerveceriaerp.proveedores
-     WHERE empresa_id = v_empresa AND upper(nombre) = upper(c.proveedor)
+     WHERE empresa_id = v_empresa AND upper(trim(nombre)) = upper(trim(c.proveedor))
      LIMIT 1;
+
+    IF v_prov IS NULL THEN
+      INSERT INTO cerveceriaerp.proveedores (empresa_id, nombre, estado, observaciones)
+      VALUES (v_empresa, c.proveedor, 'activo',
+              'Creado por la carga de compras historicas. Falta el RUC.')
+      RETURNING id INTO v_prov;
+      RAISE NOTICE 'Proveedor % creado (no estaba).', c.proveedor;
+    END IF;
 
     FOR l IN SELECT * FROM jsonb_array_elements(c.lineas) AS x(j)
     LOOP
@@ -138,7 +150,7 @@ BEGIN
          'produccion', c.lote, c.fecha::timestamptz, 'Carga historica');
 
       -- A quien se le compra y a cuanto. No pisa el proveedor principal si ya hay uno.
-      IF v_prov IS NOT NULL THEN
+      BEGIN
         INSERT INTO cerveceriaerp.proveedor_productos
           (empresa_id, producto_id, proveedor_id, costo_habitual, es_principal, updated_at)
         VALUES (v_empresa, v_prod, v_prov, (l.j ->> 'costo')::numeric,
@@ -148,7 +160,9 @@ BEGIN
                 now())
         ON CONFLICT (empresa_id, producto_id, proveedor_id)
         DO UPDATE SET costo_habitual = EXCLUDED.costo_habitual, updated_at = now();
-      END IF;
+      EXCEPTION WHEN undefined_table THEN
+        NULL;  -- instalacion sin `proveedor_productos`: la compra igual vale
+      END;
     END LOOP;
     v_n := v_n + 1;
   END LOOP;
