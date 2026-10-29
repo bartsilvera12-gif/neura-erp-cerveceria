@@ -170,11 +170,26 @@ export async function crearTransferencia(params: {
       if (!p0.activo) {
         throw new TransferenciaError(400, `El producto ${nom} está inactivo, no se puede remitir.`);
       }
-      // Remitibles = Reventa (controla_stock) + Menú (vendible sin control de stock).
-      // Solo se bloquea Materia prima (insumo) y no vendibles. El movimiento de
-      // stock del despacho opera sobre stock_actual y funciona igual para menú.
-      if (p0.es_insumo === true || p0.es_vendible === false) {
-        throw new TransferenciaError(400, `El producto ${nom} es materia prima o no vendible, por lo que no se puede remitir.`);
+      /**
+       * Remitibles:
+       *   · Reventa — vendible y controla stock.
+       *   · Menú — vendible sin control de stock (se prepara al venderse).
+       *   · Producto en proceso — NO vendible pero con stock propio: la cerveza
+       *     a granel es justo esto, y mandarla de la planta al bar es la
+       *     operación que el negocio necesita. Antes se bloqueaba por no ser
+       *     vendible y no había forma de remitirla.
+       * Se sigue bloqueando la materia prima, y lo que no es vendible ni lleva
+       * stock, que no tiene nada que mover.
+       */
+      const remitible =
+        p0.es_insumo !== true && (p0.es_vendible !== false || p0.controla_stock === true);
+      if (!remitible) {
+        throw new TransferenciaError(
+          400,
+          p0.es_insumo === true
+            ? `El producto ${nom} es materia prima; la materia prima no se remite entre sucursales.`
+            : `El producto ${nom} no se vende ni lleva stock propio, así que no hay nada que remitir.`
+        );
       }
       const p = p0;
 
@@ -184,7 +199,8 @@ export async function crearTransferencia(params: {
       const { rows: prodDst } = await client.query<{ id: string }>(
         `SELECT id FROM ${tP}
           WHERE empresa_id = $1::uuid AND sucursal_id = $2::uuid AND sku = $3
-            AND activo = true AND es_insumo IS NOT TRUE AND es_vendible IS NOT FALSE
+            AND activo = true AND es_insumo IS NOT TRUE
+            AND (es_vendible IS NOT FALSE OR controla_stock IS TRUE)
           LIMIT 1`,
         [empresaId, sucursalDestinoId, p.sku]
       );
@@ -200,7 +216,7 @@ export async function crearTransferencia(params: {
         if (existe[0]) {
           throw new TransferenciaError(
             400,
-            `El producto "${p.nombre}" (SKU ${p.sku}) existe en el destino pero está inactivo o no controla stock. Corregilo en el destino para poder remitirlo.`
+            `El producto "${p.nombre}" (SKU ${p.sku}) existe en el destino pero está inactivo, es materia prima, o no se vende ni lleva stock. Corregilo en el destino para poder remitirlo.`
           );
         }
         // Clonar el producto de origen en el destino (mismas columnas que la
@@ -424,11 +440,13 @@ export async function resolverEquivalencia(params: {
     if (!["pendiente", "aprobada"].includes(cab[0].estado)) {
       throw new TransferenciaError(409, "No se puede cambiar la equivalencia en este estado.");
     }
-    // El producto elegido debe ser del ORIGEN, activo y remitible (Reventa o Menú).
+    // El producto elegido debe ser del ORIGEN, activo y remitible (mismo
+    // criterio que `crearTransferencia`: reventa, menú o producto en proceso).
     const { rows: prod } = await client.query<{ id: string }>(
       `SELECT id FROM ${tP}
         WHERE id = $1::uuid AND empresa_id = $2::uuid AND sucursal_id = $3::uuid
-          AND activo = true AND es_insumo IS NOT TRUE AND es_vendible IS NOT FALSE`,
+          AND activo = true AND es_insumo IS NOT TRUE
+          AND (es_vendible IS NOT FALSE OR controla_stock IS TRUE)`,
       [params.productoOrigenId, params.empresaId, cab[0].sucursal_origen_id]
     );
     if (!prod[0]) {

@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:modulos": "tsx scripts/test-modulos-kevin.ts",
+    "test:circuito": "tsx scripts/circuito-produccion/correr.ts",
     "test:emitir-factura": "tsx scripts/test-emitir-factura-inicial.ts",
     "db:push-rls": "tsx scripts/run-rls-migration.ts",
     "db:verificar-rls": "tsx scripts/verificar-rls.ts",
