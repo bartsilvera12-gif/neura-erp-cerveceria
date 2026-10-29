@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS cerveceriaerp.compras (
   iva_tipo text NOT NULL DEFAULT '10', subtotal numeric, monto_iva numeric, total numeric,
   precio_venta numeric, margen_venta numeric,
   tipo_pago text NOT NULL DEFAULT 'contado', plazo_dias integer,
-  nro_timbrado text, numero_control text, estado text NOT NULL DEFAULT 'registrada',
+  nro_timbrado text NOT NULL, numero_control text, estado text NOT NULL DEFAULT 'registrada',
   fecha timestamptz NOT NULL DEFAULT now(), fecha_factura date, metodo_pago text,
   comprobante_url text, comprobante_storage_path text, comprobante_nombre text,
   comprobante_mime_type text, created_by uuid, usuario_nombre text,

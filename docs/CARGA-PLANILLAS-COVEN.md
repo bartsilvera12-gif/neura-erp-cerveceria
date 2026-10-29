@@ -111,6 +111,15 @@ compras entran como `exenta` con IVA 0, y se reconocen porque su
 `numero_control` empieza con `HIST-`. **No sirven para el libro de IVA**: están
 para costear.
 
+**Las columnas obligatorias que la planilla no tiene se completan solas.** La
+tabla `compras` tiene varias columnas NOT NULL que la pantalla de Compras llena
+y una carga histórica no puede (`nro_timbrado`, por ejemplo: estas compras no
+vienen de una factura). Enumerarlas a mano era adivinar de a una y fallar de a
+una, así que el script las busca en el catálogo de Postgres y las rellena con
+el vacío que corresponde a su tipo, avisando por `NOTICE` cuál completó. Si
+apareciera una columna que no se puede completar sola (un `uuid` que apunta a
+otra tabla), el script corta y dice cuál.
+
 **El proveedor se crea si falta.** `compras.proveedor_id` es NOT NULL, así que
 el proveedor no es opcional: si el script 12 no lo dejó, el 15 lo crea y avisa
 por `NOTICE`. La primera versión del 15 lo daba por hecho y fallaba con un

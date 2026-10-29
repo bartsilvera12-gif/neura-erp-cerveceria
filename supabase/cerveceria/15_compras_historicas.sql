@@ -22,7 +22,7 @@
 -- el deposito quedaria con 1.400 kg de malta que se uso hace meses.
 --
 -- SOBRE EL IVA: las planillas traen un importe y nada mas, sin discriminar.
--- Las compras entran como `exenta` con IVA 0 porque inventar un 10%% seria
+-- Las compras entran como `exenta` con IVA 0 porque inventar un 10% seria
 -- fabricar un dato fiscal. NO USAR estas compras para el libro de IVA; estan
 -- para costear. Se reconocen por el `numero_control`, que empieza con HIST-.
 --
@@ -49,7 +49,54 @@ DECLARE
   v_nombre   text;
   v_sku      text;
   v_n        int := 0;
+  v_extra_c  text := '';
+  v_extra_v  text := '';
+  r          record;
 BEGIN
+  -- ---------------------------------------------------------------------------
+  -- Columnas obligatorias que este script no conoce
+  -- ---------------------------------------------------------------------------
+  -- `compras` tiene bastantes columnas NOT NULL que la pantalla de Compras
+  -- llena y que una carga historica no tiene (nro_timbrado, por ejemplo: estas
+  -- compras no vienen de una factura). Enumerarlas a mano era adivinar de a
+  -- una y fallar de a una, asi que se las busca en el catalogo y se las
+  -- rellena con el vacio que corresponde a su tipo.
+  FOR r IN
+    SELECT column_name, data_type
+      FROM information_schema.columns
+     WHERE table_schema = 'cerveceriaerp'
+       AND table_name   = 'compras'
+       AND is_nullable  = 'NO'
+       AND column_default IS NULL
+       AND column_name NOT IN (
+         'empresa_id','sucursal_id','proveedor_id','proveedor_nombre',
+         'producto_id','producto_nombre','cantidad','moneda','tipo_cambio',
+         'costo_unitario_original','costo_unitario','iva_tipo','subtotal',
+         'monto_iva','total','precio_venta','margen_venta','tipo_pago',
+         'numero_control','estado','fecha','fecha_factura','metodo_pago',
+         'usuario_nombre')
+     ORDER BY ordinal_position
+  LOOP
+    v_extra_c := v_extra_c || ', ' || quote_ident(r.column_name);
+    v_extra_v := v_extra_v || ', ' || CASE
+      WHEN r.data_type IN ('character varying','text','character')     THEN ''''''
+      WHEN r.data_type IN ('numeric','integer','bigint','smallint',
+                           'double precision','real')                  THEN '0'
+      WHEN r.data_type = 'boolean'                                      THEN 'false'
+      WHEN r.data_type IN ('timestamp with time zone',
+                           'timestamp without time zone')               THEN 'now()'
+      WHEN r.data_type = 'date'                                         THEN 'CURRENT_DATE'
+      WHEN r.data_type IN ('json','jsonb')                              THEN '''{}''::jsonb'
+      -- Un uuid NOT NULL sin default apunta a otra tabla: no se puede inventar.
+      ELSE NULL
+    END;
+    IF v_extra_v IS NULL THEN
+      RAISE EXCEPTION 'La columna compras.% (%) es obligatoria y no se puede completar sola.',
+        r.column_name, r.data_type;
+    END IF;
+    RAISE NOTICE 'compras.% es obligatoria y no la trae la planilla: se completa vacia.',
+      r.column_name;
+  END LOOP;
   FOR c IN
     SELECT * FROM (VALUES
       ('HIST-G-01', 'COC-G-01', '2026-08-23'::date, 'Mercado Craft',
@@ -99,11 +146,23 @@ BEGIN
      LIMIT 1;
 
     IF v_prov IS NULL THEN
-      INSERT INTO cerveceriaerp.proveedores (empresa_id, nombre, estado, observaciones)
-      VALUES (v_empresa, c.proveedor, 'activo',
-              'Creado por la carga de compras historicas. Falta el RUC.')
-      RETURNING id INTO v_prov;
-      RAISE NOTICE 'Proveedor % creado (no estaba).', c.proveedor;
+      BEGIN
+        INSERT INTO cerveceriaerp.proveedores (empresa_id, nombre, estado, observaciones)
+        VALUES (v_empresa, c.proveedor, 'activo',
+                'Creado por la carga de compras historicas. Falta el RUC.')
+        RETURNING id INTO v_prov;
+        RAISE NOTICE 'Proveedor % creado (no estaba).', c.proveedor;
+      EXCEPTION WHEN unique_violation THEN
+        -- Existe con otra grafia que el cotejo de arriba no alcanzo. Se busca
+        -- de nuevo en vez de abortar la carga entera.
+        SELECT id INTO v_prov FROM cerveceriaerp.proveedores
+         WHERE empresa_id = v_empresa AND upper(trim(nombre)) = upper(trim(c.proveedor))
+         LIMIT 1;
+      END;
+    END IF;
+
+    IF v_prov IS NULL THEN
+      RAISE EXCEPTION 'No se pudo resolver ni crear el proveedor "%".', c.proveedor;
     END IF;
 
     FOR l IN SELECT * FROM jsonb_array_elements(c.lineas) AS x(j)
@@ -116,20 +175,25 @@ BEGIN
         RAISE EXCEPTION 'Falta el insumo % (correr antes el script 12).', l.j ->> 'sku';
       END IF;
 
-      INSERT INTO cerveceriaerp.compras
-        (empresa_id, sucursal_id, proveedor_id, proveedor_nombre,
-         producto_id, producto_nombre, cantidad, moneda, tipo_cambio,
-         costo_unitario_original, costo_unitario,
-         iva_tipo, subtotal, monto_iva, total, precio_venta, margen_venta,
-         tipo_pago, numero_control, estado, fecha, fecha_factura, metodo_pago,
-         usuario_nombre)
-      VALUES
-        (v_empresa, v_sucursal, v_prov, c.proveedor,
-         v_prod, v_nombre, (l.j ->> 'cantidad')::numeric, 'PYG', 1,
-         (l.j ->> 'costo')::numeric, (l.j ->> 'costo')::numeric,
-         'exenta', (l.j ->> 'total')::numeric, 0, (l.j ->> 'total')::numeric, 0, 0,
-         'contado', c.numero, 'registrada', c.fecha::timestamptz, c.fecha, 'efectivo',
-         'Carga historica');
+      EXECUTE format(
+        'INSERT INTO cerveceriaerp.compras
+           (empresa_id, sucursal_id, proveedor_id, proveedor_nombre,
+            producto_id, producto_nombre, cantidad, moneda, tipo_cambio,
+            costo_unitario_original, costo_unitario,
+            iva_tipo, subtotal, monto_iva, total, precio_venta, margen_venta,
+            tipo_pago, numero_control, estado, fecha, fecha_factura, metodo_pago,
+            usuario_nombre%s)
+         VALUES
+           ($1, $2, $3, $4,
+            $5, $6, $7, ''PYG'', 1,
+            $8, $8,
+            ''exenta'', $9, 0, $9, 0, 0,
+            ''contado'', $10, ''registrada'', $11, $11::date, ''efectivo'',
+            ''Carga historica''%s)', v_extra_c, v_extra_v)
+      USING v_empresa, v_sucursal, v_prov, c.proveedor,
+            v_prod, v_nombre, (l.j ->> 'cantidad')::numeric,
+            (l.j ->> 'costo')::numeric, (l.j ->> 'total')::numeric,
+            c.numero, c.fecha::timestamptz;
 
       -- Entra por la compra...
       INSERT INTO cerveceriaerp.movimientos_inventario
