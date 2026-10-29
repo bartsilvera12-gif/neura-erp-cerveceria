@@ -12,6 +12,7 @@ const SIDEBAR_SLUG_HREF_ORDER: { slug: string; href: string }[] = [
   { slug: "monitoreo", href: "/dashboard/monitoreo" },
   { slug: "ventas", href: "/ventas" },
   { slug: "presupuestos", href: "/presupuestos" },
+  { slug: "proyectos", href: "/dashboard/proyectos" },
   { slug: "recetas", href: "/dashboard/recetas" },
   { slug: "produccion", href: "/dashboard/produccion" },
   { slug: "reposicion", href: "/inventario/reposicion" },
@@ -32,7 +33,6 @@ const SIDEBAR_SLUG_HREF_ORDER: { slug: string; href: string }[] = [
   { slug: "marketing_ops", href: "/dashboard/marketing-ops" },
   { slug: "sorteos", href: "/sorteos" },
   { slug: "campanas", href: "/dashboard/campanas" },
-  { slug: "proyectos", href: "/dashboard/proyectos" },
 ];
 
 const OMNICANAL_DASHBOARD_SLUGS = [

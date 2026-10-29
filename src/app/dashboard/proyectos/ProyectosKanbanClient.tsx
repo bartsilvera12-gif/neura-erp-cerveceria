@@ -20,6 +20,7 @@ import ProyectoDetalleModal from "./components/ProyectoDetalleModal";
 
 import { MapPin, Phone, User } from "lucide-react";
 
+import Link from "next/link";
 type EstadoRow = {
   id: string;
   nombre: string;
@@ -496,11 +497,11 @@ export default function ProyectosKanbanClient() {
               style={{ boxShadow: "0 0 0 3px rgba(79, 174, 178, 0.18)" }}
             />
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4FAEB2]">
-              Zentra · Cocina
+              Zentra · Barra
             </p>
           </div>
           <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Pedidos</h1>
-          <p className="mt-0.5 text-xs text-slate-500">Tablero de cocina — pedidos por modalidad y estado.</p>
+          <p className="mt-0.5 text-xs text-slate-500">Tablero de pedidos — por modalidad y estado.</p>
         </div>
         <div className="flex w-full items-center sm:w-auto">
           <input
@@ -527,6 +528,24 @@ export default function ProyectosKanbanClient() {
           ))}
         </div>
       </div>
+
+      {/* Sin columnas configuradas el tablero no dibujaba nada y la pantalla
+          parecía rota. Las columnas se cargan una vez, desde Configuración. */}
+      {!loading && kanbanColumns.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed border-slate-200 bg-white px-6 py-12 text-center">
+          <p className="text-sm font-semibold text-slate-700">El tablero todavía no tiene columnas</p>
+          <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-slate-500">
+            Los pedidos se mueven entre columnas (por ejemplo: Pendiente → En preparación → Listo →
+            Entregado). Creálas una sola vez y el tablero queda andando.
+          </p>
+          <Link
+            href="/configuracion/proyectos"
+            className="mt-4 inline-flex rounded-lg bg-[#0EA5E9] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0284C7]"
+          >
+            Configurar columnas
+          </Link>
+        </div>
+      ) : null}
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         {/* Antes: "overflow-x-hidden" bloqueaba el scroll horizontal del kanban,
