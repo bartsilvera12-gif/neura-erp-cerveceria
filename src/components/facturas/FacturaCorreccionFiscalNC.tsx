@@ -6,6 +6,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import type { NotaCreditoListItemDTO, SifenPrevueloFacturaNcDTO } from "@/lib/nota-credito/types";
 
 import { ChevronRight } from "lucide-react";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 const MSG_BLOQUEO_TIMBRADO_ORIGEN =
   "No se puede generar la NC porque el timbrado de la factura origen es inválido o inconsistente.";
@@ -1221,15 +1222,13 @@ export function FacturaCorreccionFiscalNC({
                                 // su columna y el total se calcula (cant × precio).
                                 <span className="inline-flex items-center gap-1">
                                   <span className="text-[10px] text-slate-400">P.U.</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step={1}
+                                  <NumeroInput
                                     value={l.precio_unitario}
                                     disabled={!l.checked}
-                                    onChange={(e) => actualizarLinea(idx, { precio_unitario: Number(e.target.value) })}
+                                    onChange={(n) => actualizarLinea(idx, { precio_unitario: n })}
                                     className="w-24 text-right border border-slate-200 rounded px-1 py-0.5 disabled:opacity-40 tabular-nums"
                                     placeholder="Precio"
+                                    aria-label="Precio unitario"
                                   />
                                 </span>
                               ) : (
@@ -1251,27 +1250,23 @@ export function FacturaCorreccionFiscalNC({
                             </td>
                             <td className="px-2 py-1 align-middle text-right">
                               {l.modo === "unidades" ? (
-                                <input
-                                  type="number"
-                                  min={0}
+                                <NumeroInput
                                   max={l.cantidad_max}
-                                  step={l.cantidad_max % 1 === 0 ? 1 : 0.01}
                                   value={l.cantidad}
                                   disabled={!l.checked}
-                                  onChange={(e) => actualizarLinea(idx, { cantidad: Number(e.target.value) })}
+                                  onChange={(n) => actualizarLinea(idx, { cantidad: n })}
                                   className="w-16 text-right border border-slate-200 rounded px-1 py-0.5 disabled:opacity-40"
+                                  aria-label="Cantidad"
                                 />
                               ) : l.modo === "porcentaje" ? (
                                 <span className="inline-flex items-center gap-0.5">
-                                  <input
-                                    type="number"
-                                    min={0}
+                                  <NumeroInput
                                     max={100}
-                                    step={1}
                                     value={l.porcentaje}
                                     disabled={!l.checked}
-                                    onChange={(e) => actualizarLinea(idx, { porcentaje: Number(e.target.value) })}
+                                    onChange={(n) => actualizarLinea(idx, { porcentaje: n })}
                                     className="w-14 text-right border border-slate-200 rounded px-1 py-0.5 disabled:opacity-40"
+                                    aria-label="Porcentaje"
                                   />
                                   <span className="text-slate-400">%</span>
                                 </span>
@@ -1281,15 +1276,13 @@ export function FacturaCorreccionFiscalNC({
                             </td>
                             <td className="px-2 py-1 align-middle text-right">
                               {l.modo === "monto" ? (
-                                <input
-                                  type="number"
-                                  min={0}
+                                <NumeroInput
                                   max={l.total_max}
-                                  step={1}
                                   value={l.total_linea}
                                   disabled={!l.checked}
-                                  onChange={(e) => actualizarLinea(idx, { total_linea: Number(e.target.value) })}
+                                  onChange={(n) => actualizarLinea(idx, { total_linea: n })}
                                   className="w-24 text-right border border-slate-200 rounded px-1 py-0.5 disabled:opacity-40 tabular-nums"
+                                  aria-label="Total de la linea"
                                 />
                               ) : (
                                 <span className="tabular-nums text-slate-800">

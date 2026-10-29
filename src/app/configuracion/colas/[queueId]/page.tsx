@@ -28,6 +28,7 @@ import {
 } from "../queue-admin-api";
 import { queueEditorRouteId } from "../queue-route-params";
 import { getMisModulos } from "@/lib/empresas/actions";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 function hasOmnichannel(slugs: string[]) {
   return slugs.includes("conversaciones") || slugs.includes("omnicanal");
@@ -293,11 +294,12 @@ export default function EditarColaPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Prioridad numérica</label>
-            <input
-              type="number"
+            <NumeroInput
+              decimales={false}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
               value={priority}
-              onChange={(e) => setPriority(Number(e.target.value) || 0)}
+              onChange={setPriority}
+              aria-label="Prioridad"
             />
             <p className="text-xs text-slate-400 mt-1">Mayor número = mayor prioridad al elegir cola.</p>
           </div>
@@ -434,21 +436,22 @@ export default function EditarColaPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Tiempo</label>
-            <input
-              type="number"
+            <NumeroInput
               min={1}
+              decimales={false}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
               value={routing.initial_no_response?.value ?? 15}
-              onChange={(e) =>
+              onChange={(n) =>
                 setRouting((r) => ({
                   ...r,
                   initial_no_response: {
                     ...DEFAULT_QUEUE_ROUTING_CONFIG.initial_no_response!,
                     ...r.initial_no_response,
-                    value: Math.max(1, Number(e.target.value) || 1),
+                    value: n,
                   },
                 }))
               }
+              aria-label="Sin respuesta inicial"
             />
           </div>
           <div>
@@ -522,21 +525,22 @@ export default function EditarColaPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Duración</label>
-            <input
-              type="number"
+            <NumeroInput
               min={1}
+              decimales={false}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
               value={routing.same_advisor_window?.value ?? 24}
-              onChange={(e) =>
+              onChange={(n) =>
                 setRouting((r) => ({
                   ...r,
                   same_advisor_window: {
                     ...DEFAULT_QUEUE_ROUTING_CONFIG.same_advisor_window!,
                     ...r.same_advisor_window,
-                    value: Math.max(1, Number(e.target.value) || 1),
+                    value: n,
                   },
                 }))
               }
+              aria-label="Ventana del mismo asesor"
             />
           </div>
           <div>
@@ -779,22 +783,24 @@ function AgentEditorRow({
         <span className="block text-xs text-slate-400 truncate max-w-[180px]">{agent.email}</span>
       </td>
       <td className="py-2 pr-2">
-        <input
-          type="number"
+        <NumeroInput
           min={1}
+          decimales={false}
           className="w-16 border border-slate-200 rounded px-1 py-0.5 text-xs"
           value={maxC}
-          onChange={(e) => setMaxC(Number(e.target.value) || 1)}
+          onChange={setMaxC}
           onBlur={() => void persist()}
+          aria-label="Maximo de conversaciones"
         />
       </td>
       <td className="py-2 pr-2">
-        <input
-          type="number"
+        <NumeroInput
+          decimales={false}
           className="w-14 border border-slate-200 rounded px-1 py-0.5 text-xs"
           value={prio}
-          onChange={(e) => setPrio(Number(e.target.value) || 0)}
+          onChange={setPrio}
           onBlur={() => void persist()}
+          aria-label="Prioridad"
         />
       </td>
       <td className="py-2 pr-2">

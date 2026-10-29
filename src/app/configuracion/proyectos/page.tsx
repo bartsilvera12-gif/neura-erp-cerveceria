@@ -12,6 +12,7 @@ import {
   F_SELECT,
 } from "@/components/config/global-config-primitives";
 import { apiFetch } from "@/lib/api/fetch-with-supabase-session";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 type ProyectoTipoSla = "interno" | "cliente" | "pausado" | "final";
 
@@ -474,12 +475,13 @@ export default function ConfiguracionProyectosPage() {
                     </label>
                     <label>
                       <span className={F_LABEL}>Orden</span>
-                      <input
-                        type="number"
+                      <NumeroInput
                         className={F_INPUT}
+                        decimales={false}
                         value={draft.sort_order}
                         disabled={!canEdit}
-                        onChange={(e) => updateDraft(estado.id, "sort_order", Number(e.target.value))}
+                        onChange={(n) => updateDraft(estado.id, "sort_order", n)}
+                        aria-label="Orden"
                       />
                     </label>
                     <label>
@@ -592,11 +594,12 @@ export default function ConfiguracionProyectosPage() {
               </label>
               <label>
                 <span className={F_LABEL}>Orden</span>
-                <input
-                  type="number"
+                <NumeroInput
                   className={F_INPUT}
+                  decimales={false}
                   value={newColumn.sort_order}
-                  onChange={(e) => setNewColumn((prev) => ({ ...prev, sort_order: Number(e.target.value) }))}
+                  onChange={(n) => setNewColumn((prev) => ({ ...prev, sort_order: n }))}
+                  aria-label="Orden"
                 />
               </label>
               <label>
@@ -704,12 +707,13 @@ export default function ConfiguracionProyectosPage() {
                     </label>
                     <label>
                       <span className={F_LABEL}>Orden</span>
-                      <input
-                        type="number"
+                      <NumeroInput
                         className={F_INPUT}
+                        decimales={false}
                         value={draft.sort_order}
                         disabled={!canEdit}
-                        onChange={(e) => updatePrioridadDraft(prioridad.id, "sort_order", Number(e.target.value))}
+                        onChange={(n) => updatePrioridadDraft(prioridad.id, "sort_order", n)}
+                        aria-label="Orden"
                       />
                     </label>
                     <ColorField

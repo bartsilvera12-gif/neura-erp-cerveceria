@@ -12,6 +12,7 @@ import {
   type RecontactDryRunRow,
 } from "@/lib/chat/recontact-dry-run-shared";
 import { WA_META_REPLY_BUTTON_MAX, WA_META_REPLY_TITLE_MAX } from "@/lib/chat/whatsapp-send-service";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 export type FlowRecontactPickerNode = {
   node_code: string;
@@ -681,11 +682,12 @@ export function FlowRecontactAutomationsPanel(props: {
               </label>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500">Prioridad</span>
-                <input
-                  type="number"
+                <NumeroInput
+                  decimales={false}
                   className="w-24 border border-slate-200 rounded-lg px-2 py-1 text-sm"
                   value={draft.prioridad}
-                  onChange={(e) => setDraft((d) => ({ ...d, prioridad: Number(e.target.value) || 0 }))}
+                  onChange={(n) => setDraft((d) => ({ ...d, prioridad: n }))}
+                  aria-label="Prioridad"
                 />
               </div>
             </div>
@@ -727,32 +729,35 @@ export function FlowRecontactAutomationsPanel(props: {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Inactividad (min)</label>
-                <input
-                  type="number"
+                <NumeroInput
                   min={1}
+                  decimales={false}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   value={draft.idle_after_minutes}
-                  onChange={(e) => setDraft((d) => ({ ...d, idle_after_minutes: Number(e.target.value) || 1 }))}
+                  onChange={(n) => setDraft((d) => ({ ...d, idle_after_minutes: n }))}
+                  aria-label="Minutos sin actividad"
                 />
               </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Máx. intentos</label>
-                <input
-                  type="number"
+                <NumeroInput
                   min={1}
+                  decimales={false}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   value={draft.max_attempts}
-                  onChange={(e) => setDraft((d) => ({ ...d, max_attempts: Math.max(1, Number(e.target.value) || 1) }))}
+                  onChange={(n) => setDraft((d) => ({ ...d, max_attempts: n }))}
+                  aria-label="Maximo de intentos"
                 />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs text-slate-500 mb-1">Esperar antes del siguiente intento (min)</label>
-                <input
-                  type="number"
+                <NumeroInput
                   min={1}
+                  decimales={false}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   value={draft.cooldown_minutes}
-                  onChange={(e) => setDraft((d) => ({ ...d, cooldown_minutes: Math.max(1, Number(e.target.value) || 1) }))}
+                  onChange={(n) => setDraft((d) => ({ ...d, cooldown_minutes: n }))}
+                  aria-label="Espera entre intentos (minutos)"
                 />
                 <p className="mt-1 text-[11px] text-slate-500">
                   Ejemplo: 1440 minutos = 24 horas. Solo aplica si hay más de un intento.

@@ -6,6 +6,7 @@ import type {
   OnMissingBehavior,
 } from "@/lib/chat/comprobante-validation-types";
 import { defaultComprobanteValidationSettings } from "@/lib/chat/comprobante-validation-types";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 const OCR_FIELD_LABELS: Record<OcrFieldKey, string> = {
   monto: "Monto",
@@ -73,15 +74,12 @@ export function ComprobanteValidationPanelComprobantesCore({ value: s, onChange 
             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
               Tolerancia absoluta (Gs)
             </label>
-            <input
-              type="number"
-              min={0}
+            <NumeroInput
               max={1_000_000_000}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
               value={s.monto_tolerancia_absoluta_gs}
-              onChange={(e) =>
-                set({ monto_tolerancia_absoluta_gs: Math.max(0, Number(e.target.value) || 0) })
-              }
+              onChange={(n) => set({ monto_tolerancia_absoluta_gs: n })}
+              aria-label="Tolerancia absoluta en Gs"
             />
           </div>
           <div className="sm:col-span-2">
@@ -165,13 +163,13 @@ export function ComprobanteValidationPanelComprobantesCore({ value: s, onChange 
           <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
             Mín. caracteres OCR (sospecha)
           </label>
-          <input
-            type="number"
-            min={0}
+          <NumeroInput
             max={500}
+            decimales={false}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
             value={s.ocr_min_chars_sospecha}
-            onChange={(e) => set({ ocr_min_chars_sospecha: Number(e.target.value) || 0 })}
+            onChange={(n) => set({ ocr_min_chars_sospecha: n })}
+            aria-label="Minimo de caracteres"
           />
         </div>
         <div>
@@ -267,17 +265,14 @@ export function ComprobanteValidationPanelDatosBancarios({ value: s, onChange }:
           <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
             Mín. coincidencias (1–3)
           </label>
-          <input
-            type="number"
+          <NumeroInput
             min={1}
             max={3}
+            decimales={false}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
             value={s.min_coincidencias_bancarias}
-            onChange={(e) =>
-              set({
-                min_coincidencias_bancarias: Math.min(3, Math.max(1, Math.trunc(Number(e.target.value)) || 1)),
-              })
-            }
+            onChange={(n) => set({ min_coincidencias_bancarias: n })}
+            aria-label="Minimo de coincidencias"
           />
           <p className="text-[10px] text-slate-400 mt-0.5">
             Cantidad mínima de pares (titular / cuenta / alias) que deben coincidir entre esperado y OCR.

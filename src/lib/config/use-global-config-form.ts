@@ -63,6 +63,20 @@ export function useGlobalConfigForm() {
     );
   }
 
+  /**
+   * Setter para los campos numericos.
+   *
+   * `handleChange` sirve para texto y selects, pero con un `type="number"` hace
+   * `parseFloat(value) || 0`: al borrar el ultimo digito el campo recibe "",
+   * eso vuelve como 0 y React lo reescribe, asi que el 0 no se puede sacar y lo
+   * que se tipea queda pegado atras (querer poner 30 en un campo en 0 termina
+   * en 030). Los numericos usan NumeroInput, que avisa el numero ya resuelto y
+   * entra por aca.
+   */
+  function setNumero(name: keyof GlobalConfigFormState, n: number) {
+    setForm((prev) => (prev ? { ...prev, [name]: n } : prev));
+  }
+
   function handleGuardar() {
     if (!form) return;
     const saved = saveConfig(form);
@@ -83,6 +97,7 @@ export function useGlobalConfigForm() {
     form,
     setForm,
     handleChange,
+    setNumero,
     handleGuardar,
     handleResetFormToDefaults,
     reload,

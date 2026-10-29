@@ -7,6 +7,7 @@ import { getSorteoById, updateSorteo } from "@/lib/sorteos/actions";
 import type { SorteoCouponNumberMode, SorteoEstado, SorteoTicketDeliveryMode } from "@/lib/sorteos/types";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { normalizeTicketImageConfig } from "@/lib/sorteos/sorteo-ticket-types";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 const SORTEO_TICKET_ASSETS_BUCKET = "sorteo-ticket-assets";
 const MAX_ASSET_BYTES = 4 * 1024 * 1024;
@@ -548,14 +549,12 @@ export default function EditarSorteoPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Precio por boleto (₲)</label>
-              <input
-                type="number"
-                min={0}
-                step={1}
+              <NumeroInput
                 required
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                 value={precio}
-                onChange={(e) => setPrecio(Number(e.target.value))}
+                onChange={setPrecio}
+                aria-label="Precio"
               />
             </div>
             <div>
@@ -631,14 +630,13 @@ export default function EditarSorteoPage() {
             <div className="space-y-3 pl-0 sm:pl-1">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Número inicial</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
+                <NumeroInput
+                  decimales={false}
                   placeholder="0"
                   className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   value={Number.isFinite(couponStart) ? couponStart : 0}
-                  onChange={(e) => setCouponStart(e.target.value === "" ? 0 : Number(e.target.value))}
+                  onChange={setCouponStart}
+                  aria-label="Cupon inicial"
                 />
               </div>
               <div>

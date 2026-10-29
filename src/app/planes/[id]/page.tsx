@@ -8,6 +8,7 @@ import { getPlan, updatePlan, toggleEstadoPlan, deletePlan } from "@/lib/planes/
 import type { Plan, PlanMarketingItem } from "@/lib/planes/types";
 import { TIPOS_CONTENIDO } from "@/lib/marketing/types";
 import { Suspense } from "react";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -403,17 +404,18 @@ function PlanDetailContent() {
                         <option value="mensual">Mensual</option>
                       </select>
                       {item.periodicidad === "mensual" ? (
-                        <input
-                          type="number"
+                        <NumeroInput
                           min={1}
+                          decimales={false}
                           value={item.cantidad}
-                          onChange={(e) => {
+                          onChange={(n) => {
                             const items = [...form.plantilla_items];
-                            items[idx] = { ...item, cantidad: parseInt(e.target.value, 10) || 1 };
+                            items[idx] = { ...item, cantidad: n };
                             setForm((p) => ({ ...p, plantilla_items: items }));
                           }}
                           className="w-14 text-sm border border-slate-200 rounded px-2 py-1"
                           placeholder="Cant."
+                          aria-label="Cantidad"
                         />
                       ) : (
                         <span className="text-xs text-slate-500 w-14">{Math.max(1, (item.dias_semana ?? []).length)} tareas/sem</span>

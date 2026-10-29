@@ -6,6 +6,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import type { AmbienteSifen, EmpresaSifenConfigDTO } from "@/lib/sifen/types";
 
 import { CheckCircle2 } from "lucide-react";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 const fLabel = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
 const fInput =
@@ -616,13 +617,14 @@ export default function FacturacionElectronicaSifenPage() {
             </div>
             <div>
               <label className={fLabel}>Plazo cancelación DE (horas)</label>
-              <input
-                type="number"
+              <NumeroInput
                 min={1}
                 max={8760}
+                decimales={false}
                 className={fInput}
                 value={plazoCancelacionHoras}
-                onChange={(e) => setPlazoCancelacionHoras(parseInt(e.target.value, 10) || 1)}
+                onChange={setPlazoCancelacionHoras}
+                aria-label="Plazo de cancelacion (horas)"
               />
               <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
                 Ventana desde la marca de aprobación SET (<span className="font-mono">sifen_aprobado_at</span>) en la que se permite anular el DE en el ERP sin pagos registrados. Por defecto en base de datos: 48 h.

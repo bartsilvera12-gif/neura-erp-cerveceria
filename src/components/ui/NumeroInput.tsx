@@ -26,6 +26,8 @@ export default function NumeroInput({
   className,
   disabled,
   placeholder,
+  required,
+  onBlur,
   "aria-label": ariaLabel,
 }: {
   value: number;
@@ -39,6 +41,9 @@ export default function NumeroInput({
   className?: string;
   disabled?: boolean;
   placeholder?: string;
+  required?: boolean;
+  /** Se llama al salir del campo, despues de resolver el valor. */
+  onBlur?: () => void;
   "aria-label"?: string;
 }) {
   const [texto, setTexto] = useState<string | null>(null);
@@ -74,10 +79,12 @@ export default function NumeroInput({
       onBlur={() => {
         if (texto != null && texto.trim() === "") onChange(fallback);
         setTexto(null);
+        onBlur?.();
       }}
       className={className}
       disabled={disabled}
       placeholder={placeholder}
+      required={required}
       aria-label={ariaLabel}
     />
   );

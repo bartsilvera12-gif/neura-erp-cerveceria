@@ -7,6 +7,7 @@ import { FileText, ArrowLeft, Plus, Trash2, Loader2, ChevronUp, ChevronDown } fr
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { calcMontoIvaIncluido, type IvaTipoPresupuesto } from "@/lib/presupuestos/types";
 import SearchableSelect from "@/components/ui/SearchableSelect";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 type NivelPrecio = "minorista" | "mayorista" | "distribuidor";
 type ProductoLite = {
@@ -394,10 +395,10 @@ export default function PresupuestoForm({
                         <input value={it.producto_nombre} onChange={(e) => updItem(i, { producto_nombre: e.target.value })} className={inputClass} placeholder="Descripción" />
                       </td>
                       <td className="py-2 px-2">
-                        <input type="number" min="0" step="0.01" value={it.cantidad} onChange={(e) => updItem(i, { cantidad: Number(e.target.value) })} className={inputClass} />
+                        <NumeroInput value={it.cantidad} onChange={(n) => updItem(i, { cantidad: n })} fallback={1} className={inputClass} aria-label="Cantidad" />
                       </td>
                       <td className="py-2 px-2">
-                        <input type="number" min="0" step="1" value={it.precio_unitario} onChange={(e) => updItem(i, { precio_unitario: Number(e.target.value) })} className={inputClass} />
+                        <NumeroInput value={it.precio_unitario} onChange={(n) => updItem(i, { precio_unitario: n })} className={inputClass} aria-label="Precio unitario" />
                       </td>
                       <td className="py-2 px-2">
                         <select value={it.iva_tipo} onChange={(e) => updItem(i, { iva_tipo: e.target.value as IvaTipoPresupuesto })} className={`${inputClass} bg-white`}>
@@ -405,7 +406,7 @@ export default function PresupuestoForm({
                         </select>
                       </td>
                       <td className="py-2 px-2">
-                        <input type="number" min="0" step="1" value={it.descuento} onChange={(e) => updItem(i, { descuento: Number(e.target.value) })} className={inputClass} />
+                        <NumeroInput value={it.descuento} onChange={(n) => updItem(i, { descuento: n })} className={inputClass} aria-label="Descuento" />
                       </td>
                       <td className="py-2 px-2 text-right tabular-nums font-medium">{fmtGs(t.total)}</td>
                       <td className="py-2 pl-2 text-right">

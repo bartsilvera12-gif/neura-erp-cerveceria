@@ -5,6 +5,7 @@ import {
   type BusinessAutomationSettings,
   type BusinessHoursPreset,
 } from "@/lib/chat/channel-business-automation-types";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 const COMMON_TZ = [
   "America/Asuncion",
@@ -192,18 +193,16 @@ export function BusinessAutomationConfigSection({ value: s, onChange }: Props) {
             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
               Mínimo entre avisos fuera de horario (minutos)
             </label>
-            <input
-              type="number"
+            <NumeroInput
               min={15}
               max={10080}
+              fallback={360}
+              decimales={false}
               className="w-full max-w-[200px] border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
               value={s.away_cooldown_minutes}
-              onChange={(e) =>
-                patch({
-                  away_cooldown_minutes: Math.min(10080, Math.max(15, Math.trunc(Number(e.target.value)) || 360)),
-                })
-              }
+              onChange={(n) => patch({ away_cooldown_minutes: n })}
               disabled={!s.away_enabled || !s.hours_enabled}
+              aria-label="Espera entre avisos (minutos)"
             />
           </div>
         </div>

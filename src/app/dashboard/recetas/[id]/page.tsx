@@ -875,18 +875,12 @@ export default function EditarRecetaPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Merma de proceso (%)</label>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              max="99"
+            <NumeroInput
+              max={99}
               value={Number((((receta.merma_proceso_pct ?? 0) * 100).toFixed(2)))}
-              onChange={(e) => {
-                const pct = Number(e.target.value);
-                const seguro = Number.isFinite(pct) ? Math.min(Math.max(pct, 0), 99) : 0;
-                setReceta({ ...receta, merma_proceso_pct: seguro / 100 });
-              }}
+              onChange={(pct) => setReceta({ ...receta, merma_proceso_pct: pct / 100 })}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              aria-label="Merma de proceso (%)"
             />
             <p className="mt-1 text-[11px] text-gray-400">
               Lo que se pierde entre el rendimiento teórico y lo que realmente se envasa.

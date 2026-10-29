@@ -27,6 +27,7 @@ import { errorDesglose } from "@/lib/ventas/pago-mixto";
 import type { Producto } from "@/lib/inventario/types";
 
 import { AlertTriangle, CheckCircle2, ChevronDown, Image as ImageIcon, Plus, Search, X } from "lucide-react";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -1329,18 +1330,11 @@ export default function NuevaVentaPage() {
                           {item.sku}
                         </td>
                         <td className="py-3 pr-3 text-right tabular-nums">
-                          <input
-                            type="number"
-                            min="0.01"
-                            step="any"
-                            inputMode="decimal"
+                          <NumeroInput
                             value={item.cantidad}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(",", ".");
-                              const n = Number(raw);
-                              if (Number.isFinite(n) && n > 0) {
-                                handleCambiarCantidad(idx, n);
-                              }
+                            fallback={1}
+                            onChange={(n) => {
+                              if (n > 0) handleCambiarCantidad(idx, n);
                             }}
                             className="w-16 rounded border border-slate-200 bg-white px-2 py-1 text-right text-sm tabular-nums text-slate-800 focus:border-[#4FAEB2] focus:outline-none focus:ring-1 focus:ring-[#4FAEB2]"
                             aria-label={`Cantidad de ${item.producto_nombre}`}

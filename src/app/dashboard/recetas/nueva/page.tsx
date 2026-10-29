@@ -7,6 +7,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { ChefHat, ArrowLeft, Loader2 } from "lucide-react";
 import { NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
 import SearchableSelect from "@/components/ui/SearchableSelect";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 /** Reserva monocliente: la receta pertenece al producto; el nombre se autogenera. */
 const RECETA_SIMPLE = NEURA_CLIENT_SCHEMA === "cerveceriaerp";
@@ -179,13 +180,12 @@ export default function NuevaRecetaPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Rendimiento cantidad
               </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
+              <NumeroInput
                 value={rendCantidad}
-                onChange={(e) => setRendCantidad(Number(e.target.value))}
+                fallback={1}
+                onChange={setRendCantidad}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                aria-label="Rendimiento"
               />
             </div>
             <div>

@@ -16,9 +16,10 @@ import {
 import { GlobalConfigSubpageShell } from "@/components/config/GlobalConfigSubpageShell";
 import { useGlobalConfigForm } from "@/lib/config/use-global-config-form";
 import FacturacionModoSection from "@/components/config/FacturacionModoSection";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 export default function ConfiguracionFacturacionPage() {
-  const { config, form, handleChange, handleGuardar, success, ready } = useGlobalConfigForm();
+  const { config, form, handleChange, setNumero, handleGuardar, success, ready } = useGlobalConfigForm();
   const [gestionTributaria, setGestionTributaria] = useState<boolean | null>(null);
   const [gestionCargando, setGestionCargando] = useState(true);
   const [gestionGuardando, setGestionGuardando] = useState(false);
@@ -206,14 +207,13 @@ export default function ConfiguracionFacturacionPage() {
                 </div>
                 <div>
                   <label className={F_LABEL}>Numeración inicial</label>
-                  <input
-                    type="number"
-                    name="numeracion_inicial"
+                  <NumeroInput
                     value={form.numeracion_inicial}
-                    onChange={handleChange}
+                    onChange={(n) => setNumero("numeracion_inicial", n)}
                     min={1}
-                    step={1}
+                    decimales={false}
                     className={F_INPUT}
+                    aria-label="Numeracion inicial"
                   />
                   <ConfigHelpText>Número desde el cual comienza la secuencia de facturas.</ConfigHelpText>
                 </div>
@@ -245,15 +245,13 @@ export default function ConfiguracionFacturacionPage() {
                 <div>
                   <label className={F_LABEL}>Días de vencimiento por defecto</label>
                   <div className="relative">
-                    <input
-                      type="number"
-                      name="dias_vencimiento_default"
+                    <NumeroInput
                       value={form.dias_vencimiento_default}
-                      onChange={handleChange}
-                      min={0}
+                      onChange={(n) => setNumero("dias_vencimiento_default", n)}
                       max={365}
-                      step={1}
+                      decimales={false}
                       className={F_INPUT}
+                      aria-label="Dias de vencimiento"
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
                       días
@@ -264,15 +262,12 @@ export default function ConfiguracionFacturacionPage() {
                 <div>
                   <label className={F_LABEL}>Interés moratorio</label>
                   <div className="relative">
-                    <input
-                      type="number"
-                      name="interes_moratorio"
+                    <NumeroInput
                       value={form.interes_moratorio}
-                      onChange={handleChange}
-                      min={0}
+                      onChange={(n) => setNumero("interes_moratorio", n)}
                       max={100}
-                      step={0.1}
                       className={F_INPUT}
+                      aria-label="Interes moratorio"
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
                       % mens.

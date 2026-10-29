@@ -15,6 +15,7 @@ import {
   partitionQuickReplyButtonGroups,
   validateQuickReplyGroupsMaxThree,
 } from "@/lib/chat/flow-button-groups";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 type FlowNodeOption = {
   id: string;
@@ -2265,12 +2266,11 @@ export default function FlowEditorPage() {
                         <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <div>
                             <label className="block text-xs text-slate-500 mb-1">Orden opción</label>
-                            <input
-                              type="number"
+                            <NumeroInput
+                              decimales={false}
                               className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm w-full"
                               value={opt.sort_order}
-                              onChange={(e) => {
-                                const v = parseInt(e.target.value, 10);
+                              onChange={(v) =>
                                 setNodes((prev) =>
                                   prev.map((n) =>
                                     n.id !== node.id
@@ -2278,14 +2278,13 @@ export default function FlowEditorPage() {
                                       : {
                                           ...n,
                                           options: n.options.map((o) =>
-                                            o.id === opt.id
-                                              ? { ...o, sort_order: Number.isFinite(v) ? v : 0 }
-                                              : o
+                                            o.id === opt.id ? { ...o, sort_order: v } : o
                                           ),
                                         }
                                   )
-                                );
-                              }}
+                                )
+                              }
+                              aria-label="Orden"
                             />
                           </div>
                           <div>
@@ -2313,12 +2312,11 @@ export default function FlowEditorPage() {
                           </div>
                           <div>
                             <label className="block text-xs text-slate-500 mb-1">Orden del grupo</label>
-                            <input
-                              type="number"
+                            <NumeroInput
+                              decimales={false}
                               className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm w-full"
                               value={opt.group_order ?? 0}
-                              onChange={(e) => {
-                                const v = parseInt(e.target.value, 10);
+                              onChange={(v) =>
                                 setNodes((prev) =>
                                   prev.map((n) =>
                                     n.id !== node.id
@@ -2326,14 +2324,13 @@ export default function FlowEditorPage() {
                                       : {
                                           ...n,
                                           options: n.options.map((o) =>
-                                            o.id === opt.id
-                                              ? { ...o, group_order: Number.isFinite(v) ? v : 0 }
-                                              : o
+                                            o.id === opt.id ? { ...o, group_order: v } : o
                                           ),
                                         }
                                   )
-                                );
-                              }}
+                                )
+                              }
+                              aria-label="Orden"
                             />
                           </div>
                         </div>

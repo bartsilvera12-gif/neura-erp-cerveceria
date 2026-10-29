@@ -11,9 +11,10 @@ import {
 } from "@/components/config/global-config-primitives";
 import { GlobalConfigSubpageShell } from "@/components/config/GlobalConfigSubpageShell";
 import { useGlobalConfigForm } from "@/lib/config/use-global-config-form";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 export default function ConfiguracionMetricasPage() {
-  const { config, form, setForm, handleChange, handleGuardar, success, ready } = useGlobalConfigForm();
+  const { config, form, setForm, handleChange, setNumero, handleGuardar, success, ready } = useGlobalConfigForm();
 
   if (!ready || !config || !form) {
     return (
@@ -54,14 +55,12 @@ export default function ConfiguracionMetricasPage() {
             </div>
             <div>
               <label className={F_LABEL}>Meta de clientes nuevos / mes</label>
-              <input
-                type="number"
-                name="meta_clientes_nuevos"
+              <NumeroInput
                 value={form.meta_clientes_nuevos}
-                onChange={handleChange}
-                min={0}
-                step={1}
+                onChange={(n) => setNumero("meta_clientes_nuevos", n)}
+                decimales={false}
                 className={F_INPUT}
+                aria-label="Meta de clientes nuevos"
               />
               <ConfigHelpText>Cantidad de nuevos clientes a incorporar mensualmente.</ConfigHelpText>
             </div>
@@ -84,15 +83,12 @@ export default function ConfiguracionMetricasPage() {
             <div>
               <label className={F_LABEL}>Meta de conversión de leads (%)</label>
               <div className="relative">
-                <input
-                  type="number"
-                  name="meta_conversion_leads"
+                <NumeroInput
                   value={form.meta_conversion_leads}
-                  onChange={handleChange}
-                  min={0}
+                  onChange={(n) => setNumero("meta_conversion_leads", n)}
                   max={100}
-                  step={0.5}
                   className={F_INPUT}
+                  aria-label="Meta de conversion"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
                   %

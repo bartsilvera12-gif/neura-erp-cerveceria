@@ -10,9 +10,10 @@ import {
 } from "@/components/config/global-config-primitives";
 import { GlobalConfigSubpageShell } from "@/components/config/GlobalConfigSubpageShell";
 import { useGlobalConfigForm } from "@/lib/config/use-global-config-form";
+import NumeroInput from "@/components/ui/NumeroInput";
 
 export default function ConfiguracionPoliticasPage() {
-  const { config, form, handleChange, handleGuardar, success, ready } = useGlobalConfigForm();
+  const { config, form, handleChange, setNumero, handleGuardar, success, ready } = useGlobalConfigForm();
 
   if (!ready || !config || !form) {
     return (
@@ -40,15 +41,12 @@ export default function ConfiguracionPoliticasPage() {
             <div>
               <label className={F_LABEL}>Descuento máximo permitido</label>
               <div className="relative">
-                <input
-                  type="number"
-                  name="porcentaje_descuento_maximo"
+                <NumeroInput
                   value={form.porcentaje_descuento_maximo}
-                  onChange={handleChange}
-                  min={0}
+                  onChange={(n) => setNumero("porcentaje_descuento_maximo", n)}
                   max={100}
-                  step={0.5}
                   className={F_INPUT}
+                  aria-label="Descuento maximo"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
                   %
@@ -61,14 +59,12 @@ export default function ConfiguracionPoliticasPage() {
             <div>
               <label className={F_LABEL}>Días de retención de cliente</label>
               <div className="relative">
-                <input
-                  type="number"
-                  name="dias_retencion_cliente"
+                <NumeroInput
                   value={form.dias_retencion_cliente}
-                  onChange={handleChange}
-                  min={0}
-                  step={1}
+                  onChange={(n) => setNumero("dias_retencion_cliente", n)}
+                  decimales={false}
                   className={F_INPUT}
+                  aria-label="Dias de retencion"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
                   días
@@ -90,29 +86,25 @@ export default function ConfiguracionPoliticasPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={F_LABEL}>Máximo de clientes por empresa</label>
-              <input
-                type="number"
-                name="max_clientes_por_empresa"
+              <NumeroInput
                 value={form.max_clientes_por_empresa}
-                onChange={handleChange}
-                min={0}
-                step={1}
+                onChange={(n) => setNumero("max_clientes_por_empresa", n)}
+                decimales={false}
                 placeholder="0 = ilimitado"
                 className={F_INPUT}
+                aria-label="Maximo de clientes"
               />
               <ConfigHelpText>Límite de clientes que puede registrar cada empresa en el sistema.</ConfigHelpText>
             </div>
             <div>
               <label className={F_LABEL}>Máximo de usuarios por empresa</label>
-              <input
-                type="number"
-                name="max_usuarios_por_empresa"
+              <NumeroInput
                 value={form.max_usuarios_por_empresa}
-                onChange={handleChange}
-                min={0}
-                step={1}
+                onChange={(n) => setNumero("max_usuarios_por_empresa", n)}
+                decimales={false}
                 placeholder="0 = ilimitado"
                 className={F_INPUT}
+                aria-label="Maximo de usuarios"
               />
               <ConfigHelpText>Límite de usuarios activos que puede gestionar cada empresa.</ConfigHelpText>
             </div>
