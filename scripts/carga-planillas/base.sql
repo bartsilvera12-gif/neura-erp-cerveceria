@@ -51,7 +51,9 @@ CREATE TABLE recetas (
   rendimiento_unidad text,
   activa boolean NOT NULL DEFAULT true,
   notas text,
-  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz);
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz,
+  -- Como en el schema real: un producto tiene una sola receta.
+  CONSTRAINT recetas_empresa_producto_uq UNIQUE (empresa_id, producto_id));
 
 CREATE TABLE receta_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

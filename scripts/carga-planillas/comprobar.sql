@@ -2,7 +2,7 @@
 \echo '>> conteos (deben ser iguales tras las dos corridas)'
 SELECT 'proveedores' q, count(*) FROM cerveceriaerp.proveedores WHERE empresa_id = :'empresa'
 UNION ALL SELECT 'insumos',  count(*) FROM cerveceriaerp.productos WHERE empresa_id = :'empresa' AND es_insumo
-UNION ALL SELECT 'graneles', count(*) FROM cerveceriaerp.productos WHERE sku LIKE 'CV-%GRANEL'
+UNION ALL SELECT 'graneles', count(*) FROM cerveceriaerp.productos WHERE sku LIKE 'CV-%GRANEL%'
 UNION ALL SELECT 'recetas',  count(*) FROM cerveceriaerp.recetas WHERE empresa_id = :'empresa'
 UNION ALL SELECT 'receta_items', count(*) FROM cerveceriaerp.receta_items WHERE empresa_id = :'empresa'
 UNION ALL SELECT 'lotes',    count(*) FROM cerveceriaerp.produccion_lotes WHERE empresa_id = :'empresa'

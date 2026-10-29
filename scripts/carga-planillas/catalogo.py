@@ -54,11 +54,16 @@ INSUMOS = [
 
 # Producto "a granel" que produce cada estilo: es el producto en proceso, en
 # litros, que despues se envasa en barriles/latas/botellas.
+# `recetas` tiene un unico por (empresa, producto): un producto a granel no
+# puede tener dos recetas. El cocimiento piloto y el de 500 L son dos procesos
+# distintos con rendimientos distintos, asi que cada uno produce su granel.
 GRANELES = [
-    ("CV-BL-GRANEL",  "Coven Blonde Ale (granel)"),          # ya lo crea el script 07
-    ("CV-SE-GRANEL",  "Coven Session IPA (granel)"),
-    ("CV-BLL-GRANEL", "Coven Blonde Ale Ligera (granel)"),
-    ("CV-AM-GRANEL",  "Coven Amber Ale Suave (granel)"),
+    ("CV-BL-GRANEL",    "Coven Blonde Ale (granel)"),          # ya lo crea el script 07
+    ("CV-SE-GRANEL",    "Coven Session IPA (granel)"),
+    ("CV-BLL-GRANEL",   "Coven Blonde Ale Ligera (granel)"),
+    ("CV-AM-GRANEL",    "Coven Amber Ale Suave (granel)"),
+    ("CV-BL-GRANEL-P",  "Coven Blonde Ale piloto (granel)"),
+    ("CV-SE-GRANEL-P",  "Coven Session IPA piloto (granel)"),
 ]
 
 # Recetas derivadas de los lotes que se repiten igual. Las de los lotes piloto
@@ -92,7 +97,7 @@ RECETAS = [
     },
     {
         "id": "a1b0c3d4-0003-4a00-9000-000000000003",
-        "sku_granel": "CV-BL-GRANEL",
+        "sku_granel": "CV-BL-GRANEL-P",
         "nombre": "Coven Blonde Ale (piloto)",
         "rendimiento": 1, "unidad": "L", "activa": False,
         "origen": "coccion-pequena, lote 3 del 03/12/2025 (el lote 5 repite la misma carga)",
@@ -105,7 +110,7 @@ RECETAS = [
     },
     {
         "id": "a1b0c3d4-0004-4a00-9000-000000000004",
-        "sku_granel": "CV-SE-GRANEL",
+        "sku_granel": "CV-SE-GRANEL-P",
         "nombre": "Coven Session IPA (piloto)",
         "rendimiento": 1, "unidad": "L", "activa": False,
         "origen": "coccion-pequena, lote 8 del 08/01/2026",

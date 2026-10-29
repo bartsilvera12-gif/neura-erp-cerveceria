@@ -134,7 +134,9 @@ BEGIN
       ('CV-BL-GRANEL', 'Coven Blonde Ale (granel)'),
       ('CV-SE-GRANEL', 'Coven Session IPA (granel)'),
       ('CV-BLL-GRANEL', 'Coven Blonde Ale Ligera (granel)'),
-      ('CV-AM-GRANEL', 'Coven Amber Ale Suave (granel)')
+      ('CV-AM-GRANEL', 'Coven Amber Ale Suave (granel)'),
+      ('CV-BL-GRANEL-P', 'Coven Blonde Ale piloto (granel)'),
+      ('CV-SE-GRANEL-P', 'Coven Session IPA piloto (granel)')
     ) AS t(sku, nombre)
   LOOP
     IF NOT EXISTS (SELECT 1 FROM cerveceriaerp.productos
@@ -238,7 +240,7 @@ BEGIN
 
   -- Coven Blonde Ale (piloto) — coccion-pequena, lote 3 del 03/12/2025 (el lote 5 repite la misma carga)
   SELECT id INTO v_granel FROM cerveceriaerp.productos
-   WHERE empresa_id = v_empresa AND sucursal_id = v_sucursal AND sku = 'CV-BL-GRANEL';
+   WHERE empresa_id = v_empresa AND sucursal_id = v_sucursal AND sku = 'CV-BL-GRANEL-P';
   v_receta := 'a1b0c3d4-0003-4a00-9000-000000000003'::uuid;
 
   IF EXISTS (SELECT 1 FROM cerveceriaerp.recetas WHERE id = v_receta) THEN
@@ -281,7 +283,7 @@ BEGIN
 
   -- Coven Session IPA (piloto) — coccion-pequena, lote 8 del 08/01/2026
   SELECT id INTO v_granel FROM cerveceriaerp.productos
-   WHERE empresa_id = v_empresa AND sucursal_id = v_sucursal AND sku = 'CV-SE-GRANEL';
+   WHERE empresa_id = v_empresa AND sucursal_id = v_sucursal AND sku = 'CV-SE-GRANEL-P';
   v_receta := 'a1b0c3d4-0004-4a00-9000-000000000004'::uuid;
 
   IF EXISTS (SELECT 1 FROM cerveceriaerp.recetas WHERE id = v_receta) THEN
@@ -336,13 +338,13 @@ BEGIN
       ('COC-G-01', 'CV-BL-GRANEL', '2026-08-23'::date, 500, 'Cargado de la planilla de coccion. Estilo Blonde Ale. Proveedor mercado craf. Costo de insumos 2,244,729 Gs (no incluye mano de obra ni energia). Consumo: PILSEN UMA 103.33 x 8,600 · VIENNA UMA 5 x 11,000 · CARACLAIR 4.17 x 22,300 · CASCADE 200G 2 x 101,600 · US-05 500G 1 x 711,000 · CASCADE 50G 1 x 26,900 · TRADITION 500GR 1 x 242,000 · CLARIFICANTE 50 x 500.'),
       ('COC-G-02', 'CV-SE-GRANEL', '2026-08-27'::date, 500, 'Cargado de la planilla de coccion. Estilo Session IPA. Proveedor mercado craf. Costo de insumos 3,143,320 Gs (no incluye mano de obra ni energia). Consumo: PILSEN UMA 82.5 x 8,600 · VIENNA UMA 14.1 x 11,000 · CLARA CLAIR 7.4 x 22,300 · MAGNUM 200GR 1 x 101,000 · MAGNUM 50GR 1 x 27,000 · CENTENIAL 200GR 1 x 101,600 · CENTENIAL 50GR 1 x 26,900 · AMARILLO 200GR 2 x 121,600 · CITRA CRYO 1 LITRO 2 x 445,000 · NEW E 11GR 1 x 699,000 · CLARIFICANTE 50 x 500.'),
       ('COC-G-03', 'CV-BL-GRANEL', '2026-08-09'::date, 500, 'Cargado de la planilla de coccion. Estilo Blonde Ale. Proveedor mercado craf. Costo de insumos 1,675,104 Gs (no incluye mano de obra ni energia). Consumo: PILSEN UMA 42.84 x 8,600 · VIENNA UMA 10.88 x 10,000 · MALTA MLANOIDINA UMA 10.2 x 11,000 · MALTA CARA 30 UMA 4.08 x 11,000 · CENTENIAL 200GR 3 x 101,600 · SAFALE USA 05 500G 1 x 711,000 · CLARIFICANTE 50 x 500.'),
-      ('COC-P-02', 'CV-BL-GRANEL', '2025-11-27'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale. Proveedor CERVESHOPP. Costo de insumos 211,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 7.5kg = 97,500 · MUNICH 300g = 4,500 · VIENNA 300g = 4,500 · CARAPILS 300g = 4,500 · CARAMELO 20 300g = 6,000 · CASCADE 30g = 15,000 · E.K. GOLDING 15g = 15,000 · US-05 2un = 60,000 · WHIRLFLOC 1un = 4,000.'),
-      ('COC-P-03', 'CV-BL-GRANEL', '2025-12-03'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale. Proveedor CERVESHOPP. Costo de insumos 203,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 6.5kg = 84,500 · MUNICH 250g = 4,000 · VIENNA 250g = 4,000 · CARAPILS 250g = 4,000 · CARAMELO 20 250g = 5,000 · CASCADE 25g = 12,500 · E.K. GOLDING 15g = 15,000 · US-05 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),
+      ('COC-P-02', 'CV-BL-GRANEL-P', '2025-11-27'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale. Proveedor CERVESHOPP. Costo de insumos 211,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 7.5kg = 97,500 · MUNICH 300g = 4,500 · VIENNA 300g = 4,500 · CARAPILS 300g = 4,500 · CARAMELO 20 300g = 6,000 · CASCADE 30g = 15,000 · E.K. GOLDING 15g = 15,000 · US-05 2un = 60,000 · WHIRLFLOC 1un = 4,000.'),
+      ('COC-P-03', 'CV-BL-GRANEL-P', '2025-12-03'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale. Proveedor CERVESHOPP. Costo de insumos 203,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 6.5kg = 84,500 · MUNICH 250g = 4,000 · VIENNA 250g = 4,000 · CARAPILS 250g = 4,000 · CARAMELO 20 250g = 5,000 · CASCADE 25g = 12,500 · E.K. GOLDING 15g = 15,000 · US-05 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),
       ('COC-P-04', 'CV-BLL-GRANEL', '2025-12-03'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale Ligera. Proveedor CERVESHOPP. Costo de insumos 215,500 Gs (no incluye mano de obra ni energia). Consumo: PALE ALE 6kg = 84,000 · MUNICH 750g = 11,500 · CARAMELO 60 750g = 15,000 · CASCADE 30g = 15,000 · CASCADE 20g = 10,000 · CASCADE 20g = 10,000 · US-05 2un = 70,000.'),
       ('COC-P-05', 'CV-AM-GRANEL', '2025-12-17'::date, NULL, 'Cargado de la planilla de coccion. Estilo Amber Ale Suave. Proveedor CERVESHOPP. Costo de insumos 203,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 6.5kg = 84,500 · MUNICH 250g = 4,000 · VIENNA 250g = 4,000 · CARAPILS 250g = 4,000 · CARAMELO 20 250g = 5,000 · CASCADE 25g = 12,500 · E.K. GOLDING 15g = 15,000 · US-05 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),
       ('COC-P-06', 'CV-BLL-GRANEL', '2026-01-07'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale Ligera. Proveedor CERVESHOPP. Costo de insumos 199,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 6.5kg = 84,500 · MUNICH 250g = 4,000 · CARAPLIS 250g = 4,000 · CARAMELO 20 250g = 5,000 · CASCADE 7,1% 25g = 12,500 · EKG 5,7% 15g = 15,000 · us-05 1,5 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),
       ('COC-P-07', 'CV-BLL-GRANEL', '2026-02-27'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale Ligera. Proveedor CERVESHOPP. Costo de insumos 199,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 6.5kg = 84,500 · MUNICH 250g = 4,000 · CARAPLIS 250g = 4,000 · CARAMELO 20 250g = 5,000 · CASCADE 7,1% 25g = 12,500 · EKG 5,7% 15g = 15,000 · us-05 1,5 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),
-      ('COC-P-08', 'CV-SE-GRANEL', '2026-01-08'::date, NULL, 'Cargado de la planilla de coccion. Estilo Session IPA. Proveedor CERVESHOPP. Costo de insumos 262,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 5.4kg = 70,500 · VIENNA 900g = 13,500 · CARAPLIS 450g = 7,000 · MAGNUM 10g = 10,000 · CASCADE 25g = 15,000 · AMARILLO 30g = 30,000 · CASCAD20G+AMARI20G 20g = 32,000 · CASCARA DE NARANJA 25g = 5,000 · CEDRON KAPII 15g = 3,000 · CEDRON KAPII 5g = 2,000 · US-05 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),
+      ('COC-P-08', 'CV-SE-GRANEL-P', '2026-01-08'::date, NULL, 'Cargado de la planilla de coccion. Estilo Session IPA. Proveedor CERVESHOPP. Costo de insumos 262,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 5.4kg = 70,500 · VIENNA 900g = 13,500 · CARAPLIS 450g = 7,000 · MAGNUM 10g = 10,000 · CASCADE 25g = 15,000 · AMARILLO 30g = 30,000 · CASCAD20G+AMARI20G 20g = 32,000 · CASCARA DE NARANJA 25g = 5,000 · CEDRON KAPII 15g = 3,000 · CEDRON KAPII 5g = 2,000 · US-05 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),
       ('COC-P-09', 'CV-BLL-GRANEL', '2026-02-27'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale Ligera. Proveedor CERVESHOPP. Costo de insumos 199,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 6.5kg = 84,500 · MUNICH 250g = 4,000 · CARAPLIS 250g = 4,000 · CARAMELO 20 250g = 5,000 · CASCADE 7,1% 25g = 12,500 · EKG 5,7% 15g = 15,000 · us-05 1,5 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),
       ('COC-P-10', 'CV-BLL-GRANEL', '2026-04-10'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale Ligera. Proveedor CERVESHOPP. Costo de insumos 199,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 6.5kg = 84,500 · MUNICH 250g = 4,000 · CARAPLIS 250g = 4,000 · CARAMELO 20 250g = 5,000 · CASCADE 7,1% 25g = 12,500 · EKG 5,7% 15g = 15,000 · us-05 1,5 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),
       ('COC-P-11', 'CV-BLL-GRANEL', '2026-04-10'::date, NULL, 'Cargado de la planilla de coccion. Estilo Blonde Ale Ligera. Proveedor CERVESHOPP. Costo de insumos 199,000 Gs (no incluye mano de obra ni energia). Consumo: PILSEN 6.5kg = 84,500 · MUNICH 250g = 4,000 · CARAPLIS 250g = 4,000 · CARAMELO 20 250g = 5,000 · CASCADE 7,1% 25g = 12,500 · EKG 5,7% 15g = 15,000 · us-05 1,5 2un = 70,000 · WHIRLFLOC 1un = 4,000.'),

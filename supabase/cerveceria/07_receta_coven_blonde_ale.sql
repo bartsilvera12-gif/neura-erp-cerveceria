@@ -206,6 +206,10 @@ $receta$;
 
 COMMIT;
 
+-- PostgREST cachea el schema: sin esto la app no ve lo que acaba de cambiar.
+NOTIFY pgrst, 'reload schema';
+
+
 -- =============================================================================
 -- Verificación — el costo da 0 hasta que haya compras de los insumos
 -- =============================================================================

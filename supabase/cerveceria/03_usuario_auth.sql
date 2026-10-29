@@ -105,6 +105,10 @@ BEGIN
 END
 $fix$;
 
+-- PostgREST cachea el schema: sin esto la app no ve lo que acaba de cambiar.
+NOTIFY pgrst, 'reload schema';
+
+
 -- -----------------------------------------------------------------------------
 -- PASO 2 — Enlazar el login con la fila de `cerveceriaerp.usuarios`
 --          (correr siempre, hayas usado la Opción A o la B)

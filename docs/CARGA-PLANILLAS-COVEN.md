@@ -19,7 +19,7 @@ cambian las planillas.
 |---|---|
 | Proveedores | Mercado Craft, Cerveshopp |
 | Insumos | 25 productos con `es_insumo`, con costo por unidad base |
-| A granel | 4 productos en litros, uno por estilo |
+| A granel | 6 productos en litros: uno por estilo, más los dos piloto |
 | Recetas | Session IPA 500 L (activa) + 3 piloto (inactivas) |
 | Lotes | 15, todos en estado `cerrado` |
 
@@ -110,6 +110,12 @@ usó hace meses.
 compras entran como `exenta` con IVA 0, y se reconocen porque su
 `numero_control` empieza con `HIST-`. **No sirven para el libro de IVA**: están
 para costear.
+
+**Los cocimientos piloto producen su propio granel.** `recetas` tiene un único
+por (empresa, producto): un producto a granel no puede tener dos recetas. El
+cocimiento piloto y el de 500 L son dos procesos distintos, con rendimientos
+distintos, así que cada uno produce lo suyo (`CV-BL-GRANEL-P`,
+`CV-SE-GRANEL-P`). Los lotes piloto apuntan a esos.
 
 **Las columnas obligatorias que la planilla no tiene se completan solas.** La
 tabla `compras` tiene varias columnas NOT NULL que la pantalla de Compras llena

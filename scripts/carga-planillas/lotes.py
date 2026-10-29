@@ -63,8 +63,13 @@ def todos():
     for (pre, n), l in sorted(leer_grande().items(), key=lambda x: x[0][1]):
         det = " · ".join(f"{i[0]} {i[1]:g} x {i[2]:,.0f}" for i in l["items"])
         out.append(dict(codigo=f"COC-G-{n:02d}", **l, detalle=det))
+    # Un lote piloto no produce el mismo granel que uno de 500 L: el estilo es
+    # el mismo pero el proceso y el rendimiento no.
+    PILOTO = {"CV-BL-GRANEL": "CV-BL-GRANEL-P", "CV-SE-GRANEL": "CV-SE-GRANEL-P"}
     for (pre, n), l in sorted(leer_pequena().items(), key=lambda x: x[0][1]):
         det = " · ".join(f"{i[0]} {i[1]:g}{i[2]} = {i[3]:,.0f}" for i in l["items"])
+        nombre, sku = l["estilo"]
+        l = dict(l, estilo=(nombre, PILOTO.get(sku, sku)))
         out.append(dict(codigo=f"COC-P-{n:02d}", **l, detalle=det))
     return out
 

@@ -696,6 +696,10 @@ $clone$;
 
 COMMIT;
 
+-- PostgREST cachea el schema: sin esto la app no ve lo que acaba de cambiar.
+NOTIFY pgrst, 'reload schema';
+
+
 -- =============================================================================
 -- Verificación: los conteos de ambos schemas deberían coincidir,
 -- y `cerveceriaerp` debe tener 0 filas en todas sus tablas.

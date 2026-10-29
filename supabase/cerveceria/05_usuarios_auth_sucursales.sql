@@ -143,6 +143,10 @@ UPDATE cerveceriaerp.usuarios u
 
 COMMIT;
 
+-- PostgREST cachea el schema: sin esto la app no ve lo que acaba de cambiar.
+NOTIFY pgrst, 'reload schema';
+
+
 -- =============================================================================
 -- Verificación — los tres usuarios deben tener auth_user_id y confirmado
 -- =============================================================================
