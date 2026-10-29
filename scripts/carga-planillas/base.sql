@@ -209,3 +209,17 @@ VALUES ('0cbefe95-4007-402c-97de-70147f9d39bb', 'Coven') ON CONFLICT DO NOTHING;
 INSERT INTO cerveceriaerp.sucursales (id, empresa_id, nombre)
 VALUES ('37907a1a-5283-4b65-ae4e-4254924a1a82', '0cbefe95-4007-402c-97de-70147f9d39bb', 'Cerveceria')
 ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS cerveceriaerp.categorias_productos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id uuid NOT NULL REFERENCES cerveceriaerp.empresas(id) ON DELETE CASCADE,
+  nombre text NOT NULL, codigo text, descripcion text, parent_id uuid,
+  activo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz);
+
+CREATE TABLE IF NOT EXISTS cerveceriaerp.inventario_ubicaciones (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id uuid NOT NULL REFERENCES cerveceriaerp.empresas(id) ON DELETE CASCADE,
+  nombre text NOT NULL, codigo text, tipo text NOT NULL DEFAULT 'deposito',
+  parent_id uuid, descripcion text, activo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz);

@@ -518,6 +518,17 @@ export default function EditarRecetaPage() {
         </div>
       )}
 
+      {/* El costeo de abajo es solo de insumos; el completo (operacion y
+          envasado por formato) vive en su propia pantalla. */}
+      <div className="mb-4 flex justify-end">
+        <Link
+          href={`/dashboard/recetas/${id}/costeo`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#4FAEB2] px-3 py-2 text-sm font-medium text-[#4FAEB2] hover:bg-[#4FAEB2]/5"
+        >
+          <Factory className="h-4 w-4" aria-hidden /> Costeo completo y precios
+        </Link>
+      </div>
+
       {/* Costeo summary */}
       {costeo && (
         <div className="grid grid-cols-2 gap-3 mb-6 md:grid-cols-3 xl:grid-cols-5">

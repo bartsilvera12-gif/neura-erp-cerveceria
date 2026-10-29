@@ -25,3 +25,20 @@ SELECT round((cerveceriaerp.fn_receta_costeo('a1b0c3d4-0001-4a00-9000-0000000000
 \echo '>> lotes cargados'
 SELECT codigo, estado, volumen_planificado, fecha_inicio::date
   FROM cerveceriaerp.produccion_lotes WHERE empresa_id = :'empresa' ORDER BY codigo;
+
+\echo '>> inventario de planta: por ubicacion'
+SELECT u.nombre AS ubicacion, count(*) AS articulos, sum(p.stock_actual) AS unidades,
+       count(*) FILTER (WHERE NOT p.controla_stock) AS sin_contar
+  FROM cerveceriaerp.productos p
+  JOIN cerveceriaerp.inventario_ubicaciones u ON u.id = p.ubicacion_principal_id
+ WHERE p.sku LIKE 'FAB-%' GROUP BY u.nombre ORDER BY u.nombre;
+
+\echo '>> el stock de planta tiene que cuadrar con sus movimientos (sin duplicar tras 2 corridas)'
+SELECT (SELECT sum(stock_actual) FROM cerveceriaerp.productos WHERE sku LIKE 'FAB-%') AS stock,
+       (SELECT sum(cantidad) FROM cerveceriaerp.movimientos_inventario
+         WHERE producto_sku LIKE 'FAB-%' AND tipo='ENTRADA') AS movimientos,
+       (SELECT count(*) FROM cerveceriaerp.movimientos_inventario WHERE producto_sku LIKE 'FAB-%') AS n_mov;
+
+\echo '>> la cerveza sigue sin mover stock'
+SELECT count(*) AS movimientos_no_planta FROM cerveceriaerp.movimientos_inventario
+ WHERE producto_sku NOT LIKE 'FAB-%';

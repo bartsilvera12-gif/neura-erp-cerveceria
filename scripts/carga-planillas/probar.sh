@@ -23,8 +23,12 @@ $PSQL -f "$AQUI/base.sql"
 $PSQL -f "$RAIZ/supabase/cerveceria/06_recetas_precio_y_formatos.sql" >/dev/null
 $PSQL -f "$RAIZ/supabase/cerveceria/07_receta_coven_blonde_ale.sql"   >/dev/null
 $PSQL -f "$RAIZ/supabase/cerveceria/08_produccion_lotes_fermentadores.sql" >/dev/null
-echo "--- corrida 1"; $PSQL -f "$RAIZ/supabase/cerveceria/12_carga_coven_planillas.sql"
-echo "--- corrida 2 (idempotencia)"; $PSQL -f "$RAIZ/supabase/cerveceria/12_carga_coven_planillas.sql"
+echo "--- corrida 1"
+$PSQL -f "$RAIZ/supabase/cerveceria/12_carga_coven_planillas.sql" >/dev/null
+$PSQL -f "$RAIZ/supabase/cerveceria/13_inventario_fabrica.sql"    >/dev/null
+echo "--- corrida 2 (idempotencia)"
+$PSQL -f "$RAIZ/supabase/cerveceria/12_carga_coven_planillas.sql" >/dev/null
+$PSQL -f "$RAIZ/supabase/cerveceria/13_inventario_fabrica.sql"    >/dev/null
 echo "--- comprobaciones"
 psql -h 127.0.0.1 -p $PUERTO -U postgres -d carga -v ON_ERROR_STOP=1 -f "$AQUI/comprobar.sql"
 (su postgres -c "$PGBIN/pg_ctl -D $DIR/data -m immediate stop" || true) >/dev/null 2>&1
