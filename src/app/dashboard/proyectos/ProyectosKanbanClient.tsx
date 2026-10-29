@@ -18,7 +18,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { readSaasBriefData } from "@/lib/proyectos/brief-data";
 import ProyectoDetalleModal from "./components/ProyectoDetalleModal";
 
-import { MapPin, Phone, User } from "lucide-react";
+import { LayoutGrid, List, MapPin, Phone, User } from "lucide-react";
 
 import Link from "next/link";
 type EstadoRow = {
@@ -238,6 +238,20 @@ const PEDIDO_MODALIDAD_BADGE: Record<
   carry_out: { label: "Retiro",    cls: "border-sky-300 bg-sky-50 text-sky-800" },
 };
 
+/**
+ * Una línea corta que dice a dónde va el pedido. Un pedido de mesa no tiene
+ * cliente cargado, así que mostrar "Sin cliente" era ruido: lo que el mozo
+ * necesita leer es la mesa, o a quién se le entrega.
+ */
+function pedidoDestinoCorto(pedido: PedidoBrief, contacto: string | null): string {
+  if (pedido.modalidad === "local") return pedido.mesa ? `Mesa ${pedido.mesa}` : "En el local";
+  const nombre = (pedido.cliente_nombre || contacto || "").trim();
+  if (pedido.modalidad === "delivery") {
+    return nombre || pedido.direccion_entrega || "Delivery";
+  }
+  return nombre || "Para retirar";
+}
+
 function fmtPedidoTotal(n: number | string | null | undefined): string {
   if (n == null) return "—";
   const v = typeof n === "string" ? Number(n) : n;
@@ -264,11 +278,13 @@ export default function ProyectosKanbanClient() {
 
   const [q, setQ] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState("");
-  const [filtroRc, setFiltroRc] = useState("");
-  const [filtroRt, setFiltroRt] = useState("");
-  const [tipoOpts, setTipoOpts] = useState<{ id: string; nombre: string }[]>([]);
-  const [userOpts, setUserOpts] = useState<{ id: string; nombre?: string }[]>([]);
+  /** Kanban para trabajar el turno; lista para revisar lo del día de un vistazo. */
+  const [vista, setVista] = useState<"kanban" | "lista">("kanban");
+  /**
+   * La modalidad vive en `brief_data`, no es una columna, así que se filtra
+   * acá y no en la consulta.
+   */
+  const [filtroModalidad, setFiltroModalidad] = useState<"" | PedidoBrief["modalidad"]>("");
   const [modalProjectId, setModalProjectId] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -276,33 +292,24 @@ export default function ProyectosKanbanClient() {
     useSensor(KeyboardSensor)
   );
 
-  // Las opciones no-críticas (tipos, usuarios, prioridades) son config estática:
-  // no dependen de los filtros y solo alimentan selects + estilos de badge.
-  // Se cargan UNA sola vez y nunca bloquean el render del tablero. Esto evita
-  // refetch en cada cambio de filtro y, sobre todo, que un endpoint lento/caído
-  // (ej. /prioridades vía pool PG directo) congele el kanban en "Cargando…".
+  // La config de prioridades es estática: no depende de los filtros y solo
+  // alimenta los estilos de los badges. Se carga UNA sola vez y nunca bloquea
+  // el render del tablero, para que un endpoint lento no congele el kanban en
+  // "Cargando…".
   const opcionesCargadasRef = useRef(false);
 
   const cargarOpcionesNoCriticas = useCallback(async () => {
     if (opcionesCargadasRef.current) return;
     opcionesCargadasRef.current = true;
     try {
-      const [rTipos, rUsers, rPrioridades] = await Promise.all([
-        fetchWithSupabaseSession("/api/proyectos/tipos", { cache: "no-store" }),
-        fetchWithSupabaseSession("/api/usuarios/empresa-activos", { cache: "no-store" }),
-        fetchWithSupabaseSession("/api/configuracion/proyectos/prioridades", { cache: "no-store" }),
-      ]);
-      const jTipos = (await rTipos.json().catch(() => ({}))) as {
-        success?: boolean;
-        data?: { id: string; nombre: string }[];
-      };
-      const jUsers = (await rUsers.json().catch(() => ({}))) as { usuarios?: { id: string; nombre?: string }[] };
+      const rPrioridades = await fetchWithSupabaseSession(
+        "/api/configuracion/proyectos/prioridades",
+        { cache: "no-store" }
+      );
       const jPrioridades = (await rPrioridades.json().catch(() => ({}))) as {
         success?: boolean;
         data?: { prioridades?: PrioridadConfig[] };
       };
-      if (jTipos.success && jTipos.data) setTipoOpts(jTipos.data);
-      if (jUsers.usuarios) setUserOpts(jUsers.usuarios);
       if (rPrioridades.ok && jPrioridades.success && jPrioridades.data?.prioridades) {
         setPrioridadesConfig(jPrioridades.data.prioridades);
       } else {
@@ -321,9 +328,6 @@ export default function ProyectosKanbanClient() {
     const sp = new URLSearchParams();
     if (q.trim()) sp.set("q", q.trim());
     if (filtroEstado) sp.set("estado_id", filtroEstado);
-    if (filtroTipo) sp.set("tipo_id", filtroTipo);
-    if (filtroRc) sp.set("responsable_comercial_id", filtroRc);
-    if (filtroRt) sp.set("responsable_tecnico_id", filtroRt);
 
     // Camino crítico: el tablero solo necesita estados + proyectos para pintar.
     const [rEst, rPr] = await Promise.all([
@@ -350,7 +354,7 @@ export default function ProyectosKanbanClient() {
 
     // No-críticas en segundo plano: no bloquean el render del tablero.
     void cargarOpcionesNoCriticas();
-  }, [q, filtroEstado, filtroTipo, filtroRc, filtroRt, cargarOpcionesNoCriticas]);
+  }, [q, filtroEstado, cargarOpcionesNoCriticas]);
 
   useEffect(() => {
     void load();
@@ -358,10 +362,16 @@ export default function ProyectosKanbanClient() {
 
   const estadoActivoIds = useMemo(() => new Set(estados.map((e) => e.id)), [estados]);
 
+  /** Pedidos que se muestran: el filtro de modalidad aplica a kanban y a lista. */
+  const proyectosVisibles = useMemo(() => {
+    if (!filtroModalidad) return proyectos;
+    return proyectos.filter((p) => readPedidoBrief(p.brief_data)?.modalidad === filtroModalidad);
+  }, [proyectos, filtroModalidad]);
+
   const kanbanColumns = useMemo(() => {
     const columns = [...estados];
     const missing = new Map<string, EstadoRow>();
-    for (const p of proyectos) {
+    for (const p of proyectosVisibles) {
       if (estadoActivoIds.has(p.estado_id) || missing.has(p.estado_id)) continue;
       missing.set(p.estado_id, {
         id: p.estado_id,
@@ -373,17 +383,17 @@ export default function ProyectosKanbanClient() {
       });
     }
     return [...columns, ...missing.values()];
-  }, [estadoActivoIds, estados, proyectos]);
+  }, [estadoActivoIds, estados, proyectosVisibles]);
 
   const byColumn = useMemo(() => {
     const m = new Map<string, ProyectoCard[]>();
     for (const e of kanbanColumns) m.set(e.id, []);
-    for (const p of proyectos) {
+    for (const p of proyectosVisibles) {
       const col = m.get(p.estado_id);
       if (col) col.push(p);
     }
     return m;
-  }, [kanbanColumns, proyectos]);
+  }, [kanbanColumns, proyectosVisibles]);
 
   const prioridadByCodigo = useMemo(() => {
     const m = new Map<string, PrioridadConfig>();
@@ -397,6 +407,19 @@ export default function ProyectosKanbanClient() {
     () => proyectos.find((p) => p.id === activeDragProjectId) ?? null,
     [activeDragProjectId, proyectos]
   );
+
+  const estadoById = useMemo(() => {
+    const m = new Map<string, EstadoRow>();
+    for (const e of kanbanColumns) m.set(e.id, e);
+    return m;
+  }, [kanbanColumns]);
+
+  const hayFiltros = q.trim() !== "" || filtroEstado !== "" || filtroModalidad !== "";
+  function limpiarFiltros() {
+    setQ("");
+    setFiltroEstado("");
+    setFiltroModalidad("");
+  }
 
   async function cambiarEstado(proyectoId: string, estadoId: string): Promise<boolean> {
     if (!estadoActivoIds.has(estadoId)) {
@@ -505,13 +528,76 @@ export default function ProyectosKanbanClient() {
         </div>
         <div className="flex w-full items-center sm:w-auto">
           <input
-            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm sm:w-72"
-            placeholder="Buscar título o cliente…"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/15 sm:w-72"
+            placeholder="Buscar pedido o cliente…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void load()}
           />
         </div>
+      </div>
+
+      {/* Barra: vista + filtros. Sin botón de alta: los pedidos entran desde
+          Caja, no se cargan a mano desde el tablero. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+          {([
+            { id: "kanban", label: "Kanban", Icon: LayoutGrid },
+            { id: "lista", label: "Lista", Icon: List },
+          ] as const).map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setVista(id)}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                vista === id
+                  ? "bg-[#4FAEB2] text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <Icon className="h-4 w-4" aria-hidden />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <select
+          value={filtroEstado}
+          onChange={(e) => setFiltroEstado(e.target.value)}
+          aria-label="Filtrar por estado"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition-colors hover:border-slate-300 focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/15"
+        >
+          <option value="">Todos los estados</option>
+          {estados.map((e) => (
+            <option key={e.id} value={e.id}>{e.nombre}</option>
+          ))}
+        </select>
+
+        <select
+          value={filtroModalidad}
+          onChange={(e) => setFiltroModalidad(e.target.value as typeof filtroModalidad)}
+          aria-label="Filtrar por modalidad"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition-colors hover:border-slate-300 focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/15"
+        >
+          <option value="">Todas las modalidades</option>
+          <option value="local">En local</option>
+          <option value="delivery">Delivery</option>
+          <option value="carry_out">Retiro</option>
+        </select>
+
+        <span className="text-xs text-slate-400 tabular-nums">
+          {proyectosVisibles.length === 1 ? "1 pedido" : `${proyectosVisibles.length} pedidos`}
+        </span>
+
+        {hayFiltros ? (
+          <button
+            type="button"
+            onClick={limpiarFiltros}
+            className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+          >
+            Limpiar filtros
+          </button>
+        ) : null}
       </div>
 
       {err ? <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{err}</div> : null}
@@ -524,10 +610,23 @@ export default function ProyectosKanbanClient() {
               label={estado.nombre}
               value={byColumn.get(estado.id)?.length ?? 0}
               color={estado.color}
+              activo={filtroEstado === estado.id}
+              onClick={() => setFiltroEstado(filtroEstado === estado.id ? "" : estado.id)}
             />
           ))}
         </div>
       </div>
+
+      {vista === "lista" ? (
+        <PedidosLista
+          pedidos={proyectosVisibles}
+          estados={estados}
+          estadoById={estadoById}
+          movingProjectId={movingProjectId}
+          onOpen={setModalProjectId}
+          onMove={(proyectoId, estadoId) => void cambiarEstado(proyectoId, estadoId)}
+        />
+      ) : null}
 
       {/* Sin columnas configuradas el tablero no dibujaba nada y la pantalla
           parecía rota. Las columnas se cargan una vez, desde Configuración. */}
@@ -547,6 +646,7 @@ export default function ProyectosKanbanClient() {
         </div>
       ) : null}
 
+      {vista === "kanban" ? (
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         {/* Antes: "overflow-x-hidden" bloqueaba el scroll horizontal del kanban,
             las columnas se comprimian a flex-1 y en mobile quedaban ilegibles
@@ -560,12 +660,20 @@ export default function ProyectosKanbanClient() {
               const items = byColumn.get(col.id) ?? [];
               return (
                 <KanbanColumnView key={col.id} col={col}>
-                  <div
-                    className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2 shadow-sm"
-                    style={{ borderTopColor: col.color, borderTopWidth: 3 }}
-                  >
-                    <span className="text-sm font-semibold text-slate-800">{col.nombre}</span>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs text-slate-600">{items.length}</span>
+                  <div className="sticky top-0 z-30 overflow-hidden rounded-t-lg bg-white shadow-sm">
+                    <div className="h-1" style={{ backgroundColor: col.color || "#94a3b8" }} />
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+                      <span className="truncate text-sm font-semibold text-slate-800" title={col.nombre}>
+                        {col.nombre}
+                      </span>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                          items.length > 0 ? "bg-slate-100 text-slate-700" : "bg-slate-50 text-slate-400"
+                        }`}
+                      >
+                        {items.length}
+                      </span>
+                    </div>
                   </div>
                   {col.inactiveFallback ? (
                     <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -586,7 +694,9 @@ export default function ProyectosKanbanClient() {
                       />
                     ))}
                     {items.length === 0 ? (
-                      <div className="py-8 text-center text-xs text-slate-400">Soltá tarjetas acá</div>
+                      <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-xs text-slate-400">
+                        Soltá tarjetas acá
+                      </div>
                     ) : null}
                   </div>
                 </KanbanColumnView>
@@ -608,10 +718,13 @@ export default function ProyectosKanbanClient() {
           ) : null}
         </DragOverlay>
       </DndContext>
+      ) : null}
 
-      <p className="text-center text-xs text-slate-400">
-        Arrastrá tarjetas entre columnas activas o usá el selector “Mover a” como alternativa.
-      </p>
+      {vista === "kanban" ? (
+        <p className="text-center text-xs text-slate-400">
+          Arrastrá tarjetas entre columnas activas o usá el selector “Mover a” como alternativa.
+        </p>
+      ) : null}
 
       <ProyectoDetalleModal
         projectId={modalProjectId}
@@ -637,9 +750,9 @@ function KanbanColumnView({ col, children }: KanbanColumnViewProps) {
       // imposibles de leer en mobile. Ahora: ancho fijo de 260px (sin flex-1)
       // para que el contenedor scrollee horizontalmente con todas las columnas
       // legibles. shrink-0 evita que se compriman.
-      className={`flex w-[82vw] max-w-[320px] shrink-0 flex-col rounded-lg border bg-slate-50/80 transition-colors sm:w-[300px] lg:w-[260px] ${
+      className={`flex w-[82vw] max-w-[320px] shrink-0 flex-col rounded-xl border bg-slate-100/60 transition-colors sm:w-[300px] lg:w-[272px] ${
         isOver && !col.inactiveFallback
-          ? "border-indigo-300 bg-indigo-50/70 ring-2 ring-indigo-100"
+          ? "border-[#4FAEB2] bg-[#4FAEB2]/10 ring-2 ring-[#4FAEB2]/20"
           : "border-slate-200"
       }`}
     >
@@ -703,8 +816,8 @@ function ProjectCardView({
             <div className="text-sm font-semibold leading-snug text-slate-950 hover:underline">
               {p.titulo}
             </div>
-            <div className="mt-0.5 text-[11px] font-medium text-slate-600">
-              {cli}
+            <div className="mt-0.5 truncate text-[11px] font-medium text-slate-600">
+              {pedido ? pedidoDestinoCorto(pedido, p.cliente?.nombre_contacto ?? null) : cli}
             </div>
           </div>
         </div>
@@ -712,7 +825,6 @@ function ProjectCardView({
           {pedido ? (
             <span className={`${baseBadgeClass} font-semibold ${PEDIDO_MODALIDAD_BADGE[pedido.modalidad].cls}`}>
               {PEDIDO_MODALIDAD_BADGE[pedido.modalidad].label}
-              {pedido.modalidad === "local" && pedido.mesa ? ` · Mesa ${pedido.mesa}` : ""}
             </span>
           ) : (
             <span className={neutralBadgeClass}>
@@ -870,24 +982,191 @@ function PedidoCardBody({
   );
 }
 
+/**
+ * Contador por estado. Tocarlo filtra el tablero por esa columna: en el
+ * mostrador se mira "¿cuántos hay en preparación?" y se quiere ir ahí de una.
+ */
 function EstadoMetric({
   label,
   value,
   color,
+  activo,
+  onClick,
 }: {
   label: string;
   value: number;
   color: string;
+  activo: boolean;
+  onClick: () => void;
 }) {
+  const c = color || "#94a3b8";
   return (
-    <div className="min-w-[120px] flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
-      <div className="mb-1 h-0.5 rounded-full" style={{ backgroundColor: color || "#94a3b8" }} />
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-[10px] font-medium uppercase tracking-wide text-slate-500" title={label}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activo}
+      title={activo ? `Quitar el filtro de ${label}` : `Ver solo ${label}`}
+      className={`group min-w-[130px] flex-1 overflow-hidden rounded-xl border bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+        activo ? "border-slate-300 ring-2 ring-slate-900/5" : "border-slate-200"
+      }`}
+    >
+      <div className="h-1" style={{ backgroundColor: c }} />
+      <div className="flex items-baseline justify-between gap-2 px-3 py-2">
+        <span
+          className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+          title={label}
+        >
           {label}
         </span>
-        <span className="text-base font-semibold text-slate-900 tabular-nums">{value}</span>
+        <span
+          className={`text-xl font-semibold tabular-nums ${value > 0 ? "text-slate-900" : "text-slate-300"}`}
+        >
+          {value}
+        </span>
       </div>
+    </button>
+  );
+}
+
+/**
+ * Vista de lista: el turno entero en una tabla, para revisar de un vistazo lo
+ * que en el kanban obliga a recorrer columna por columna. El estado se cambia
+ * desde el mismo selector, sin abrir el pedido.
+ */
+function PedidosLista({
+  pedidos,
+  estados,
+  estadoById,
+  movingProjectId,
+  onOpen,
+  onMove,
+}: {
+  pedidos: ProyectoCard[];
+  estados: EstadoRow[];
+  estadoById: Map<string, EstadoRow>;
+  movingProjectId: string | null;
+  onOpen: (id: string) => void;
+  onMove: (proyectoId: string, estadoId: string) => void;
+}) {
+  if (pedidos.length === 0) {
+    return (
+      <div className="rounded-xl border-2 border-dashed border-slate-200 bg-white px-6 py-14 text-center">
+        <p className="text-sm font-medium text-slate-500">No hay pedidos para mostrar.</p>
+        <p className="mt-1 text-xs text-slate-400">Los pedidos entran desde Caja al confirmar una venta.</p>
+      </div>
+    );
+  }
+
+  const th = "px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500";
+  const td = "px-3 py-3 align-middle";
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table className="w-full min-w-[760px] text-sm">
+        <thead className="border-b border-slate-200 bg-slate-50/80">
+          <tr>
+            <th className={th}>Pedido</th>
+            <th className={th}>Modalidad</th>
+            <th className={th}>Destino</th>
+            <th className={`${th} w-full`}>Detalle</th>
+            <th className={`${th} text-right`}>Total</th>
+            <th className={th}>Estado</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {pedidos.map((p) => {
+            const pedido = readPedidoBrief(p.brief_data);
+            const estado = estadoById.get(p.estado_id);
+            const moviendo = movingProjectId === p.id;
+            const cliente =
+              (p.cliente?.empresa || "").trim() ||
+              (p.cliente?.nombre_contacto || "").trim() ||
+              pedido?.cliente_nombre ||
+              "";
+            const destino =
+              pedido?.modalidad === "local"
+                ? pedido.mesa
+                  ? `Mesa ${pedido.mesa}`
+                  : "En local"
+                : pedido?.modalidad === "delivery"
+                ? pedido.direccion_entrega || pedido.cliente_telefono || "Delivery"
+                : cliente || "Retiro";
+            const unidades = pedido?.items.reduce((a, it) => a + it.cantidad, 0) ?? 0;
+            const primeros = (pedido?.items ?? []).slice(0, 2).map((it) => `${it.cantidad}× ${it.producto_nombre}`);
+            const resto = Math.max(0, (pedido?.items.length ?? 0) - 2);
+
+            return (
+              <tr key={p.id} className={`transition-colors hover:bg-slate-50 ${moviendo ? "bg-sky-50/60" : ""}`}>
+                <td className={td}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(p.id)}
+                    className="whitespace-nowrap text-left font-semibold text-slate-900 hover:underline"
+                  >
+                    {p.titulo}
+                  </button>
+                  <div className="text-[11px] tabular-nums text-slate-400">
+                    {fmtPedidoHora(p.fecha_ingreso ?? p.last_activity_at ?? null)}
+                    {/* El número solo se repite si el título no lo trae ya. */}
+                    {pedido?.numero_control && !p.titulo.includes(pedido.numero_control)
+                      ? ` · ${pedido.numero_control}`
+                      : ""}
+                  </div>
+                </td>
+                <td className={td}>
+                  {pedido ? (
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${PEDIDO_MODALIDAD_BADGE[pedido.modalidad].cls}`}
+                    >
+                      {PEDIDO_MODALIDAD_BADGE[pedido.modalidad].label}
+                    </span>
+                  ) : (
+                    <span className="text-slate-300">—</span>
+                  )}
+                </td>
+                <td className={`${td} max-w-[220px] truncate text-slate-700`} title={destino || undefined}>
+                  {destino || <span className="text-slate-300">—</span>}
+                </td>
+                <td className={`${td} w-full text-[12px] text-slate-600`}>
+                  {primeros.length > 0 ? (
+                    <>
+                      <span className="block max-w-[320px] truncate">{primeros.join(" · ")}</span>
+                      <span className="text-[11px] text-slate-400">
+                        {resto > 0 ? `+${resto} más · ` : ""}
+                        {unidades === 1 ? "1 unidad" : `${unidades} unidades`}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-slate-300">—</span>
+                  )}
+                </td>
+                <td className={`${td} whitespace-nowrap text-right font-semibold tabular-nums text-slate-900`}>
+                  {fmtPedidoTotal(Number(p.monto_vendido ?? 0))}
+                </td>
+                <td className={td}>
+                  {/* El borde toma el color de la columna: el estado se lee sin
+                      tener que leerlo. */}
+                  <select
+                    value={p.estado_id}
+                    onChange={(e) => onMove(p.id, e.target.value)}
+                    disabled={moviendo}
+                    aria-label={`Estado de ${p.titulo}`}
+                    className="w-full min-w-[138px] rounded-lg border-2 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 outline-none transition-colors disabled:opacity-50"
+                    style={{ borderColor: estado?.color || "#cbd5e1" }}
+                  >
+                    {!estadoById.has(p.estado_id) ? (
+                      <option value={p.estado_id}>Estado sin configurar</option>
+                    ) : null}
+                    {estados.map((e) => (
+                      <option key={e.id} value={e.id}>{e.nombre}</option>
+                    ))}
+                  </select>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
