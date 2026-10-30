@@ -12,6 +12,10 @@ import AnularCompraModal from "./AnularCompraModal";
 import type { Compra, TipoPago } from "@/lib/compras/types";
 
 import { ChevronDown, ChevronRight, Paperclip } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import { useRolErp } from "@/lib/auth/use-rol-erp";
+import { esAdminErp } from "@/lib/roles/erp-role-access";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none bg-white";
@@ -112,6 +116,47 @@ export default function ComprasPage() {
   const [filtroTipoPago, setFiltroTipoPago] = useState<TipoPago | "">("");
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [anularTarget, setAnularTarget] = useState<{ numero: string; proveedor: string } | null>(null);
+  const [eliminando, setEliminando] = useState<string | null>(null);
+  const { rol } = useRolErp();
+  const puedeEliminar = esAdminErp(rol);
+  const { confirmar, avisar } = useDialogos();
+
+  /**
+   * Borrar definitivamente una compra ya anulada.
+   *
+   * Solo anuladas: una compra viva sumó stock y pudo dejar una cuenta por
+   * pagar, y borrar la fila no deshace nada de eso. Anular sí, y después la
+   * fila no tiene nada colgando.
+   */
+  async function eliminarCompra(numero: string, proveedor: string) {
+    if (eliminando) return;
+    const seguir = await confirmar({
+      titulo: `Eliminar la compra ${numero}`,
+      mensaje:
+        `Ya está anulada, así que el stock y la cuenta por pagar ya se revirtieron. ` +
+        `Esto saca la compra de ${proveedor} del historial para siempre.`,
+      confirmar: "Eliminar",
+      tono: "peligro",
+    });
+    if (!seguir) return;
+    setEliminando(numero);
+    try {
+      const r = await fetchWithSupabaseSession(
+        `/api/compras/${encodeURIComponent(numero)}/eliminar`,
+        { method: "DELETE" }
+      );
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        await avisar({ mensaje: j?.error ?? "No se pudo eliminar la compra.", tono: "peligro" });
+        return;
+      }
+      await recargar();
+    } catch {
+      await avisar({ mensaje: "Error de red al eliminar la compra.", tono: "peligro" });
+    } finally {
+      setEliminando(null);
+    }
+  }
   const [ocPorConfirmar, setOcPorConfirmar] = useState<
     Array<{ id: string; numero: string; proveedor_nombre: string; fecha: string; estado: string; items: number; totalPendiente: number }>
   >([]);
@@ -375,7 +420,7 @@ export default function ComprasPage() {
                           {formatFechaDate(g.fecha_factura)}
                         </td>
                         <td className="py-4 text-right">
-                          {!g.anulada && (
+                          {!g.anulada ? (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -387,6 +432,22 @@ export default function ComprasPage() {
                             >
                               Anular
                             </button>
+                          ) : (
+                            puedeEliminar && (
+                              <button
+                                type="button"
+                                disabled={eliminando === g.numero_control}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void eliminarCompra(g.numero_control, g.proveedor_nombre);
+                                }}
+                                className="inline-flex items-center justify-center rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                                title="Eliminar del historial (ya está anulada)"
+                                aria-label={`Eliminar la compra ${g.numero_control}`}
+                              >
+                                <Trash2 className="h-4 w-4" aria-hidden />
+                              </button>
+                            )
                           )}
                         </td>
                       </tr>

@@ -87,6 +87,52 @@ export function errorTelefono(raw: string, opts?: { obligatorio?: boolean }): st
 }
 
 /**
+ * Número de comprobante paraguayo: `001-001-0000001`.
+ *
+ * Son tres partes con largo fijo: establecimiento (3), punto de expedición (3)
+ * y correlativo (7). El largo importa: el campo aceptaba cualquier cantidad de
+ * dígitos y después esa factura de compra no se puede cruzar con el libro de
+ * IVA ni con lo que declara el proveedor.
+ */
+export function errorNumeroComprobante(
+  raw: string,
+  opts?: { obligatorio?: boolean }
+): string | null {
+  const v = raw.trim();
+  if (vacio(v)) return opts?.obligatorio ? "El número de factura es obligatorio." : null;
+  if (/[a-zA-Z]/.test(v)) return "El número de factura lleva solo números y guiones.";
+  if (!/^\d{3}-\d{3}-\d{7}$/.test(v)) {
+    const digitos = (v.match(/\d/g) ?? []).length;
+    if (digitos !== 13) {
+      return `El número de factura va en formato 001-001-0000001 (13 dígitos, van ${digitos}).`;
+    }
+    return "El número de factura va en formato 001-001-0000001.";
+  }
+  return null;
+}
+
+/**
+ * Da forma al número de comprobante mientras se tipea: quien lo copia de una
+ * factura escribe los 13 dígitos de corrido, y pedirle que ponga los guiones a
+ * mano es pedirle que se equivoque.
+ */
+export function formatearNumeroComprobante(raw: string): string {
+  const d = (raw.match(/\d/g) ?? []).join("").slice(0, 13);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
+/** Timbrado de la SET: 8 dígitos. */
+export function errorTimbrado(raw: string, opts?: { obligatorio?: boolean }): string | null {
+  const v = raw.trim();
+  if (vacio(v)) return opts?.obligatorio ? "El timbrado es obligatorio." : null;
+  if (!/^\d+$/.test(v)) return "El timbrado lleva solo números.";
+  if (v.length !== 8) return `El timbrado tiene 8 dígitos (van ${v.length}).`;
+  return null;
+}
+
+/**
  * Primer error de una lista de validaciones, o `null` si pasan todas. Permite
  * escribir la validación de un formulario como una lista plana y mantener el
  * orden en que el usuario lee los campos.

@@ -67,17 +67,34 @@ script los lista y dice qué unificar en vez de fallar con un error críptico.
   instancia hacen falta. El cobro por transferencia ya funciona sin entidad;
   la entidad es para conciliar.
 
-## Pendiente de revisar
+## Segunda tanda
 
-No los toqué todavía, por orden de lo que más cuesta:
+| | Qué era | Qué se hizo |
+|---|---|---|
+| **CP-02** | Anular compras | **Ya existía acá**: botón, modal, API y reversa de stock |
+| **CP-02** | Eliminar compras | Se agregó, sólo sobre compras ya anuladas y sólo admin |
+| **CP-03** | El N° de factura aceptaba cualquier cantidad de dígitos | Formato `001-001-0000001`, con máscara al tipear |
+| **CP-03** | El timbrado no se validaba | 8 dígitos. El placeholder además mostraba el formato de la factura |
+| **FN-06** | Gastos sin filtro por mes | Selector de mes + "Este mes" |
+| **CP-02** | El desplegable de IVA tapaba la tabla | **No aplica**: acá el IVA es un control segmentado, no un desplegable |
 
-- **CP-02**: anular y eliminar compras. Hoy sólo se pueden editar. Es una
-  funcionalidad que falta, no un bug.
-- **CP-03**: validar el formato `001-001-0000001` del número de factura y del
-  timbrado, y que los datos de facturación de la orden pasen a la compra.
+### Eliminar compras: sólo las anuladas
+
+Una compra registrada no es un papel. Sumó stock, pudo dejar una cuenta por
+pagar y movió el costo promedio del producto. Borrar la fila no deshace nada de
+eso: deja el stock inflado y el kardex con una entrada sin origen, y nadie se
+entera hasta el próximo conteo.
+
+Anular sí deshace todo eso. Por eso el camino es anular primero y, si además no
+se la quiere ver más en la lista, borrarla después: para entonces ya no queda
+nada colgando. La condición se comprueba en el servidor y no sólo en la
+pantalla, porque el botón se puede saltear llamando a la URL.
+
+## Pendiente, falta el detalle para reproducir
+
 - **CP-02 / CP-05**: el error de Cuentas por pagar. Hace falta el mensaje
-  exacto para reproducirlo.
+  exacto.
 - **RD-06**: el error en Reportes → Proveedor. Ídem.
 - **IN-02b**: el historial de entradas no se refresca al crear productos.
-- **FN-06**: Gastos sin filtro por mes.
-- **CP-02**: el desplegable de IVA tapa la tabla en Nueva compra.
+- **CP-03**: que los datos de facturación de la orden de compra pasen a la
+  compra en vez de volver a pedirse.

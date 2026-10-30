@@ -7,6 +7,12 @@ import { Loader2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { uploadComprobante } from "@/lib/compras/storage";
 import { useDialogos } from "@/components/ui/Dialogos";
+import {
+  errorNumeroComprobante,
+  errorTimbrado,
+  formatearNumeroComprobante,
+  primerError,
+} from "@/lib/validacion/documentos";
 
 type OcCab = { id: string; numero: string; proveedor_nombre: string; estado: string; fecha: string; moneda: string; tipo_pago: string; plazo_dias: number | null };
 type OcItem = { id: string; producto_nombre: string; sku_snapshot: string | null; cantidad_solicitada: number; cantidad_recibida: number; costo_estimado: number };
@@ -91,7 +97,11 @@ export default function DesdeOrdenRecepcionPage() {
 
   async function confirmar() {
     setErr(null);
-    if (!nroTimbrado.trim()) { setErr("Ingresá el N° de timbrado de la factura recibida."); return; }
+    const eComprobante = primerError(
+      errorTimbrado(nroTimbrado, { obligatorio: true }),
+      errorNumeroComprobante(numeroFactura)
+    );
+    if (eComprobante) { setErr(eComprobante); return; }
     const recepciones = items.map((it) => {
       const r = rec[it.id];
       const pend = Math.max(0, it.cantidad_solicitada - it.cantidad_recibida);
@@ -249,11 +259,17 @@ export default function DesdeOrdenRecepcionPage() {
           </div>
           <div>
             <label className={labelClass}>N° de timbrado <span className="text-red-500">*</span></label>
-            <input value={nroTimbrado} onChange={(e) => setNroTimbrado(e.target.value)} placeholder="Ej: 12345678" className={inputClass} />
+            <input value={nroTimbrado} inputMode="numeric"
+              onChange={(e) => setNroTimbrado(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              placeholder="Ej: 12345678" className={inputClass} />
+            <p className="mt-1 text-[11px] text-slate-500">8 dígitos.</p>
           </div>
           <div>
             <label className={labelClass}>N° de factura del proveedor</label>
-            <input value={numeroFactura} onChange={(e) => setNumeroFactura(e.target.value)} placeholder="001-001-0000123" className={inputClass} />
+            {/* Los guiones los pone el campo. */}
+            <input value={numeroFactura} inputMode="numeric"
+              onChange={(e) => setNumeroFactura(formatearNumeroComprobante(e.target.value))}
+              placeholder="001-001-0000123" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Fecha de factura</label>

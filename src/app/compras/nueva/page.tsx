@@ -21,6 +21,11 @@ import {
   primerError,
 } from "@/lib/validacion/documentos";
 import { useDialogos } from "@/components/ui/Dialogos";
+import {
+  errorNumeroComprobante as validarNumeroComprobante,
+  errorTimbrado as validarTimbrado,
+  formatearNumeroComprobante,
+} from "@/lib/validacion/documentos";
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatGs(valor: number) {
@@ -260,7 +265,11 @@ export default function NuevaCompraPage() {
     e.preventDefault();
     setErrorSubmit(null);
     if (!cab.proveedor_id) return setErrorSubmit("Seleccioná o agregá un proveedor.");
-    if (!cab.nro_timbrado.trim()) return setErrorSubmit("Ingresá el N° de timbrado.");
+    const eComprobante = primerError(
+      validarTimbrado(cab.nro_timbrado, { obligatorio: true }),
+      validarNumeroComprobante(cab.numero_factura_proveedor)
+    );
+    if (eComprobante) return setErrorSubmit(eComprobante);
     if (lineas.length === 0) return setErrorSubmit("Agregá al menos un producto a la compra.");
     if (cab.moneda === "USD" && tipoCambioNum <= 0)
       return setErrorSubmit("Cargá el tipo de cambio (USD → Gs.).");
@@ -422,15 +431,20 @@ export default function NuevaCompraPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>N° de timbrado <span className="text-red-500">*</span></label>
+                {/* El placeholder decia "001-001-0000001", que es el formato
+                    del numero de factura y no el del timbrado. */}
                 <input type="text" name="nro_timbrado" value={cab.nro_timbrado}
-                  onChange={(e) => setCab((p) => ({ ...p, nro_timbrado: e.target.value }))}
-                  placeholder="Ej: 001-001-0000001" className={inputClass} />
+                  onChange={(e) => setCab((p) => ({ ...p, nro_timbrado: e.target.value.replace(/\D/g, "").slice(0, 8) }))}
+                  placeholder="Ej: 12345678" inputMode="numeric" className={inputClass} />
+                <p className="mt-1 text-[11px] text-slate-500">8 dígitos.</p>
               </div>
               <div>
                 <label className={labelClass}>N° de factura del proveedor <span className="text-gray-400 font-normal">(opcional)</span></label>
+                {/* Los guiones los pone el campo: quien copia de la factura
+                    escribe los 13 digitos de corrido. */}
                 <input type="text" name="numero_factura_proveedor" value={cab.numero_factura_proveedor}
-                  onChange={(e) => setCab((p) => ({ ...p, numero_factura_proveedor: e.target.value }))}
-                  placeholder="Ej: 001-001-0000123" className={inputClass} />
+                  onChange={(e) => setCab((p) => ({ ...p, numero_factura_proveedor: formatearNumeroComprobante(e.target.value) }))}
+                  placeholder="001-001-0000123" inputMode="numeric" className={inputClass} />
                 <p className="mt-1 text-[11px] text-slate-500">Número real del comprobante del proveedor. El COMP- interno se genera solo.</p>
               </div>
               <div>

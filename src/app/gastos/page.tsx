@@ -7,6 +7,7 @@ import type { Gasto } from "@/lib/gastos/actions";
 
 import { ClipboardList } from "lucide-react";
 import { useDialogos } from "@/components/ui/Dialogos";
+import { hoyYmdLocal, ymdInicioFinMesLocal } from "@/lib/fechas/calendario";
 
 function formatGs(valor: number) {
   return `${valor.toLocaleString("es-PY")} ₲`;
@@ -41,6 +42,29 @@ const metodoPagoBadge: Record<string, { label: string; className: string }> = {
   tarjeta: { label: "Tarjeta", className: "bg-amber-50 text-amber-800" },
 };
 
+/**
+ * Primer y último día de un mes `YYYY-MM`.
+ *
+ * Se apoya en `ymdInicioFinMesLocal`, que ya resuelve el último día de cada
+ * mes (y los bisiestos). El `new Date(anio, mes - 1, 1)` es a propósito con
+ * componentes y no con la cadena: `new Date("2026-10-01")` se interpreta en
+ * UTC y en Paraguay cae el 30 de septiembre, así que el filtro se comería un
+ * día.
+ */
+function rangoDelMes(mes: string): { desde: string; hasta: string } | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(mes);
+  if (!m) return null;
+  const num = Number(m[2]);
+  if (num < 1 || num > 12) return null;
+  const { inicioYmd, finYmd } = ymdInicioFinMesLocal(new Date(Number(m[1]), num - 1, 1));
+  return { desde: inicioYmd, hasta: finYmd };
+}
+
+/** `YYYY-MM` de hoy. */
+function mesActual(): string {
+  return hoyYmdLocal().slice(0, 7);
+}
+
 export default function GastosPage() {
   const { confirmar } = useDialogos();
   const [gastos, setGastos] = useState<Gasto[]>([]);
@@ -53,6 +77,18 @@ export default function GastosPage() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState<"" | "fijo" | "variable">("");
+  /** El mes es un atajo sobre desde/hasta, no otro filtro: así no se contradicen. */
+  const mesElegido = (() => {
+    if (!desde || !hasta) return "";
+    const r = rangoDelMes(desde.slice(0, 7));
+    return r && r.desde === desde && r.hasta === hasta ? desde.slice(0, 7) : "";
+  })();
+  function elegirMes(mes: string) {
+    const r = rangoDelMes(mes);
+    if (!r) { setDesde(""); setHasta(""); return; }
+    setDesde(r.desde);
+    setHasta(r.hasta);
+  }
   const [metodoPagoFiltro, setMetodoPagoFiltro] = useState<
     "" | "efectivo" | "transferencia" | "tarjeta" | "sin_especificar"
   >("");
@@ -156,6 +192,28 @@ export default function GastosPage() {
                 placeholder="Categoría, beneficiario o descripción…"
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
               />
+            </div>
+            {/* Antes habia que poner las dos fechas a mano para ver un mes,
+                que es la consulta de todos los meses. */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                Mes
+              </label>
+              <input
+                type="month"
+                value={mesElegido}
+                onChange={(e) => elegirMes(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
+              />
+              {/* Debajo y no al lado: al lado el boton se comia el ancho del
+                  campo y quedaba cortado en "Est...". */}
+              <button
+                type="button"
+                onClick={() => elegirMes(mesActual())}
+                className="mt-1 text-[11px] text-[#0EA5E9] hover:underline"
+              >
+                Este mes
+              </button>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
