@@ -102,6 +102,8 @@ const MENU_STRUCTURE: MenuItem[] = [
     // La pantalla de la barra y la cocina. Vive bajo /ventas para heredar el
     // permiso del módulo, que es el mismo que usa el salón.
     { label: "Comandas", href: "/ventas/comandas" },
+    // Lo que el cajero tiene que cobrar: mesas cerradas esperando y abiertas con consumo.
+    { label: "Por cobrar", href: "/ventas/por-cobrar" },
   ]},
   { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
   {

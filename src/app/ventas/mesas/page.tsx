@@ -116,15 +116,23 @@ export default function MesasPage() {
             Cuentas abiertas. Se cobran en Caja al cerrarlas.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={abrirMesa}
-          disabled={abriendo}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95 disabled:opacity-50"
-        >
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          Abrir mesa
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/ventas/por-cobrar"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            Por cobrar
+          </Link>
+          <button
+            type="button"
+            onClick={abrirMesa}
+            disabled={abriendo}
+            className="flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95 disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Abrir mesa
+          </button>
+        </div>
       </div>
 
       {error && (

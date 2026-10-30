@@ -164,3 +164,35 @@ export async function guardarItems(
     .eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Lo mismo que `listarMesas`, pero devolviendo también la metadata cruda.
+ *
+ * La pantalla de Caja necesita dos cosas que el resumen no trae: cuándo se
+ * cerró la mesa (para contar la espera desde el cierre, no desde la apertura) y
+ * el estado de cada ronda (para avisar si todavía falta entregar algo antes de
+ * cobrar).
+ */
+export async function listarMesasParaCobro(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  sucursalId: string
+): Promise<Array<{ mesa: MesaResumen; metadata: Record<string, unknown> }>> {
+  const { data, error } = await sb
+    .from("proyectos")
+    .select(COLUMNAS)
+    .eq("empresa_id", empresaId)
+    .eq("sucursal_id", sucursalId)
+    .eq("archivado", false)
+    .eq("metadata->>mesa_abierta", "true")
+    .order("fecha_ingreso", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as FilaProyecto[])
+    .map((fila) => ({ mesa: filaAMesa(fila), metadata: asMetadataObject(fila.metadata) }))
+    .filter(
+      ({ mesa }) =>
+        mesa.facturacion_estado !== "facturado" && mesa.facturacion_estado !== "cancelado_caja"
+    );
+}

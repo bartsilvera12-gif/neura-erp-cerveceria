@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ChefHat, Clock, Loader2, Printer, RotateCcw } from "lucide-react";
+import { CheckCircle2, ChefHat, Clock, Loader2, Printer, Receipt, RotateCcw } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import {
   ESTADO_LABEL,
@@ -248,6 +248,15 @@ export default function ComandasPage() {
                     </>
                   )}
                   {!c.de_venta && (
+                    <Link
+                      href={`/ventas/mesas/${c.pedido_id}`}
+                      title="Abrir la cuenta de la mesa para cobrarla"
+                      className="flex items-center gap-1 rounded-lg border border-[#4FAEB2]/40 px-3 py-2 text-xs font-semibold text-[#2F6F72] hover:bg-[#4FAEB2]/10"
+                    >
+                      <Receipt className="h-3.5 w-3.5" aria-hidden /> Cobrar
+                    </Link>
+                  )}
+                  {!c.de_venta && (
                     <a
                       href={`/api/mesas/${c.pedido_id}/comanda?ronda=${c.ronda}`}
                       target="_blank"
@@ -269,6 +278,10 @@ export default function ComandasPage() {
         ¿Falta algo? Se carga desde{" "}
         <Link href="/ventas/mesas" className="text-[#4FAEB2] hover:underline">
           Mesas
+        </Link>
+        . Para cobrar,{" "}
+        <Link href="/ventas/por-cobrar" className="text-[#4FAEB2] hover:underline">
+          Por cobrar
         </Link>
         .
       </p>

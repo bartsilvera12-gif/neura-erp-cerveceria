@@ -6,7 +6,7 @@ import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/fi
 import { guardarItems, leerMesa } from "@/lib/mesas/server/mesas-pg";
 import { quitarItem } from "@/lib/mesas/mesas-domain";
 import { devolverItem } from "@/lib/mesas/server/stock-mesa";
-import { marcarEnviadoACaja } from "@/lib/caja/facturacion";
+import { marcarCanceladoDesdeCaja, marcarEnviadoACaja } from "@/lib/caja/facturacion";
 import { isoLocalPy } from "@/lib/fecha/paraguay";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -34,6 +34,8 @@ export async function GET(request: NextRequest, { params }: Ctx) {
  *   · `cerrar`      → la manda a Caja. No cobra: Caja cobra, descuenta stock y
  *                     marca el pedido facturado, que es el circuito que ya
  *                     existía para los pedidos.
+ *   · `reabrir`     → la saca de Caja y la devuelve al salón, para cuando la
+ *                     mesa pide una vuelta más después de pedir la cuenta.
  *   · `quitar_item` → saca una línea de la última ronda (ver `mesas-domain`).
  */
 export async function POST(request: NextRequest, { params }: Ctx) {
@@ -70,6 +72,28 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         .from("proyectos")
         .update({
           metadata: { ...marcarEnviadoACaja(r.metadata, ahora), mesa_cerrada_at: ahora },
+          last_activity_at: ahora,
+          ultimo_movimiento_at: ahora,
+        })
+        .eq("empresa_id", auth.empresa_id)
+        .eq("id", id);
+      if (upd.error) return NextResponse.json(errorResponse(upd.error.message), { status: 400 });
+      return NextResponse.json(successResponse({ id, ya_estaba: false }));
+    }
+
+    if (accion === "reabrir") {
+      // La mesa volvió a pedir después de pedir la cuenta. Sacarla de Caja la
+      // devuelve al salón y habilita rondas nuevas; no toca el stock, que ya
+      // bajó al servir, ni el consumo cargado.
+      if (r.mesa.facturacion_estado !== "pendiente_caja") {
+        return NextResponse.json(successResponse({ id, ya_estaba: true }));
+      }
+      const ahora = isoLocalPy(new Date());
+      const meta = marcarCanceladoDesdeCaja(r.metadata, ahora, auth.user?.email ?? null);
+      const upd = await sb
+        .from("proyectos")
+        .update({
+          metadata: { ...meta, mesa_cerrada_at: null, mesa_reabierta_at: ahora },
           last_activity_at: ahora,
           ultimo_movimiento_at: ahora,
         })
