@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { AlertTriangle, Container, Factory, Loader2, Plus } from "lucide-react";
+import { AlertTriangle, Container, Factory, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { useDialogos } from "@/components/ui/Dialogos";
 import { useRolErp } from "@/lib/auth/use-rol-erp";
 import { puedeEditarRecetas } from "@/lib/roles/erp-role-access";
 import { ETAPA_LABEL } from "@/lib/produccion/lotes-pg";
@@ -67,6 +68,7 @@ function fmtFecha(s: string | null) {
 export default function ProduccionPage() {
   const { rol } = useRolErp();
   const puedeEditar = puedeEditarRecetas(rol);
+  const { confirmar, avisar, pedirTexto } = useDialogos();
 
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [fermentadores, setFermentadores] = useState<Fermentador[]>([]);
@@ -74,6 +76,101 @@ export default function ProduccionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  /**
+   * Borrar un lote PLANIFICADO. El servidor rechaza cualquier otro: desde el
+   * cocimiento el lote consumió materia prima y borrarlo dejaría ese consumo
+   * sin nada que lo explique.
+   */
+  async function borrarLote(id: string, codigoLote: string, estado: string) {
+    if (estado !== "planificado") {
+      await avisar({
+        titulo: `El lote ${codigoLote} ya arrancó`,
+        mensaje:
+          "Consumió materia prima, así que borrarlo dejaría ese consumo sin explicación. " +
+          "Abrí el lote y cancelalo: libera el fermentador y deja el rastro.",
+        tono: "peligro",
+      });
+      return;
+    }
+    const seguir = await confirmar({
+      titulo: `Borrar el lote ${codigoLote}`,
+      mensaje: "Todavía no arrancó, así que no se pierde ningún movimiento. No se puede deshacer.",
+      confirmar: "Borrar",
+      tono: "peligro",
+    });
+    if (!seguir) return;
+    await accion(`/api/produccion/lotes/${id}`, { method: "DELETE" }, "No se pudo borrar el lote.");
+  }
+
+  /** Editar un fermentador: lo que se cambia a mano es el nombre y la capacidad. */
+  async function editarFermentador(f: Fermentador) {
+    const nombre = await pedirTexto({
+      titulo: `Fermentador ${f.codigo}`,
+      mensaje: "Nombre del tanque",
+      valorInicial: f.nombre,
+      confirmar: "Siguiente",
+      minimo: 1,
+    });
+    if (nombre == null) return;
+    const capacidad = await pedirTexto({
+      titulo: `Fermentador ${f.codigo}`,
+      mensaje: "Capacidad en litros",
+      valorInicial: String(f.capacidad_litros),
+      confirmar: "Guardar",
+    });
+    if (capacidad == null) return;
+    const litros = Number(String(capacidad).replace(",", "."));
+    if (!Number.isFinite(litros) || litros <= 0) {
+      await avisar({ mensaje: "La capacidad tiene que ser un número mayor a 0.", tono: "peligro" });
+      return;
+    }
+    await accion(
+      `/api/produccion/fermentadores/${f.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombre.trim(), capacidad_litros: litros }),
+      },
+      "No se pudo guardar el fermentador."
+    );
+  }
+
+  /** Borrar un fermentador. El servidor lo rechaza si alguna vez fermentó algo. */
+  async function borrarFermentador(f: Fermentador) {
+    const seguir = await confirmar({
+      titulo: `Borrar el fermentador ${f.codigo}`,
+      mensaje:
+        "Sólo se puede si nunca se usó. Si ya fermentó algún lote, el sistema no te va a dejar: " +
+        "en ese caso el tanque se desactiva para no perder el historial.",
+      confirmar: "Borrar",
+      tono: "peligro",
+    });
+    if (!seguir) return;
+    await accion(
+      `/api/produccion/fermentadores/${f.id}`,
+      { method: "DELETE" },
+      "No se pudo borrar el fermentador."
+    );
+  }
+
+  /** Pide, muestra el error del server tal cual y recarga. */
+  async function accion(url: string, init: RequestInit, fallback: string) {
+    setBusy(true);
+    try {
+      const res = await fetchWithSupabaseSession(url, init);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body?.success === false) {
+        await avisar({ mensaje: body?.error ?? fallback, tono: "peligro" });
+        return;
+      }
+      await refresh();
+    } catch {
+      await avisar({ mensaje: "Error de red.", tono: "peligro" });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // Alta de lote
   const [nuevoOpen, setNuevoOpen] = useState(false);
@@ -315,6 +412,7 @@ export default function ProduccionPage() {
                   <th className="px-4 py-2 text-right font-medium">Envasado</th>
                   <th className="px-4 py-2 text-right font-medium">Merma</th>
                   <th className="px-4 py-2 font-medium">Inicio</th>
+                  {puedeEditar && <th className="px-4 py-2" />}
                 </tr>
               </thead>
               <tbody>
@@ -347,6 +445,26 @@ export default function ProduccionPage() {
                         {merma == null ? "—" : `${fmtNum(merma)} L`}
                       </td>
                       <td className="px-4 py-2 text-gray-500">{fmtFecha(l.fecha_inicio)}</td>
+                      {puedeEditar && (
+                        <td className="px-4 py-2 text-right">
+                          {/* Sólo el planificado se borra; el resto ya consumió
+                              materia prima y se cancela desde su pantalla. */}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => borrarLote(l.id, l.codigo, l.estado)}
+                            title={
+                              l.estado === "planificado"
+                                ? "Borrar este lote"
+                                : "Ya arrancó: se cancela desde la pantalla del lote"
+                            }
+                            aria-label={`Borrar el lote ${l.codigo}`}
+                            className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -441,7 +559,33 @@ export default function ProduccionPage() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-gray-800">{f.codigo}</span>
-                  <span className="text-xs text-gray-500">{fmtNum(f.capacidad_litros)} L</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500">{fmtNum(f.capacidad_litros)} L</span>
+                    {puedeEditar && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => editarFermentador(f)}
+                          title="Editar nombre y capacidad"
+                          aria-label={`Editar el fermentador ${f.codigo}`}
+                          className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+                        >
+                          <Pencil className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => borrarFermentador(f)}
+                          title="Borrar (sólo si nunca se usó)"
+                          aria-label={`Borrar el fermentador ${f.codigo}`}
+                          className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                      </>
+                    )}
+                  </span>
                 </div>
                 <p className="mt-0.5 truncate text-xs text-gray-500">{f.nombre}</p>
                 <p className="mt-2 text-xs">

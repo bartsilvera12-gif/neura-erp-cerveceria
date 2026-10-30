@@ -84,3 +84,67 @@ export async function PATCH(request: NextRequest, { params }: RouteCtx) {
     return NextResponse.json(errorResponse("No se pudo actualizar el lote."), { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/produccion/lotes/[id] — borra un lote que todavía no arrancó.
+ *
+ * SOLO EN "PLANIFICADO"
+ * Desde el cocimiento, el lote tiene una producción detrás: descontó materia
+ * prima y, al envasar, generó stock. Borrar la fila no deshace nada de eso —
+ * dejaría los insumos consumidos sin nada que los explique y el kardex con
+ * movimientos de un lote que no existe.
+ *
+ * Un lote ya arrancado se CANCELA (desde su pantalla), que lo saca del tablero
+ * y libera el fermentador dejando el rastro de lo que pasó.
+ */
+export async function DELETE(request: NextRequest, { params }: RouteCtx) {
+  try {
+    const { id } = await params;
+    const guard = await requireEdicionRecetas(request);
+    if (!guard.ok) return guard.response;
+    const ctx = guard.ctx;
+
+    const lote = await getLote(ctx.supabase, ctx.auth.empresa_id, id);
+    if (!lote) return NextResponse.json(errorResponse("Lote no encontrado."), { status: 404 });
+
+    if (lote.estado !== "planificado") {
+      return NextResponse.json(
+        errorResponse(
+          `El lote ya arrancó (está en "${lote.estado}"), así que consumió materia prima y no se puede borrar. ` +
+            `Cancelalo desde la pantalla del lote: libera el fermentador y deja el rastro de lo que pasó.`
+        ),
+        { status: 409 }
+      );
+    }
+    // Cinturón y tirantes: si por algún camino quedó una producción asociada
+    // estando en planificado, tampoco se borra.
+    if (lote.produccion_id) {
+      return NextResponse.json(
+        errorResponse("El lote tiene una producción asociada: cancelalo en vez de borrarlo."),
+        { status: 409 }
+      );
+    }
+
+    // Las etapas cuelgan del lote y no tienen sentido sin él.
+    await ctx.supabase.from("produccion_lote_etapas").delete().eq("lote_id", id);
+
+    const { data, error } = await ctx.supabase
+      .from("produccion_lotes")
+      .delete()
+      .eq("empresa_id", ctx.auth.empresa_id)
+      .eq("id", id)
+      .eq("estado", "planificado")
+      .select("id");
+    if (error) return NextResponse.json(errorResponse(error.message), { status: 500 });
+    if (!data || data.length === 0) {
+      return NextResponse.json(
+        errorResponse("El lote cambió de estado mientras lo borrabas: volvé a mirarlo."),
+        { status: 409 }
+      );
+    }
+    return NextResponse.json(successResponse({ id }));
+  } catch (err) {
+    console.error("[/api/produccion/lotes/[id] DELETE]", err instanceof Error ? err.message : err);
+    return NextResponse.json(errorResponse("No se pudo borrar el lote."), { status: 500 });
+  }
+}
