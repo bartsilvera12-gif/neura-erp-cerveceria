@@ -3,6 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { anularVentaCore, ventaTieneCobrosAplicados } from "@/lib/ventas/server/anular-venta-core";
+import { devolverLotesDeVenta } from "@/lib/produccion/trazabilidad-lote";
 import { marcarDesfacturadoPorAnulacion } from "@/lib/caja/facturacion";
 
 /**
@@ -134,6 +135,20 @@ export async function POST(
     });
     if (!res.ok) {
       return NextResponse.json(errorResponse(res.message), { status: res.status ?? 500 });
+    }
+
+    /**
+     * Las unidades vuelven a su lote. Sin esto quedarían contadas como vendidas
+     * para siempre y la próxima venta las saltearía, atribuyendo la mercadería
+     * al lote siguiente. Best-effort: la venta ya está anulada.
+     */
+    try {
+      await devolverLotesDeVenta(sb, { empresaId, ventaId });
+    } catch (e) {
+      console.error(
+        "[ventas/anular] no se pudieron devolver las unidades a su lote:",
+        e instanceof Error ? e.message : e
+      );
     }
 
     // Best-effort: si la venta tenía factura ERP no-aceptada, descartarla también.

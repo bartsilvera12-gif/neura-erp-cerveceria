@@ -72,6 +72,10 @@ export interface LineaVenta {
   subtotal:              number;  // precio_venta × cantidad
   monto_iva:             number;
   total_linea:           number;  // subtotal + monto_iva
+  /** Lote de producción del que salió lo vendido. Lo asigna el ERP (ver
+   *  `trazabilidad-lote`). Null en ventas anteriores a esa trazabilidad y en
+   *  productos que no vienen de producción. */
+  lote_codigo?:          string | null;
 }
 
 /** Cabecera de venta: condiciones comerciales + totales consolidados. */

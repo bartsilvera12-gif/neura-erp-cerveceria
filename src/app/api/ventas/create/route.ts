@@ -17,6 +17,7 @@ import type { Venta, LineaVenta } from "@/lib/ventas/types";
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 import { estaFacturado, marcarFacturado } from "@/lib/caja/facturacion";
 import { vincularMovimientosAVenta } from "@/lib/mesas/server/stock-mesa";
+import { asignarLotesAVenta } from "@/lib/produccion/trazabilidad-lote";
 import { resolverCajaParaVenta, CajaError } from "@/lib/caja/server/caja-pg";
 
 /** Error tipado: el pedido que se intenta facturar ya tiene venta. */
@@ -336,6 +337,27 @@ export async function POST(request: NextRequest) {
       usuarioNombre: auth.user?.email ?? null,
       cajaId: cajaIdVenta,
     });
+
+    /**
+     * De qué lote salió lo vendido. Se asigna por orden de envasado, después de
+     * que la venta exista: el cajero no elige nada.
+     *
+     * Best-effort a propósito: si falla, la venta ya está hecha y no se toca.
+     * Perder la trazabilidad es malo; perder la venta, peor.
+     */
+    try {
+      const sbLotes = createServiceRoleClientWithDbSchema(schema);
+      await asignarLotesAVenta(sbLotes, {
+        empresaId: auth.empresa_id,
+        ventaId,
+        items: items.map((i) => ({ producto_id: i.producto_id, cantidad: Number(i.cantidad) || 0 })),
+      });
+    } catch (e) {
+      console.error(
+        "[ventas/create] no se pudo asignar el lote de produccion:",
+        e instanceof Error ? e.message : e
+      );
+    }
 
     // Vincular el pedido facturado con la venta creada (Caja). Trazabilidad:
     // presupuesto → pedido → venta. Marca el pedido como 'facturado' con venta_id.

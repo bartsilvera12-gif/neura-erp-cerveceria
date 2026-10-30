@@ -716,7 +716,16 @@ export default function VentasPage() {
                                   {v.items.map((it, idx) => (
                                     <tr key={`${v.id}-item-${idx}`} className="border-b border-slate-100 last:border-0">
                                       <td className="py-2 pr-3 font-mono text-xs text-slate-500">{it.sku || "—"}</td>
-                                      <td className="py-2 pr-3 text-slate-800">{it.producto_nombre}</td>
+                                      <td className="py-2 pr-3 text-slate-800">
+                                        {it.producto_nombre}
+                                        {/* De qué lote salió. Sólo aparece en lo que
+                                            viene de producción. */}
+                                        {it.lote_codigo && (
+                                          <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] text-amber-800">
+                                            {it.lote_codigo}
+                                          </span>
+                                        )}
+                                      </td>
                                       <td className="py-2 pr-3 text-right tabular-nums text-slate-700">{it.cantidad}</td>
                                       <td className="py-2 pr-3 text-right tabular-nums text-slate-700">{formatGs(it.precio_venta)}</td>
                                       <td className="py-2 pr-3">

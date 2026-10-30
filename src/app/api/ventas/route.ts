@@ -33,6 +33,7 @@ interface VentaItemRow {
   subtotal: number | string;
   monto_iva: number | string;
   total_linea: number | string;
+  lote_codigo?: string | null;
 }
 
 function num(v: number | string): number {
@@ -52,6 +53,7 @@ function mapItems(rows: VentaItemRow[]): LineaVenta[] {
     subtotal: num(r.subtotal),
     monto_iva: num(r.monto_iva),
     total_linea: num(r.total_linea),
+    lote_codigo: r.lote_codigo ?? null,
   }));
 }
 
@@ -227,17 +229,33 @@ export async function GET(request: NextRequest) {
     const idsCargadas = new Set(ventasRows.map((v) => v.id));
     const itemsRows: VentaItemRow[] = [];
     const PAGE = 1000;
+    const COLS_ITEM =
+      "venta_id, producto_id, producto_nombre, sku, cantidad, precio_venta_original, precio_venta, tipo_iva, tipo_precio, subtotal, monto_iva, total_linea";
+    /**
+     * `lote_codigo` lo agrega el script 24. Si todavía no se corrió, pedirlo
+     * haría fallar la lista ENTERA de ventas por una columna que es un extra.
+     * Se intenta con ella y, si no está, se sigue sin ella.
+     */
+    let conLote = true;
+
     for (let desde = 0; ; desde += PAGE) {
-      const pageQ = await ctx.supabase
-        .from("ventas_items")
-        .select(
-          "venta_id, producto_id, producto_nombre, sku, cantidad, precio_venta_original, precio_venta, tipo_iva, tipo_precio, subtotal, monto_iva, total_linea"
-        )
-        .eq("empresa_id", empresaId)
-        .order("venta_id", { ascending: true })
-        .range(desde, desde + PAGE - 1);
+      const traer = (cols: string) =>
+        ctx.supabase
+          .from("ventas_items")
+          .select(cols)
+          .eq("empresa_id", empresaId)
+          .order("venta_id", { ascending: true })
+          .range(desde, desde + PAGE - 1);
+
+      let pageQ = await traer(conLote ? `${COLS_ITEM}, lote_codigo` : COLS_ITEM);
+      if (pageQ.error && conLote && /lote_codigo/.test(pageQ.error.message)) {
+        conLote = false;
+        pageQ = await traer(COLS_ITEM);
+      }
       if (pageQ.error) throw new Error(pageQ.error.message);
-      const rows = (pageQ.data ?? []) as VentaItemRow[];
+      // El cast pasa por `unknown` porque el select es dinámico (con o sin
+      // `lote_codigo`) y ahí PostgREST ya no puede tipar las columnas.
+      const rows = (pageQ.data ?? []) as unknown as VentaItemRow[];
       for (const r of rows) if (idsCargadas.has(r.venta_id)) itemsRows.push(r);
       if (rows.length < PAGE) break;
     }
