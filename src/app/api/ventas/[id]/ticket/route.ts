@@ -12,6 +12,9 @@ import { fechaHoraPy } from "@/lib/fecha/paraguay";
  * HTML imprimible NO FISCAL. Soporta dos modos:
  *
  * - Default (sin `mode`): una sola copia tipo CLIENTE.
+ * - `mode=comanda` (singular): UNA copia para la barra/cocina, sin precios, con
+ *   la modalidad, la mesa y la observación arriba. Es la que usa el bar: su
+ *   carta no se divide en sectores como la de una pizzería.
  * - `mode=comandas`: genera múltiples copias en una sola página HTML separadas por
  *   page-break-after, calculadas automáticamente según las categorías/SKUs de los
  *   productos de la venta:
@@ -193,7 +196,7 @@ interface PedidoBrief {
 // ── Render de cada copia ───────────────────────────────────────────────────
 
 function renderCopia(opts: {
-  tipo: "cliente" | "pizzeria" | "plancha";
+  tipo: "cliente" | "pizzeria" | "plancha" | "comanda";
   venta: VentaRow;
   items: EnrichedItem[];
   brief: PedidoBrief | null;
@@ -205,7 +208,11 @@ function renderCopia(opts: {
 }): string {
   const { tipo, venta, items, brief, fontPx, isLast, marca, pagoDetalle } = opts;
   const showPrices = tipo === "cliente";
-  const sectorBadge = tipo === "pizzeria" ? "COMANDA PIZZERÍA" : tipo === "plancha" ? "COMANDA PLANCHA" : "";
+  const sectorBadge =
+    tipo === "pizzeria" ? "COMANDA PIZZERÍA"
+    : tipo === "plancha" ? "COMANDA PLANCHA"
+    : tipo === "comanda" ? "COMANDA"
+    : "";
   const modalidad = modalidadLabel(brief?.modalidad);
 
   // Filas de ítems: en cliente todas; en cocina todas también, pero las del propio sector destacadas.
@@ -215,6 +222,7 @@ function renderCopia(opts: {
       const punit = Number(it.precio_venta);
       const sub = Number(it.total_linea);
       const matchesSector =
+        tipo === "comanda" ||
         (tipo === "pizzeria" && it.sector === "pizzeria") ||
         (tipo === "plancha" && it.sector === "plancha");
       const cls = matchesSector ? "match" : tipo === "cliente" ? "" : "muted";
@@ -380,6 +388,8 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   const widthMm = wParam === "58" ? 58 : 80;
   const fontPx = widthMm === 58 ? 11 : 12;
   const modeComandas = url.searchParams.get("mode") === "comandas";
+  // Comanda única (bar): sin precios y sin clasificar por sector.
+  const modeComanda = url.searchParams.get("mode") === "comanda";
   const esRemision = url.searchParams.get("tipo") === "remision" || url.searchParams.get("mode") === "remision";
 
   const ctx = await getTenantSupabaseFromAuth(request);
@@ -557,7 +567,9 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   const hayPizzeria = items.some((i) => i.sector === "pizzeria");
   const hayPlancha = items.some((i) => i.sector === "plancha");
 
-  const copias: Array<"cliente" | "pizzeria" | "plancha"> = ["cliente"];
+  const copias: Array<"cliente" | "pizzeria" | "plancha" | "comanda"> = modeComanda
+    ? ["comanda"]
+    : ["cliente"];
   if (modeComandas) {
     if (hayPizzeria) copias.push("pizzeria");
     if (hayPlancha) copias.push("plancha");
@@ -626,7 +638,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   ${seccionesHtml}
   <div class="actions">
     <button type="button" onclick="window.print()">Imprimir</button>
-    <a href="?${modeComandas ? "mode=comandas&" : ""}w=${widthMm === 80 ? 58 : 80}">Cambiar a ${widthMm === 80 ? 58 : 80}mm</a>
+    <a href="?${modeComandas ? "mode=comandas&" : modeComanda ? "mode=comanda&" : ""}w=${widthMm === 80 ? 58 : 80}">Cambiar a ${widthMm === 80 ? 58 : 80}mm</a>
   </div>
   <script>
     try {

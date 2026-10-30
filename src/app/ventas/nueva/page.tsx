@@ -6,6 +6,13 @@ import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload } from "@/components/inventario/ProductPickerModal";
 import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
+import PanelComanda, {
+  COMANDA_VACIA,
+  comandaParaGuardar,
+  errorComanda,
+  leerPreferenciaComanda,
+  type DatosComanda,
+} from "@/components/ventas/PanelComanda";
 import { getProductos } from "@/lib/inventario/storage";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type {
@@ -282,6 +289,12 @@ export default function NuevaVentaPage() {
   const [items, setItems]           = useState<LineaVenta[]>([]);
   const [errorLinea, setErrorLinea] = useState<string | null>(null);
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
+  // Comanda a la barra/cocina (ver `PanelComanda`): se manda junto con la venta.
+  const [comandaActiva, setComandaActiva] = useState(false);
+  const [comanda, setComanda] = useState<DatosComanda>(COMANDA_VACIA);
+  // La preferencia vive en localStorage, que no existe en el server: se lee
+  // después de montar para no romper la hidratación.
+  useEffect(() => { setComandaActiva(leerPreferenciaComanda()); }, []);
   // Venta sin stock: faltantes devueltos por el backend + modal de confirmación.
   const [faltantes, setFaltantes] = useState<FaltanteStock[]>([]);
   const [confirmSinStockOpen, setConfirmSinStockOpen] = useState(false);
@@ -873,6 +886,12 @@ export default function NuevaVentaPage() {
       setErrorVenta("Hay varias cajas abiertas: elegí en qué caja registrar la venta.");
       return;
     }
+    const errComanda = errorComanda(comandaActiva, comanda);
+    if (errComanda) {
+      isSubmittingRef.current = false;
+      setErrorVenta(errComanda);
+      return;
+    }
     setGuardando(true);
     try {
       const resultado = await saveVenta(
@@ -891,7 +910,7 @@ export default function NuevaVentaPage() {
           genera_nota_remision: !!clienteId && generaNotaRemision,
           emitir_factura: tipoDocumento === "factura",
         },
-        undefined,
+        comandaParaGuardar(comandaActiva, comanda) ?? undefined,
         {
           entidad_bancaria_id: pagoEntidadId || null,
           entidad_nombre_snapshot: entidades.find((e) => e.id === pagoEntidadId)?.nombre ?? null,
@@ -927,6 +946,12 @@ export default function NuevaVentaPage() {
       //
       // Solo se dispara si el cajero eligió "Factura" en el toggle. Si eligió
       // "Ticket", saltamos al fallback (imprime ticket + modal post-venta).
+      // La comanda se imprime SIEMPRE que se haya pedido, incluso cuando la
+      // venta sigue al panel SIFEN: la cocina no espera a la factura.
+      if (comandaActiva) {
+        try { window.open(`/api/ventas/${v.id}/ticket?mode=comanda&auto=1`, "_blank", "noopener"); } catch {}
+      }
+
       if (tipoDocumento === "factura" && resultado.factura?.id) {
         router.push(`/facturas/${resultado.factura.id}?auto=1`);
         return;
@@ -1587,6 +1612,15 @@ export default function NuevaVentaPage() {
               </div>
             </>
           )}
+
+          <PanelComanda
+            activa={comandaActiva}
+            onActivaChange={setComandaActiva}
+            datos={comanda}
+            onChange={setComanda}
+            inputClass={inputClass}
+            labelClass={labelClass}
+          />
 
           {/* Error confirmar */}
           {errorVenta && (
