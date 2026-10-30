@@ -99,6 +99,9 @@ const MENU_STRUCTURE: MenuItem[] = [
     { label: "Caja", href: "/ventas" },
     // Salón: cuentas abiertas por mesa. Van bajo Caja porque es la que las cobra.
     { label: "Mesas", href: "/ventas/mesas" },
+    // La pantalla de la barra y la cocina. Vive bajo /ventas para heredar el
+    // permiso del módulo, que es el mismo que usa el salón.
+    { label: "Comandas", href: "/ventas/comandas" },
   ]},
   { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
   {

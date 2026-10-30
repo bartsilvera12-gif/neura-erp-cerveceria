@@ -107,22 +107,37 @@ export async function leerMesa(
 }
 
 /**
- * Marca que el stock de esta mesa YA se descontó al servir.
+ * Deja en la metadata lo que la ronda acaba de causar:
  *
- * Es lo que lee `/api/ventas/create` para crear la venta con `omitirStock` y no
- * descontar de nuevo. Se escribe en cada ronda y no sólo en la primera: si una
- * ronda se cargó antes de que existiera la marca, la siguiente la deja puesta.
+ *  · `stock_descontado_en_mesa`: el stock ya bajó al servir, así que la venta
+ *    de esta mesa se crea con `omitirStock` y no descuenta de nuevo. Se escribe
+ *    en cada ronda y no sólo en la primera: si una ronda se cargó antes de que
+ *    existiera la marca, la siguiente la deja puesta.
+ *  · `rondas_at`: cuándo entró cada ronda. Es lo que la pantalla de comandas
+ *    usa para decir hace cuánto espera. Sin esto, una ronda de las 23 en una
+ *    mesa abierta a las 21 figuraría esperando dos horas.
  */
-export async function marcarStockDescontadoEnMesa(
+export async function marcarRondaEnMesa(
   sb: AppSupabaseClient,
   empresaId: string,
   id: string,
-  metadata: Record<string, unknown>
+  metadata: Record<string, unknown>,
+  ronda: number,
+  ahoraIso: string
 ): Promise<void> {
-  if (metadata.stock_descontado_en_mesa === true) return;
+  const rondasAt =
+    metadata.rondas_at != null && typeof metadata.rondas_at === "object"
+      ? (metadata.rondas_at as Record<string, unknown>)
+      : {};
   const { error } = await sb
     .from("proyectos")
-    .update({ metadata: { ...metadata, stock_descontado_en_mesa: true } })
+    .update({
+      metadata: {
+        ...metadata,
+        stock_descontado_en_mesa: true,
+        rondas_at: { ...rondasAt, [String(ronda)]: ahoraIso },
+      },
+    })
     .eq("empresa_id", empresaId)
     .eq("id", id);
   if (error) throw new Error(error.message);

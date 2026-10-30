@@ -6,7 +6,8 @@ import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/fi
 import { guardarItems, leerMesa } from "@/lib/mesas/server/mesas-pg";
 import { agregarRonda, itemsDeRonda, type ItemNuevo } from "@/lib/mesas/mesas-domain";
 import { descontarRonda } from "@/lib/mesas/server/stock-mesa";
-import { marcarStockDescontadoEnMesa } from "@/lib/mesas/server/mesas-pg";
+import { marcarRondaEnMesa } from "@/lib/mesas/server/mesas-pg";
+import { isoLocalPy } from "@/lib/fecha/paraguay";
 
 /**
  * POST /api/mesas/[id]/rondas — agrega una ronda a la cuenta.
@@ -111,8 +112,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     await guardarItems(sb, auth.empresa_id, id, r.brief, res.items);
-    // La venta de esta mesa no tiene que volver a descontar.
-    await marcarStockDescontadoEnMesa(sb, auth.empresa_id, id, r.metadata);
+    // La venta de esta mesa no tiene que volver a descontar, y la pantalla de
+    // comandas necesita saber a qué hora entró ESTA ronda.
+    await marcarRondaEnMesa(sb, auth.empresa_id, id, r.metadata, res.ronda, isoLocalPy(new Date()));
     return NextResponse.json(successResponse({ ronda: res.ronda, items: res.items }));
   } catch (err) {
     const rSuc = respuestaSucursalNoAsignada(err);
