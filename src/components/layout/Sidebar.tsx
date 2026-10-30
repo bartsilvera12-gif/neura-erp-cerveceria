@@ -197,6 +197,22 @@ const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },
 ];
 
+/**
+ * Familias que NO se dibujan en el menú.
+ *
+ * Administración (Usuarios y Configuración) se entra por link: son pantallas
+ * de puesta a punto, no del día a día, y en el menú le ofrecen a cualquiera
+ * que pase por la pantalla una puerta que no tiene por qué abrir.
+ *
+ * OCULTAR NO ES PROTEGER: las rutas siguen existiendo y lo que decide quién
+ * entra sigue siendo el permiso del módulo, igual que antes. Esto es orden
+ * visual, no seguridad.
+ *
+ * Al buscar en el menú sí aparecen: si alguien escribe "usuarios" es porque lo
+ * está buscando, y esconderlo ahí sería hacerle perder el tiempo.
+ */
+const FAMILIAS_OCULTAS = new Set<string>(["administracion"]);
+
 function modulosSyntheticFromMenu(): ModuloEmpresa[] {
   return MENU_STRUCTURE.map((item) => ({
     id: item.slug,
@@ -597,6 +613,7 @@ export default function Sidebar() {
 
   // Agrupar los ítems visibles del menú principal por familias (solo visual).
   const seccionesMenu = useMemo(() => {
+    const buscando = menuSearchQuery.trim() !== "";
     const byKey = new Map(mainItemsFiltered.map((it) => [it.key, it]));
     const usados = new Set<string>();
     const secciones: { id: string; titulo: string; items: MenuItem[] }[] = [];
@@ -604,13 +621,16 @@ export default function Sidebar() {
       const items = fam.keys
         .map((k) => byKey.get(k))
         .filter((it): it is MenuItem => it !== undefined);
+      // Se marcan como usados aunque la familia esté oculta: si no, sus ítems
+      // caerían en "Otros" y la sección volvería a aparecer con otro nombre.
       items.forEach((it) => usados.add(it.key));
+      if (FAMILIAS_OCULTAS.has(fam.id) && !buscando) continue;
       if (items.length > 0) secciones.push({ id: fam.id, titulo: fam.titulo, items });
     }
     const otros = mainItemsFiltered.filter((it) => !usados.has(it.key));
     if (otros.length > 0) secciones.push({ id: "otros", titulo: "Otros", items: otros });
     return secciones;
-  }, [mainItemsFiltered]);
+  }, [mainItemsFiltered, menuSearchQuery]);
 
   const familiaExpandida = (id: string) => expandedFamilies[id] ?? true; // abiertas por defecto
   const toggleFamilia = (id: string) =>
