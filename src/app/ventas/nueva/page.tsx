@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import NuevoClienteRapidoModal, { type NuevoClienteCreado } from "./NuevoClienteRapidoModal";
 import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
@@ -386,10 +387,13 @@ export default function NuevaVentaPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // ── Caja del turno (multi-caja): a qué caja se imputa la venta ──────────────
-  // Con 0 cajas abiertas la venta procede sin caja; con 1 se autoselecciona;
-  // con varias, el cajero elige (obligatorio) antes de cobrar.
+  // Sin caja abierta NO se cobra al contado: esa plata no entraría a ningún
+  // arqueo y el cierre del turno no cerraría. Con 1 se autoselecciona; con
+  // varias, el cajero elige antes de cobrar. Una sucursal que no opera caja
+  // (la fábrica) no queda bloqueada.
   const [cajasAbiertas, setCajasAbiertas] = useState<{ id: string; numero_caja: number }[]>([]);
   const [cajaVentaId, setCajaVentaId] = useState<string | null>(null);
+  const [manejaCaja, setManejaCaja] = useState(true);
   useEffect(() => {
     (async () => {
       try {
@@ -397,10 +401,13 @@ export default function NuevaVentaPage() {
         const j = await r.json();
         const cajas = (j?.data?.cajas ?? []) as { id: string; numero_caja: number }[];
         setCajasAbiertas(cajas);
+        setManejaCaja(j?.data?.maneja_caja !== false);
         if (cajas.length === 1) setCajaVentaId(cajas[0]!.id);
-      } catch { /* no bloquea la venta */ }
+      } catch { /* si no se puede consultar, el servidor igual valida al cobrar */ }
     })();
   }, []);
+  /** Caja cerrada en una sucursal que sí opera caja: no se puede cobrar al contado. */
+  const cajaCerrada = manejaCaja && cajasAbiertas.length === 0;
 
   function pickerToProducto(p: ProductoPickerItem): Producto {
     return {
@@ -884,6 +891,11 @@ export default function NuevaVentaPage() {
     if (cajasAbiertas.length > 1 && !cajaVentaId) {
       isSubmittingRef.current = false;
       setErrorVenta("Hay varias cajas abiertas: elegí en qué caja registrar la venta.");
+      return;
+    }
+    if (cajaCerrada && tipoVenta !== "CREDITO") {
+      isSubmittingRef.current = false;
+      setErrorVenta("La caja está cerrada. Abrila desde Caja (cierres) para poder cobrar.");
       return;
     }
     const errComanda = errorComanda(comandaActiva, comanda);
@@ -1431,6 +1443,21 @@ export default function NuevaVentaPage() {
                       <span className="tabular-nums">{formatGs(totalGeneral)}</span>
                     </div>
                   </div>
+
+                  {cajaCerrada && tipoVenta !== "CREDITO" && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-1.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+                        Caja cerrada
+                      </p>
+                      <p className="text-xs text-amber-700">
+                        No se puede cobrar al contado sin una caja abierta: el dinero no entraría
+                        al arqueo y el cierre del turno no cerraría.
+                      </p>
+                      <Link href="/caja" className="inline-block text-xs font-semibold text-amber-900 underline">
+                        Abrir la caja
+                      </Link>
+                    </div>
+                  )}
 
                   {cajasAbiertas.length > 1 && (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1.5">

@@ -535,14 +535,29 @@ export async function listarCajasAbiertasParaVenta(
 }
 
 /**
- * Resuelve a qué caja se imputa una venta de la sucursal (patrón Ferretería):
+ * Resuelve a qué caja se imputa una venta de la sucursal.
  *   - `cajaIdPedida` presente → debe estar abierta (si no, error).
  *   - 1 caja abierta → esa.
- *   - 0 cajas abiertas → null (la venta procede igual; no rompe el flujo actual).
  *   - varias abiertas → exige elegir (error): el POS debe mandar caja_id.
+ *   - 0 cajas abiertas → depende de `exigirAbierta`.
+ *
+ * CON LA CAJA CERRADA NO SE COBRA
+ * Antes una venta sin caja abierta se registraba igual, con `caja_id` en null.
+ * Esa plata no entraba a ningún arqueo: al cerrar el turno, el efectivo del
+ * cajón no coincidía con el del sistema y no había forma de saber de qué venta
+ * venía la diferencia.
+ *
+ * Lo que necesita caja abierta es COBRAR, no vender: una venta a crédito no
+ * mueve efectivo, así que pasa igual (`exigirAbierta: false`). Y una sucursal
+ * que no opera caja — la fábrica, que factura y cobra por transferencia —
+ * tampoco queda bloqueada: lo dice el flag `sucursales.maneja_caja`.
  */
 export async function resolverCajaParaVenta(
-  schemaRaw: string, empresaId: string, sucursalId: string, cajaIdPedida: string | null
+  schemaRaw: string,
+  empresaId: string,
+  sucursalId: string,
+  cajaIdPedida: string | null,
+  opts?: { exigirAbierta?: boolean }
 ): Promise<string | null> {
   const abiertas = await listarCajasAbiertasParaVenta(schemaRaw, empresaId, sucursalId);
   if (cajaIdPedida) {
@@ -551,8 +566,15 @@ export async function resolverCajaParaVenta(
     return match.id;
   }
   if (abiertas.length === 1) return abiertas[0]!.id;
-  if (abiertas.length === 0) return null;
-  throw new CajaError(409, "Hay varias cajas abiertas: elegí en qué caja registrar la venta.");
+  if (abiertas.length > 1) {
+    throw new CajaError(409, "Hay varias cajas abiertas: elegí en qué caja registrar la venta.");
+  }
+  if (opts?.exigirAbierta === false) return null;
+  if (!(await sucursalManejaCaja(schemaRaw, empresaId, sucursalId))) return null;
+  throw new CajaError(
+    409,
+    "La caja está cerrada. Abrí la caja desde Caja (cierres) para poder cobrar esta venta."
+  );
 }
 
 export async function getCajaDetalle(schemaRaw: string, empresaId: string, sucursalId: string, id: string) {

@@ -300,7 +300,10 @@ export async function POST(request: NextRequest) {
     let cajaIdVenta: string | null = null;
     try {
       const cajaPedida = o.caja_id != null && String(o.caja_id).trim() !== "" ? String(o.caja_id).trim() : null;
-      cajaIdVenta = await resolverCajaParaVenta(schema, auth.empresa_id, sucursalIdVenta, cajaPedida);
+      // Una venta a crédito no mueve efectivo: no necesita caja abierta.
+      cajaIdVenta = await resolverCajaParaVenta(schema, auth.empresa_id, sucursalIdVenta, cajaPedida, {
+        exigirAbierta: tipoVenta !== "CREDITO",
+      });
     } catch (e) {
       if (e instanceof CajaError) return NextResponse.json(errorResponse(e.message), { status: e.status });
       throw e;
