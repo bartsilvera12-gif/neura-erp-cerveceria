@@ -95,7 +95,11 @@ const MENU_STRUCTURE: MenuItem[] = [
     href: "/dashboard/monitoreo",
     icon: Activity,
   },
-  { key: "ventas", slug: "ventas", label: "Caja", href: "/ventas", icon: ShoppingCart },
+  { key: "ventas", slug: "ventas", label: "Caja", href: "/ventas", icon: ShoppingCart, children: [
+    { label: "Caja", href: "/ventas" },
+    // Salón: cuentas abiertas por mesa. Van bajo Caja porque es la que las cobra.
+    { label: "Mesas", href: "/ventas/mesas" },
+  ]},
   { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
   {
     key: "proyectos",
