@@ -8,6 +8,7 @@ import {
   updateLote,
 } from "@/lib/produccion/lotes-pg";
 import { requireEdicionRecetas } from "@/lib/recetas/require-edicion-recetas";
+import { revertirProduccionPg } from "@/lib/produccion/revertir-produccion-pg";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -72,6 +73,43 @@ export async function POST(request: NextRequest, { params }: RouteCtx) {
       patch.fecha_fin = new Date().toISOString();
     }
 
+    /**
+     * Cancelar DEVUELVE la materia prima, salvo que ya se haya envasado algo.
+     *
+     * Si la cocción se perdió antes de envasar, las maltas no se perdieron con
+     * ella: lo correcto es que vuelvan al stock y que los litros de granel que
+     * nunca llegaron a existir salgan de él. Con envases ya hechos no se
+     * revierte: esas unidades pueden estar vendidas o en el bar, y devolver la
+     * materia prima de algo que sí se produjo dejaría el stock inflado.
+     */
+    let reversa: { insumos_devueltos: number; litros_quitados: number } | null = null;
+    let reversaAviso: string | null = null;
+    if (destino === "cancelado" && lote.produccion_id) {
+      const envasado = Number(lote.volumen_envasado ?? 0);
+      if (envasado > 0) {
+        reversaAviso =
+          `Se cancela sin devolver la materia prima: ya se envasaron ${envasado} L, ` +
+          `así que esa producción existió de verdad.`;
+      } else {
+        try {
+          reversa = await revertirProduccionPg(ctx.supabase, {
+            empresaId: ctx.auth.empresa_id,
+            produccionId: lote.produccion_id,
+            motivo: `Cancelación del lote ${lote.codigo}`,
+            usuarioId: ctx.auth.usuarioCatalogId ?? null,
+            usuarioNombre: ctx.auth.nombre ?? null,
+          });
+        } catch (e) {
+          // La cancelación no se bloquea por esto, pero no se miente: queda
+          // dicho que el stock hay que corregirlo a mano.
+          console.error("[etapa] reversa de produccion fallo:", e instanceof Error ? e.message : e);
+          reversaAviso =
+            "El lote se canceló, pero no se pudo devolver la materia prima al stock. " +
+            "Corregilo desde Inventario → Movimientos.";
+        }
+      }
+    }
+
     const actualizado = await updateLote(ctx.supabase, ctx.auth.empresa_id, id, patch);
     await insertEtapa(
       ctx.supabase,
@@ -83,7 +121,7 @@ export async function POST(request: NextRequest, { params }: RouteCtx) {
     );
 
     return NextResponse.json(
-      successResponse({ lote: actualizado, etapas_posibles: ETAPAS_LOTE })
+      successResponse({ lote: actualizado, etapas_posibles: ETAPAS_LOTE, reversa, aviso: reversaAviso })
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

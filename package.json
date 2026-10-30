@@ -67,6 +67,7 @@
     "test:costeo": "tsx scripts/test-costeo-completo.ts",
     "test:destino-pedido": "tsx scripts/test-destino-pedido.ts",
     "test:consumo-stock": "tsx scripts/test-consumo-stock.ts",
+    "test:densidad": "tsx scripts/test-densidad.ts",
     "test:mesas": "tsx scripts/test-mesas.ts",
     "test:gasto-payload": "tsx scripts/test-gasto-payload.ts",
     "test:ticket-pago": "tsx scripts/test-ticket-pago.ts",
