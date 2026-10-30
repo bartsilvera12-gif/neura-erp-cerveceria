@@ -8,6 +8,7 @@ import type { Gasto } from "@/lib/gastos/actions";
 import { ClipboardList } from "lucide-react";
 import { useDialogos } from "@/components/ui/Dialogos";
 import { hoyYmdLocal, ymdInicioFinMesLocal } from "@/lib/fechas/calendario";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
 function formatGs(valor: number) {
   return `${valor.toLocaleString("es-PY")} ₲`;
@@ -69,6 +70,14 @@ export default function GastosPage() {
   const { confirmar } = useDialogos();
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [errorAccion, setErrorAccion] = useState<string | null>(null);
+  /**
+   * Resultado de `/api/gastos/diagnostico`. Se muestra en pantalla en vez de
+   * pedirle a la usuaria que abra la consola del navegador: el botón hace el
+   * intento de alta del lado del servidor y deja el error de Postgres a la
+   * vista, listo para copiar.
+   */
+  const [diagnostico, setDiagnostico] = useState<string | null>(null);
+  const [diagnosticando, setDiagnosticando] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [eliminando, setEliminando] = useState<string | null>(null);
 
@@ -128,6 +137,26 @@ export default function GastosPage() {
       .finally(() => setCargando(false));
   }, []);
 
+  async function correrDiagnostico() {
+    setDiagnosticando(true);
+    setDiagnostico(null);
+    try {
+      const res = await fetchWithSupabaseSession("/api/gastos/diagnostico", { cache: "no-store" });
+      const texto = await res.text();
+      let bonito = texto;
+      try {
+        bonito = JSON.stringify(JSON.parse(texto), null, 2);
+      } catch {
+        /* si no es JSON se muestra tal cual: el texto crudo también sirve */
+      }
+      setDiagnostico(`HTTP ${res.status}\n\n${bonito}`);
+    } catch (err) {
+      setDiagnostico(`No se pudo correr el diagnóstico: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDiagnosticando(false);
+    }
+  }
+
   async function handleEliminar(g: Gasto) {
     if (!(await confirmar({
       mensaje: `¿Eliminar el gasto "${g.descripcion || g.categoria || "sin descripción"}"?`,
@@ -169,14 +198,49 @@ export default function GastosPage() {
           <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Gastos operativos</h1>
           <p className="mt-0.5 text-xs text-slate-500">Registro de gastos de la empresa</p>
         </div>
-        <Link
-          href="/gastos/nuevo"
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
-        >
-          <span>+</span>
-          Nuevo gasto
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={correrDiagnostico}
+            disabled={diagnosticando}
+            title="Prueba el alta de un gasto contra la base y muestra el error exacto"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+          >
+            {diagnosticando ? "Probando…" : "Diagnóstico"}
+          </button>
+          <Link
+            href="/gastos/nuevo"
+            className="flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
+          >
+            <span>+</span>
+            Nuevo gasto
+          </Link>
+        </div>
       </div>
+
+      {diagnostico && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Diagnóstico de gastos
+            </h2>
+            <button
+              type="button"
+              onClick={() => setDiagnostico(null)}
+              className="text-[11px] text-slate-500 hover:underline"
+            >
+              Cerrar
+            </button>
+          </div>
+          <pre className="max-h-80 overflow-auto rounded-lg bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-700">
+{diagnostico}
+          </pre>
+          <p className="mt-2 text-[11px] text-slate-500">
+            Copiá este texto completo y pasalo por el chat: dice exactamente por qué la base
+            acepta o rechaza el gasto.
+          </p>
+        </div>
+      )}
 
       {gastos.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3">
