@@ -4,6 +4,7 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { membreteA4, membreteTicket, type MembreteMarca } from "@/lib/documentos/membrete";
 import { getMarcaSucursal } from "@/lib/documentos/marca-sucursal";
 import { lineasPagoTicket } from "@/lib/ventas/ticket-pago";
+import { fechaHoraPy } from "@/lib/fecha/paraguay";
 
 /**
  * GET /api/ventas/[id]/ticket?w=58|80&mode=comandas&auto=1
@@ -108,19 +109,8 @@ function formatGs(v: number): string {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
 }
 
-function formatFecha(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const yyyy = d.getFullYear();
-    const hh = String(d.getHours()).padStart(2, "0");
-    const min = String(d.getMinutes()).padStart(2, "0");
-    return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
-  } catch {
-    return iso;
-  }
-}
+/** El servidor corre en UTC; el ticket lleva la hora del local. */
+const formatFecha = fechaHoraPy;
 
 function modalidadLabel(m: string | null | undefined): string {
   if (m === "local") return "Local";

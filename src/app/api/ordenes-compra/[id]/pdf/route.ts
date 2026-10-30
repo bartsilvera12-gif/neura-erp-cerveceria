@@ -3,6 +3,7 @@ import { resolverCtx } from "../../_ctx";
 import { getOrdenCompra } from "@/lib/ordenes-compra/server/oc-pg";
 import { membreteA4, EMPRESA_DOC } from "@/lib/documentos/membrete";
 import { getMarcaSucursal } from "@/lib/documentos/marca-sucursal";
+import { fechaHoraPy } from "@/lib/fecha/paraguay";
 
 /**
  * GET /api/ordenes-compra/[id]/pdf?auto=1
@@ -20,7 +21,7 @@ function fh(iso: unknown): string {
   const d = new Date(String(iso));
   if (Number.isNaN(d.getTime())) return "—";
   const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return fechaHoraPy(d);
 }
 const IVA_LBL: Record<string, string> = { exenta: "Exenta", "5": "5%", "10": "10%" };
 const ESTADO_LBL: Record<string, string> = {

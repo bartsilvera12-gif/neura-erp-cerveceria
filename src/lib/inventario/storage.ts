@@ -7,6 +7,7 @@ import type {
   MetodoValuacion,
   TipoMovimiento,
 } from "./types";
+import { nombreParaRegistro } from "@/lib/auth/nombre-para-registro";
 
 // ─── Tipos de fila Supabase ───────────────────────────────────────────────────
 
@@ -365,6 +366,26 @@ export async function saveMovimiento(
   const delta = calcularDelta(mov.tipo, mov.cantidad);
   const debeActualizarStock = mov.origen !== "inventario_inicial"; // inventario_inicial ya viene del insert
 
+  /**
+   * Una salida no puede llevarse más de lo que hay.
+   *
+   * Antes esto NO se validaba y el stock se guardaba con `Math.max(0, ...)`:
+   * una salida de 50 sobre 35 dejaba el producto en 0 y registraba igual un
+   * movimiento de 50. O sea que el kardex decía una cosa y el stock otra, y
+   * las 15 unidades de diferencia desaparecían sin que nada avisara.
+   *
+   * Se valida acá y no sólo en la pantalla porque el stock es el dato que
+   * después se vende: la pantalla se puede saltear.
+   */
+  if (debeActualizarStock && delta < 0 && producto.controla_stock !== false) {
+    const disponible = Number(producto.stock_actual) || 0;
+    if (disponible + delta < 0) {
+      throw new Error(
+        `No hay stock suficiente de ${producto.nombre}: hay ${disponible} y querés sacar ${Math.abs(delta)}.`
+      );
+    }
+  }
+
   // 2. Insertar movimiento
   const insert = {
     empresa_id: usuario.empresa_id,
@@ -378,6 +399,10 @@ export async function saveMovimiento(
     origen: mov.origen,
     referencia: mov.referencia ?? null,
     fecha: mov.fecha,
+    // Sin esto la columna "Usuario" del kardex decía "Sin registro" en todos
+    // los movimientos manuales: no se podía auditar quién tocó el stock.
+    created_by: usuario.id ?? null,
+    usuario_nombre: nombreParaRegistro(usuario),
   };
 
   const { data: movData, error: movError } = await supabase
@@ -405,7 +430,8 @@ export async function saveMovimiento(
     let stockLeido = producto.stock_actual;
     let aplicado = false;
     for (let intento = 0; intento < 4 && !aplicado; intento++) {
-      const objetivo = Math.max(0, stockLeido + delta);
+      // El negativo ya se rechazó arriba; acá el valor es exacto.
+      const objetivo = stockLeido + delta;
       const { data: updData, error: updError } = await supabase
         .from("productos")
         .update({ stock_actual: objetivo })

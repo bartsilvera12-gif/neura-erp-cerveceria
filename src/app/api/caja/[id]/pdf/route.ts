@@ -4,6 +4,7 @@ import { getCajaDetalle } from "@/lib/caja/server/caja-pg";
 import { membreteA4, EMPRESA_DOC } from "@/lib/documentos/membrete";
 import { getMarcaSucursal } from "@/lib/documentos/marca-sucursal";
 import type { ArqueoItem } from "@/lib/caja/denominaciones";
+import { fechaHoraPy } from "@/lib/fecha/paraguay";
 
 /**
  * GET /api/caja/[id]/pdf?auto=1
@@ -21,7 +22,7 @@ function fh(iso: unknown): string {
   const d = new Date(String(iso));
   if (Number.isNaN(d.getTime())) return "—";
   const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return fechaHoraPy(d);
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

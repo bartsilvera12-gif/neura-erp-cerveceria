@@ -30,6 +30,7 @@ import type { P12KeyMaterial } from "./sign-xml";
 import { extractKeyAndCertFromP12 } from "./sign-xml";
 import { urlEventos } from "./sifen-ws-urls";
 import type { AmbienteSifen } from "./types";
+import { isoLocalPy } from "@/lib/fecha/paraguay";
 
 const SIFEN_NS = SIFEN_EKUATIA_TARGET_NS;
 const SOAP_ENV = "http://www.w3.org/2003/05/soap-envelope";
@@ -55,14 +56,15 @@ export function normalizarMotivoEvento(motivo: string): string {
   return m.slice(0, 500);
 }
 
-/** `dFecFirma`: fecha-hora local sin zona, formato SIFEN (YYYY-MM-DDTHH:mm:ss). */
-function fechaFirmaSifen(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
-    `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-  );
-}
+/**
+ * `dFecFirma`: fecha-hora de PARAGUAY sin zona (YYYY-MM-DDTHH:mm:ss).
+ *
+ * Antes usaba la hora del servidor. En la nube eso es UTC, o sea 3 horas
+ * adelantada, y el SET rechaza el evento con el error 1004 ("La fecha y hora
+ * de la firma digital es adelantada"). `rde-xml.ts` ya lo hacia bien para las
+ * facturas: las facturas se firmaban en hora local y las cancelaciones no.
+ */
+const fechaFirmaSifen = isoLocalPy;
 
 export type BuildEventoCancelacionOptions = {
   /** CDC (44 dígitos) del documento a cancelar: factura o nota de crédito. */

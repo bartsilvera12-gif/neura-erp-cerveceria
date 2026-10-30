@@ -10,6 +10,7 @@ import {
   type CompraItemInput,
 } from "@/lib/compras/server/compras-pg";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { getCurrentUserDisplayNameServer } from "@/lib/auth/get-current-user-display-name-server";
 
 /**
  * GET /api/compras — lista via PG directo.
@@ -86,7 +87,11 @@ export async function POST(request: NextRequest) {
       comprobante_nombre: body.comprobante_nombre != null && String(body.comprobante_nombre).trim() !== "" ? String(body.comprobante_nombre) : null,
       comprobante_mime_type: body.comprobante_mime_type != null && String(body.comprobante_mime_type).trim() !== "" ? String(body.comprobante_mime_type) : null,
       created_by: ctx.auth.usuarioCatalogId ?? null,
-      usuario_nombre: ctx.auth.user?.email ?? null,
+      // Antes iba el email crudo. El kardex mezclaba "Administrador" (nombre)
+      // con "admin@..." (email) segun que lo hubiera escrito, y asi no se
+      // puede auditar quien toco el stock. Este helper aplica la misma regla
+      // que ya usa la pantalla: nombre, si no el email.
+      usuario_nombre: await getCurrentUserDisplayNameServer(),
     };
 
     const items: CompraItemInput[] = [];

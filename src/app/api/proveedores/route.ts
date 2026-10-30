@@ -143,18 +143,31 @@ export async function POST(request: NextRequest) {
       ? (body.categoria_ids as unknown[]).map((x) => String(x)).filter(Boolean)
       : [];
 
-    // Duplicado por RUC
+    /**
+     * Duplicado por RUC.
+     *
+     * Si la comprobacion falla NO se sigue adelante. Antes el catch se tragaba
+     * el error y el insert corria igual: justo cuando no se puede verificar si
+     * hay duplicado es cuando mas caro sale crearlo. Dos proveedores con el
+     * mismo RUC rompen la conciliacion de compras y el libro de IVA, y
+     * separarlos despues obliga a tocar las compras ya cargadas.
+     */
     if (ruc) {
+      let dup: { id: string; nombre: string } | null = null;
       try {
-        const dup = await findProveedorByRuc(schema, empresaId, ruc);
-        if (dup) {
-          return NextResponse.json(
-            errorResponse(`Ya existe un proveedor con el mismo RUC ("${dup.nombre}").`),
-            { status: 409 }
-          );
-        }
+        dup = await findProveedorByRuc(schema, empresaId, ruc);
       } catch (e) {
         console.error("[/api/proveedores POST] findProveedorByRuc", { schema, empresaId, msg: e instanceof Error ? e.message : e });
+        return NextResponse.json(
+          errorResponse("No se pudo verificar si el RUC ya existe. Volvé a intentar."),
+          { status: 503 }
+        );
+      }
+      if (dup) {
+        return NextResponse.json(
+          errorResponse(`Ya existe un proveedor con el mismo RUC ("${dup.nombre}").`),
+          { status: 409 }
+        );
       }
     }
 

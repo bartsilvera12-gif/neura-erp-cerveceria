@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import { getProductos, saveMovimiento } from "@/lib/inventario/storage";
 import type { Producto, TipoMovimiento, OrigenMovimiento } from "@/lib/inventario/types";
+import SearchableSelect from "@/components/ui/SearchableSelect";
 
 export default function NuevoMovimientoPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function NuevoMovimientoPage() {
     cantidad: "",
     costo_unitario: "",
     origen: "compra" as OrigenMovimiento,
+    motivo: "",
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,8 +38,7 @@ export default function NuevoMovimientoPage() {
     return () => { cancelled = true; };
   }, []);
 
-  function handleProductoChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const id = e.target.value;
+  function handleProductoChange(id: string) {
     const producto = productos.find((p) => p.id === id);
     setForm((prev) => ({
       ...prev,
@@ -59,6 +60,9 @@ export default function NuevoMovimientoPage() {
     setForm((prev) => ({ ...prev, tipo, origen: origenSugerido }));
   }
 
+  /** Un ajuste manual no tiene documento que lo explique: pide motivo. */
+  const exigeMotivo = form.tipo === "AJUSTE" || form.origen === "ajuste_manual";
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (enviandoRef.current) return;
@@ -73,6 +77,22 @@ export default function NuevoMovimientoPage() {
     if (!Number.isFinite(cantidadNum) || cantidadNum === 0) {
       return setError("Indicá una cantidad distinta de 0.");
     }
+    const motivo = form.motivo.trim();
+    if (exigeMotivo && motivo.length < 3) {
+      return setError("Escribí el motivo del ajuste: es lo único que explica por qué cambió el stock.");
+    }
+    // El stock se valida igual en el guardado, pero avisar acá evita que el
+    // operador descubra el problema recién después de apretar.
+    if (
+      cantidadNum < 0 || form.tipo === "SALIDA"
+    ) {
+      const salida = form.tipo === "SALIDA" ? cantidadNum : Math.abs(cantidadNum);
+      if (productoSeleccionado.controla_stock !== false && salida > productoSeleccionado.stock_actual) {
+        return setError(
+          `No hay stock suficiente: hay ${productoSeleccionado.stock_actual} y querés sacar ${salida}.`
+        );
+      }
+    }
 
     enviandoRef.current = true;
     setGuardando(true);
@@ -86,6 +106,7 @@ export default function NuevoMovimientoPage() {
         cantidad: cantidadNum,
         costo_unitario: parseFloat(form.costo_unitario) || 0,
         origen: form.origen,
+        referencia: motivo || undefined,
         fecha: new Date().toISOString(),
       });
       if (!guardado) {
@@ -124,20 +145,19 @@ export default function NuevoMovimientoPage() {
           {/* Producto */}
           <div>
             <label className={labelClass}>Producto</label>
-            <select
-              name="producto_id"
-              value={form.producto_id}
-              onChange={handleProductoChange}
-              className={inputClass}
-              required
-            >
-              <option value="">Seleccionar producto...</option>
-              {productos.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.nombre} — {p.sku} (stock actual: {p.stock_actual})
-                </option>
-              ))}
-            </select>
+            {/* Buscable y no un <select>: con el catalogo entero adentro
+                habia que recorrer la lista a ojo. */}
+            <SearchableSelect
+              value={form.producto_id || null}
+              onChange={(id) => handleProductoChange(id ?? "")}
+              options={productos.map((p) => ({
+                id: String(p.id),
+                label: p.nombre,
+                hint: `${p.sku} · stock ${p.stock_actual}`,
+              }))}
+              placeholder="Buscá por nombre o SKU…"
+              emptyText="Sin productos que coincidan"
+            />
           </div>
 
           {/* Tipo + Origen */}
@@ -206,6 +226,28 @@ export default function NuevoMovimientoPage() {
               />
             </div>
           </div>
+
+          {/* Motivo. Obligatorio en un ajuste manual: es el unico movimiento
+              que no tiene un documento detras (una compra, una venta) que
+              explique por que cambio el stock. Sin motivo, seis meses despues
+              nadie sabe si fue un conteo, una rotura o un error de carga. */}
+          {exigeMotivo && (
+            <div>
+              <label className={labelClass}>
+                Motivo <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="motivo"
+                value={form.motivo}
+                onChange={handleChange}
+                placeholder="Ej: conteo fisico de octubre, rotura, vencimiento"
+                className={inputClass}
+                maxLength={200}
+                autoComplete="off"
+              />
+            </div>
+          )}
 
           {/* Nota de fecha automática */}
           <p className="text-xs text-gray-400">

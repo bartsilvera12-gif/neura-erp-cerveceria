@@ -192,6 +192,14 @@ export interface InsertProveedorInput {
   observaciones?: string | null;
 }
 
+/**
+ * Busca un proveedor por RUC, comparando sin guiones ni espacios.
+ *
+ * Antes comparaba el texto exacto, asi que "80012345-7", "800123457" y
+ * "80012345 - 7" se consideraban tres RUC distintos y el chequeo de duplicado
+ * no veia nada. Dos proveedores con el mismo RUC rompen la conciliacion de
+ * compras y el libro de IVA.
+ */
 export async function findProveedorByRuc(
   schemaRaw: string,
   empresaId: string,
@@ -201,10 +209,17 @@ export async function findProveedorByRuc(
   const t = quoteSchemaTable(schema, "proveedores");
   const { rows } = await pool().query<{ id: string; nombre: string }>(
     `SELECT id, nombre FROM ${t}
-      WHERE empresa_id = $1::uuid AND ruc = $2 LIMIT 1`,
-    [empresaId, ruc]
+      WHERE empresa_id = $1::uuid
+        AND regexp_replace(upper(coalesce(ruc, '')), '[^A-Z0-9]', '', 'g') = $2
+      LIMIT 1`,
+    [empresaId, normalizarRuc(ruc)]
   );
   return rows[0] ?? null;
+}
+
+/** Solo letras y numeros, en mayuscula: la forma en la que se comparan dos RUC. */
+export function normalizarRuc(ruc: string | null | undefined): string {
+  return String(ruc ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
 export async function insertProveedor(

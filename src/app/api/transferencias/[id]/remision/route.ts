@@ -4,6 +4,7 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { getTransferenciaDetalle } from "@/lib/transferencias/server/transferencias-queries";
 import { membreteA4, EMPRESA_DOC } from "@/lib/documentos/membrete";
 import { getMarcaSucursal } from "@/lib/documentos/marca-sucursal";
+import { fechaHoraPy } from "@/lib/fecha/paraguay";
 
 /**
  * GET /api/transferencias/[id]/remision?auto=1
@@ -23,7 +24,7 @@ function fmtFechaHora(iso: unknown): string {
   const d = new Date(String(iso));
   if (Number.isNaN(d.getTime())) return "—";
   const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return fechaHoraPy(d);
 }
 
 const ESTADO_LABEL: Record<string, string> = {
