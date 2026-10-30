@@ -9,7 +9,8 @@ import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
 import AnularCompraModal from "./AnularCompraModal";
-import type { Compra, TipoPago } from "@/lib/compras/types";
+import DetalleCompra from "./DetalleCompra";
+import type { Compra, MetodoPago, TipoPago } from "@/lib/compras/types";
 
 import { ChevronDown, ChevronRight, Paperclip } from "lucide-react";
 import { Trash2 } from "lucide-react";
@@ -70,6 +71,7 @@ type GrupoCompra = {
   total: number;
   comprobante: boolean;
   anulada: boolean;
+  anulacion_motivo: string | null;
 };
 
 function agrupar(rows: Compra[]): GrupoCompra[] {
@@ -91,13 +93,17 @@ function agrupar(rows: Compra[]): GrupoCompra[] {
         total: 0,
         comprobante: false,
         anulada: c.estado === "anulada",
+        anulacion_motivo: c.anulacion_motivo ?? null,
       };
       map.set(key, g);
     }
     g.items.push(c);
     g.total += Number(c.total) || 0;
     if (c.comprobante_storage_path) g.comprobante = true;
-    if (c.estado === "anulada") g.anulada = true;
+    if (c.estado === "anulada") {
+      g.anulada = true;
+      if (!g.anulacion_motivo) g.anulacion_motivo = c.anulacion_motivo ?? null;
+    }
   }
   return [...map.values()].sort(
     (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
@@ -355,18 +361,18 @@ export default function ComprasPage() {
               ) : (
                 filtrados.map((g) => {
                   const abierto = expandidos.has(g.numero_control);
-                  const multi = g.items.length > 1;
                   return (
                     <FragmentRow key={g.numero_control}>
                       <tr
-                        className={`border-b border-slate-200 transition-colors hover:bg-[#4FAEB2]/[0.04] ${multi ? "cursor-pointer" : ""} ${g.anulada ? "opacity-60" : ""}`}
-                        onClick={() => multi && toggle(g.numero_control)}
+                        className={`border-b border-slate-200 transition-colors hover:bg-[#4FAEB2]/[0.04] cursor-pointer ${g.anulada ? "opacity-60" : ""}`}
+                        onClick={() => toggle(g.numero_control)}
+                        title="Ver el detalle de la compra"
                       >
                         <td className={`py-4 pr-4 ${g.anulada ? "opacity-60" : ""}`}>
                           <div className="flex items-center gap-1">
-                            {multi && (abierto
-                  ? <ChevronDown className="inline h-3.5 w-3.5 text-gray-400" aria-hidden />
-                  : <ChevronRight className="inline h-3.5 w-3.5 text-gray-400" aria-hidden />)}
+                            {abierto
+                              ? <ChevronDown className="inline h-3.5 w-3.5 text-gray-400" aria-hidden />
+                              : <ChevronRight className="inline h-3.5 w-3.5 text-gray-400" aria-hidden />}
                             <span className={`text-sm font-medium ${g.anulada ? "line-through text-gray-400" : "text-gray-800"}`}>
                               {g.numero_factura_proveedor || <span className="font-normal italic text-gray-400">Sin número cargado</span>}
                             </span>
@@ -452,23 +458,27 @@ export default function ComprasPage() {
                         </td>
                       </tr>
 
-                      {abierto && multi && g.items.map((it) => (
-                        <tr key={it.id} className="border-b border-slate-100 bg-slate-50/50 text-xs">
-                          <td className="py-2 pr-4" />
-                          <td className="py-2 pr-4" />
-                          <td className="py-2 pr-4 text-gray-700">
-                            <span className="font-medium">{it.producto_nombre}</span>
-                            <span className="ml-2 font-mono text-gray-400">{formatGs(it.costo_unitario)}/u</span>
+                      {abierto && (
+                        <tr className="border-b border-slate-200 bg-slate-50/40">
+                          <td colSpan={10} className="px-2 py-3">
+                            <DetalleCompra
+                              numeroControl={g.numero_control}
+                              items={g.items}
+                              numeroFactura={g.numero_factura_proveedor}
+                              fechaFactura={g.fecha_factura}
+                              metodoPago={(g.metodo_pago as MetodoPago | null) ?? null}
+                              tipoPago={g.tipo_pago}
+                              plazoDias={g.plazo_dias}
+                              fechaRegistro={g.fecha}
+                              anulada={g.anulada}
+                              anulacionMotivo={g.anulacion_motivo}
+                              tieneComprobante={g.comprobante}
+                              onGuardado={() => void recargar()}
+                            />
                           </td>
-                          <td className="py-2 pr-4 text-right tabular-nums text-gray-600">{it.cantidad}</td>
-                          <td className="py-2 pr-4 text-right tabular-nums text-gray-700">{formatGs(it.total)}</td>
-                          <td className="hidden lg:table-cell" />
-                          <td className="hidden lg:table-cell" />
-                          <td />
-                          <td className="hidden lg:table-cell" />
-                          <td />
                         </tr>
-                      ))}
+                      )}
+
                     </FragmentRow>
                   );
                 })
