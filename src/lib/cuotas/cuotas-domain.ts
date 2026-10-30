@@ -123,13 +123,22 @@ export function generarCuotasIguales(
   saldo: number,
   cantidad: number,
   primerVencimiento: string,
-  periodicidadDias = 30
+  periodicidadDias = 30,
+  /**
+   * `true` para monedas sin centavos (guaraníes): las cuotas salen en números
+   * enteros y la última absorbe el resto. Dividir 50.000 en 3 daba
+   * "16666,66 · 16666,66 · 16666,68", que no es un importe que se pueda pagar
+   * ni transferir en Gs. Ahora da "16.666 · 16.666 · 16.668".
+   */
+  enteros = false
 ): CuotaPlanInput[] {
-  const total = round2(saldo);
+  const total = enteros ? Math.round(round2(saldo)) : round2(saldo);
   if (!(total > 0) || !Number.isInteger(cantidad) || cantidad < 1) return [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(primerVencimiento ?? "").trim())) return [];
 
-  const base = Math.floor((total / cantidad) * 100) / 100;
+  const base = enteros
+    ? Math.floor(total / cantidad)
+    : Math.floor((total / cantidad) * 100) / 100;
   const cuotas: CuotaPlanInput[] = [];
   let acumulado = 0;
   const base0 = new Date(`${primerVencimiento}T00:00:00`);

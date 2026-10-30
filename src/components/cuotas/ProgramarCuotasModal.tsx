@@ -65,13 +65,13 @@ export default function ProgramarCuotasModal({ tipo, cuentaId, montoTotal, moned
       }));
       setPagado(Number(data.pagado) || 0);
       setTienePlan(existentes.length > 0);
-      setCuotas(existentes.length > 0 ? existentes : generarCuotasIguales(montoTotal, 3, hoyISO(), 30));
+      setCuotas(existentes.length > 0 ? existentes : generarCuotasIguales(montoTotal, 3, hoyISO(), 30, moneda !== "USD"));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error al cargar.");
     } finally {
       setCargando(false);
     }
-  }, [tipo, cuentaId, montoTotal]);
+  }, [tipo, cuentaId, montoTotal, moneda]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -83,7 +83,11 @@ export default function ProgramarCuotasModal({ tipo, cuentaId, montoTotal, moned
     return arr.map((c, i) => ({ ...c, numero_cuota: i + 1 }));
   }
   function generarIguales() {
-    const g = generarCuotasIguales(montoTotal, Math.max(1, nCuotas), primerVenc, Math.max(1, periodicidad));
+    // Guaraníes sin centavos: dividir 50.000 en 3 daba cuotas de 16666,66,
+    // que no es un importe que se pueda pagar ni transferir.
+    const g = generarCuotasIguales(
+      montoTotal, Math.max(1, nCuotas), primerVenc, Math.max(1, periodicidad), moneda !== "USD"
+    );
     if (g.length === 0) { setErr("No se pudo generar (revisá monto, cantidad y fecha)."); return; }
     setErr(null);
     setCuotas(g);

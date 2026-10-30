@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { Wallet, X, Loader2, AlertTriangle, Search, CalendarClock } from "lucide-react";
 import ProgramarCuotasModal from "@/components/cuotas/ProgramarCuotasModal";
+import { derivarEstadoCuotas, type CuotaDerivada, type CuotaPlanInput } from "@/lib/cuotas/cuotas-domain";
 
 type Cuenta = {
   id: string;
@@ -184,12 +185,51 @@ export default function CuentasPorPagarPage() {
   );
 }
 
+/**
+ * Registrar un pago de una cuenta por pagar.
+ *
+ * PAGAR UNA CUOTA SOLA
+ * Si la cuenta tiene plan de cuotas, el modal lo muestra y ofrece la PRIMERA
+ * cuota con saldo en un clic. Antes el monto venía fijo en el saldo total y
+ * había que acordarse del importe de la cuota y tipearlo: programar cuotas
+ * servía para mirar el cronograma y nada más.
+ *
+ * Por qué sólo la primera con saldo: los pagos no se guardan "contra" una
+ * cuota. Son abonos que bajan el saldo de la cuenta, y el estado de cada cuota
+ * se deriva imputando lo pagado de la más vieja a la más nueva (ver
+ * `cuotas-domain`). Pagar la cuota 3 dejando la 1 sin pagar no se puede
+ * representar: el sistema lo mostraría como la 1 pagada igual.
+ */
 function ModalPago({ cuenta, onClose, onPagado }: { cuenta: Cuenta; onClose: () => void; onPagado: () => void }) {
   const [monto, setMonto] = useState(String(Math.round(cuenta.saldo)));
   const [metodo, setMetodo] = useState("efectivo");
   const [referencia, setReferencia] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [cuotas, setCuotas] = useState<CuotaDerivada[] | null>(null);
+
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession(`/api/cuotas?tipo=pagar&cuentaId=${encodeURIComponent(cuenta.id)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        const plan: CuotaPlanInput[] = (j.data?.cuotas ?? []).map((c: CuotaPlanInput) => ({
+          numero_cuota: c.numero_cuota, monto: c.monto, fecha_vencimiento: c.fecha_vencimiento,
+        }));
+        if (plan.length === 0) return;
+        const derivadas = derivarEstadoCuotas(plan, Number(j.data?.pagado) || 0);
+        setCuotas(derivadas);
+        // Arranca con la cuota que toca, no con el saldo entero: es lo que se
+        // va a pagar casi siempre cuando hay plan.
+        const proxima = derivadas.find((c) => c.saldo > 0);
+        if (proxima) setMonto(String(Math.round(proxima.saldo)));
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, [cuenta.id]);
+
+  const proxima = cuotas?.find((c) => c.saldo > 0) ?? null;
 
   async function guardar() {
     setErr(null);
@@ -226,6 +266,53 @@ function ModalPago({ cuenta, onClose, onPagado }: { cuenta: Cuenta; onClose: () 
             {cuenta.proveedor_nombre} · {cuenta.numero_factura_proveedor || cuenta.compra_numero_control}
             <div className="mt-0.5 text-xs">Saldo pendiente: <span className="font-semibold text-slate-800">{fmtGs(cuenta.saldo, cuenta.moneda)}</span></div>
           </div>
+          {cuotas && cuotas.length > 0 && (
+            <div className="rounded-lg border border-slate-200">
+              <div className="border-b border-slate-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Plan de {cuotas.length} cuotas
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {cuotas.map((c) => {
+                  const esProxima = proxima?.numero_cuota === c.numero_cuota;
+                  return (
+                    <li key={c.numero_cuota} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                      <span className="text-slate-600">
+                        Cuota {c.numero_cuota} · vence {fmtFecha(c.fecha_vencimiento)}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="tabular-nums text-slate-700">{fmtGs(c.monto, cuenta.moneda)}</span>
+                        {c.estado === "pagada" ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700">Pagada</span>
+                        ) : esProxima ? (
+                          <button
+                            type="button"
+                            onClick={() => setMonto(String(Math.round(c.saldo)))}
+                            className="rounded-lg border border-[#4FAEB2] px-2 py-0.5 font-semibold text-[#4FAEB2] hover:bg-[#4FAEB2]/10"
+                          >
+                            Pagar esta ({fmtGs(c.saldo, cuenta.moneda)})
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">
+                            {c.estado === "parcial" ? "Parcial" : "Después de la " + (proxima?.numero_cuota ?? 1)}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="border-t border-slate-200 px-3 py-2 text-right">
+                <button
+                  type="button"
+                  onClick={() => setMonto(String(Math.round(cuenta.saldo)))}
+                  className="text-xs font-medium text-slate-500 hover:text-slate-700 hover:underline"
+                >
+                  Pagar el saldo completo ({fmtGs(cuenta.saldo, cuenta.moneda)})
+                </button>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Monto</label>
             <input type="number" min={0} max={Math.round(cuenta.saldo)} step="any" value={monto} onChange={(e) => setMonto(e.target.value)}

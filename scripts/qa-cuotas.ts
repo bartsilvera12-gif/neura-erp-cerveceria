@@ -101,5 +101,25 @@ const g2 = generarCuotasIguales(100000, 3, "2026-10-01", 30);
 eq("3b suma exacta con remanente", g2.reduce((a, c) => a + c.monto, 0), 100000);
 check("3b valida contra su propio saldo", validarPlanCuotas(100000, g2).ok === true);
 
+// ---- guaranies sin centavos ----
+// El caso real: 50.000 en 3 cuotas salia "16666,66 / 16666,66 / 16666,68",
+// que no es un importe que se pueda pagar ni transferir en Gs.
+const gEnt = generarCuotasIguales(50000, 3, "2026-10-30", 30, true);
+eq("4a montos enteros", gEnt.map((c) => c.monto), [16666, 16666, 16668]);
+eq("4a suma exacta", gEnt.reduce((a, c) => a + c.monto, 0), 50000);
+check("4a todos enteros", gEnt.every((c) => Number.isInteger(c.monto)));
+check("4a valida contra su saldo", validarPlanCuotas(50000, gEnt).ok === true);
+
+const gEnt2 = generarCuotasIguales(50000, 4, "2026-10-30", 30, true);
+eq("4b divisible exacto", gEnt2.map((c) => c.monto), [12500, 12500, 12500, 12500]);
+
+const gEnt3 = generarCuotasIguales(1, 1, "2026-10-30", 30, true);
+eq("4c una sola cuota", gEnt3.map((c) => c.monto), [1]);
+
+// Con decimales (USD) sigue como antes.
+const gDec = generarCuotasIguales(100, 3, "2026-10-30", 30);
+check("4d USD mantiene centavos", gDec.some((c) => !Number.isInteger(c.monto)));
+eq("4d suma exacta", gDec.reduce((a, c) => a + c.monto, 0), 100);
+
 console.log(`\n${fail === 0 ? "✓ TODOS OK" : "✗ HAY FALLOS"} — ${pass} pass, ${fail} fail`);
 process.exit(fail === 0 ? 0 : 1);
