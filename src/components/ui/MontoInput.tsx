@@ -64,7 +64,18 @@ export default function MontoInput({
   const numValue = typeof value === "string"
     ? (value === "" ? 0 : parseMontoInput(value))
     : Number(value) || 0;
-  const formateado = (typeof value === "string" && value === "") ? "" : formatMontoDisplay(numValue, decimals);
+  /**
+   * Un monto en 0 se muestra VACIO, con el placeholder a la vista.
+   *
+   * Mostrar "0" en un campo que todavia no se cargo es lo que hacia que el
+   * cero pareciera pegado: se entra al campo, se tipea al lado y queda
+   * "018000". Vacio no hay nada que borrar, y el ejemplo del placeholder se ve.
+   * El valor que se emite no cambia: sin tocar el campo sigue siendo 0.
+   */
+  const formateado =
+    typeof value === "string"
+      ? (value === "" || numValue === 0 ? "" : formatMontoDisplay(numValue, decimals))
+      : (numValue === 0 ? "" : formatMontoDisplay(numValue, decimals));
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const crudo = e.target.value;
