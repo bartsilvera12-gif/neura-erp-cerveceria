@@ -5,6 +5,13 @@ import { resolveApiAuthContext } from "@/lib/middleware/api-auth-context";
 export interface UsuarioConEmpresa {
   user: User;
   empresa_id: string;
+  /**
+   * Nombre de la fila `usuarios` del tenant. Va acá, y no sólo en
+   * `UsuarioConEmpresaYRol`, porque es lo que firma los registros: sin él, las
+   * rutas no tenían más remedio que guardar el email crudo y la columna
+   * "Usuario" terminaba mostrando el nombre en unas filas y el correo en otras.
+   */
+  nombre?: string;
   /** PK `usuarios.id` del schema del tenant cuando se resolvió la fila. */
   usuarioCatalogId?: string | null;
   /**
@@ -71,5 +78,6 @@ export async function getUserAndEmpresa(request?: Request | null): Promise<Usuar
     sucursal_id: r.ctx.sucursal_id ?? null,
     sucursal_ids: r.ctx.sucursal_ids ?? [],
     sucursal_consolidada: r.ctx.sucursal_consolidada ?? false,
+    nombre: r.ctx.usuarioNombre ?? undefined,
   };
 }

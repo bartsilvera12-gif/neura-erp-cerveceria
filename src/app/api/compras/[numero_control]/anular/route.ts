@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /**
  * POST /api/compras/[numero_control]/anular
@@ -53,7 +54,7 @@ export async function POST(
     const empresaId = auth.empresa_id;
     const userId = auth.user.id;
     const movCreatedBy = auth.usuarioCatalogId ?? null;
-    const movUsuarioNombre = auth.user?.email ?? null;
+    const movUsuarioNombre = firmaDeUsuario(auth);
 
     const { numero_control } = await params;
     const numero = decodeURIComponent(numero_control ?? "").trim();

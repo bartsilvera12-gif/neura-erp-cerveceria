@@ -11,6 +11,7 @@ import {
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 
 import { errorDesglose, normalizarDesglose } from "@/lib/ventas/pago-mixto";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 /**
  * POST /api/ventas/[id]/regenerar
  *
@@ -184,7 +185,7 @@ export async function POST(
         generaNotaRemision: venta.genera_nota_remision === true,
         emitirFactura: emitirFacturaRegen,
         createdBy: auth.usuarioCatalogId ?? null,
-        usuarioNombre: auth.user?.email ?? null,
+        usuarioNombre: firmaDeUsuario(auth),
       });
 
       return NextResponse.json(

@@ -4,6 +4,7 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { OrdenCompraError } from "@/lib/ordenes-compra/server/oc-pg";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 export type OcCtx = {
   empresaId: string; sucursalId: string; schema: string; rol: string | null;
@@ -37,7 +38,7 @@ export async function resolverCtx(
       empresaId: auth.auth.empresa_id, sucursalId, schema,
       rol: auth.auth.rol ?? null,
       usuarioId: auth.auth.usuarioCatalogId ?? null,
-      usuarioNombre: auth.auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(auth.auth),
     },
   };
 }

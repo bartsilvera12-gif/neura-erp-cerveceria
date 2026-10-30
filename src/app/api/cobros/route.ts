@@ -3,13 +3,14 @@ import { getTenantSupabaseFromAuthWithRol } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { registrarCobro, CobroError } from "@/lib/cobros/server/cobros-pg";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /** POST /api/cobros — registra un cobro contra una cuenta por cobrar. */
 export async function POST(request: NextRequest) {
   try {
     const ctx = await getTenantSupabaseFromAuthWithRol(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
-    const usuarioNombre = ctx.auth.nombre ?? ctx.auth.user?.email ?? null;
+    const usuarioNombre = firmaDeUsuario(ctx.auth);
     const usuarioId = ctx.auth.user?.id ?? null;
 
     let body: Record<string, unknown>;

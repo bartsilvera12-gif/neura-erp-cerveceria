@@ -6,6 +6,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import { facturarPresupuestoDirecto } from "@/lib/presupuestos/server/presupuestos-pg";
 import { StockInsuficienteError } from "@/lib/ventas/server/create-venta-pg";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /**
  * POST /api/presupuestos/[id]/facturar
@@ -33,7 +34,7 @@ export async function POST(
       id,
       {
         createdBy: ctx.auth.usuarioCatalogId ?? null,
-        usuarioNombre: ctx.auth.user?.email ?? null,
+        usuarioNombre: firmaDeUsuario(ctx.auth),
       }
     );
 

@@ -8,6 +8,7 @@ import { agregarRonda, itemsDeRonda, type ItemNuevo } from "@/lib/mesas/mesas-do
 import { descontarRonda } from "@/lib/mesas/server/stock-mesa";
 import { marcarRondaEnMesa } from "@/lib/mesas/server/mesas-pg";
 import { isoLocalPy } from "@/lib/fecha/paraguay";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /**
  * POST /api/mesas/[id]/rondas — agrega una ronda a la cuenta.
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       items: itemsDeRonda(res.items, res.ronda),
       permitirSinStock: body?.permitir_sin_stock === true,
       createdBy: auth.usuarioCatalogId ?? null,
-      usuarioNombre: auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(auth),
     });
     if (!stock.ok) {
       return NextResponse.json(

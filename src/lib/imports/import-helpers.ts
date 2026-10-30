@@ -8,6 +8,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
 import { parseUploadFile } from "@/lib/excel/import";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 export interface AuthCtx {
   empresaId: string;
@@ -54,7 +55,7 @@ export async function leerArchivoYAuth(request: Request): Promise<
       empresaId,
       schema,
       usuarioCatalogId: tenant.auth.usuarioCatalogId ?? null,
-      usuarioNombre: tenant.auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(tenant.auth),
       filename: file.name,
       rows: parsed.rows,
       crearFaltantes,

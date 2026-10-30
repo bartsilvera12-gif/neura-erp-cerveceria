@@ -7,6 +7,7 @@ import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-po
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import type { LadoTransferencia } from "@/lib/transferencias/permisos";
 import { TransferenciaError } from "@/lib/transferencias/server/transferencias-pg";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /** Traduce errores de dominio a respuestas HTTP; el resto es 500 genérico. */
 export function respError(err: unknown): NextResponse {
@@ -63,7 +64,7 @@ export async function resolverCtx(
       schema,
       rol: auth.auth.rol ?? null,
       usuarioId: auth.auth.usuarioCatalogId ?? null,
-      usuarioNombre: auth.auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(auth.auth),
     },
   };
 }

@@ -74,7 +74,8 @@
     "test:ticket-pago": "tsx scripts/test-ticket-pago.ts",
     "test:fecha-py": "tsx scripts/test-fecha-paraguay.ts",
     "test:comprobante": "tsx scripts/test-validacion-comprobante.ts",
-    "test:por-cobrar": "tsx scripts/test-por-cobrar.ts"
+    "test:por-cobrar": "tsx scripts/test-por-cobrar.ts",
+    "test:firma-usuario": "tsx scripts/test-firma-usuario.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

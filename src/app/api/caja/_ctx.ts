@@ -4,6 +4,7 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { CajaError } from "@/lib/caja/server/caja-pg";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 export type CajaCtx = {
   empresaId: string; sucursalId: string; schema: string;
@@ -31,7 +32,7 @@ export async function resolverCtx(
     ctx: {
       empresaId: ctx.auth.empresa_id, sucursalId, schema,
       usuarioId: ctx.auth.usuarioCatalogId ?? null,
-      usuarioNombre: ctx.auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(ctx.auth),
     },
   };
 }

@@ -9,6 +9,7 @@ import {
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /**
  * GET /api/producciones — listado de producciones de la empresa (vía PostgREST).
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
       observaciones,
       permitirSinStock,
       usuarioId: auth.user?.id ?? null,
-      usuarioNombre: auth.nombre ?? null,
+      usuarioNombre: firmaDeUsuario(auth),
     };
 
     if (esPreview) {

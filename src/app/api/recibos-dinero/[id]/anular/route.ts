@@ -5,6 +5,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { esAdminErp } from "@/lib/roles/erp-role-access";
 import { anularRecibo, AnularReciboError } from "@/lib/recibos/server/anular-recibo-pg";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /**
  * POST /api/recibos-dinero/[id]/anular
@@ -53,7 +54,7 @@ export async function POST(
       reciboId: id.trim(),
       motivo,
       usuarioId: ctx.auth.usuarioCatalogId ?? null,
-      usuarioNombre: ctx.auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(ctx.auth),
     });
 
     return NextResponse.json(successResponse(result));

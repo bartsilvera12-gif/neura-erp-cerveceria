@@ -3,6 +3,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { getLote, insertEtapa, updateLote } from "@/lib/produccion/lotes-pg";
 import { requireEdicionRecetas } from "@/lib/recetas/require-edicion-recetas";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 import {
   crearProduccionPg,
   InsumoInsuficienteError,
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest, { params }: RouteCtx) {
       observaciones: `Cocimiento del lote ${lote.codigo}`,
       permitirSinStock,
       usuarioId: ctx.auth.usuarioCatalogId ?? null,
-      usuarioNombre: ctx.auth.nombre ?? null,
+      usuarioNombre: firmaDeUsuario(ctx.auth),
     });
 
     const actualizado = await updateLote(ctx.supabase, ctx.auth.empresa_id, id, {

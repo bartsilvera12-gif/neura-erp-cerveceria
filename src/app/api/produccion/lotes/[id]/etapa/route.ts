@@ -9,6 +9,7 @@ import {
 } from "@/lib/produccion/lotes-pg";
 import { requireEdicionRecetas } from "@/lib/recetas/require-edicion-recetas";
 import { revertirProduccionPg } from "@/lib/produccion/revertir-produccion-pg";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest, { params }: RouteCtx) {
             produccionId: lote.produccion_id,
             motivo: `Cancelación del lote ${lote.codigo}`,
             usuarioId: ctx.auth.usuarioCatalogId ?? null,
-            usuarioNombre: ctx.auth.nombre ?? null,
+            usuarioNombre: firmaDeUsuario(ctx.auth),
           });
         } catch (e) {
           // La cancelación no se bloquea por esto, pero no se miente: queda

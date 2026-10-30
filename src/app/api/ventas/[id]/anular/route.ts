@@ -5,6 +5,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import { anularVentaCore, ventaTieneCobrosAplicados } from "@/lib/ventas/server/anular-venta-core";
 import { devolverLotesDeVenta } from "@/lib/produccion/trazabilidad-lote";
 import { marcarDesfacturadoPorAnulacion } from "@/lib/caja/facturacion";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /**
  * POST /api/ventas/[id]/anular
@@ -37,7 +38,7 @@ export async function POST(
     const empresaId = auth.empresa_id;
     const userId = auth.user.id;
     const movCreatedBy = auth.usuarioCatalogId ?? null;
-    const movUsuarioNombre = auth.user?.email ?? null;
+    const movUsuarioNombre = firmaDeUsuario(auth);
 
     const { id } = await params;
     const ventaId = id?.trim();

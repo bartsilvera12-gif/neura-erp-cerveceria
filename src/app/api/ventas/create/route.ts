@@ -19,6 +19,7 @@ import { estaFacturado, marcarFacturado } from "@/lib/caja/facturacion";
 import { vincularMovimientosAVenta } from "@/lib/mesas/server/stock-mesa";
 import { asignarLotesAVenta } from "@/lib/produccion/trazabilidad-lote";
 import { resolverCajaParaVenta, CajaError } from "@/lib/caja/server/caja-pg";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /** Error tipado: el pedido que se intenta facturar ya tiene venta. */
 class PedidoYaFacturadoError extends Error {
@@ -334,7 +335,7 @@ export async function POST(request: NextRequest) {
       // cajero explícitamente eligió "solo ticket" al confirmar la venta.
       emitirFactura: emitirFacturaFlag,
       createdBy: auth.usuarioCatalogId ?? null,
-      usuarioNombre: auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(auth),
       cajaId: cajaIdVenta,
     });
 

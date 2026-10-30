@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { envasarLote, VolumenInsuficienteError } from "@/lib/produccion/envasado-pg";
 import { requireEdicionRecetas } from "@/lib/recetas/require-edicion-recetas";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteCtx) {
       productoId: producto_id,
       cantidad,
       usuarioId: ctx.auth.usuarioCatalogId ?? null,
-      usuarioNombre: ctx.auth.nombre ?? null,
+      usuarioNombre: firmaDeUsuario(ctx.auth),
     });
 
     return NextResponse.json(successResponse({ envasado: r }));

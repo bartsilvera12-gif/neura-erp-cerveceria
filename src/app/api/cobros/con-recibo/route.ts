@@ -4,6 +4,7 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 import {
   cobrarConRecibo,
   cuentasPendientesDeCliente,
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
       observaciones: typeof body.observaciones === "string" ? body.observaciones : null,
       fecha_pago: typeof body.fecha_pago === "string" ? body.fecha_pago : null,
       usuarioId: ctx.auth.usuarioCatalogId ?? null,
-      usuarioNombre: ctx.auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(ctx.auth),
     });
     return NextResponse.json(successResponse(out));
   } catch (err) {

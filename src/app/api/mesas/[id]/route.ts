@@ -8,6 +8,7 @@ import { quitarItem } from "@/lib/mesas/mesas-domain";
 import { devolverItem } from "@/lib/mesas/server/stock-mesa";
 import { marcarCanceladoDesdeCaja, marcarEnviadoACaja } from "@/lib/caja/facturacion";
 import { isoLocalPy } from "@/lib/fecha/paraguay";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
           mesaId: id,
           item: r.mesa.items[indice],
           createdBy: auth.usuarioCatalogId ?? null,
-          usuarioNombre: auth.user?.email ?? null,
+          usuarioNombre: firmaDeUsuario(auth),
         });
       }
       await guardarItems(sb, auth.empresa_id, id, r.brief, res.items);

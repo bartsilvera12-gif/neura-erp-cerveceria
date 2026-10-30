@@ -23,3 +23,23 @@ export function nombreParaRegistro(
   if (email) return email;
   return "Usuario";
 }
+
+/**
+ * Lo mismo, a partir del contexto de una ruta: `firmaDeUsuario(auth)` es lo que
+ * va en `usuario_nombre` de cualquier registro.
+ *
+ * Existe para que ninguna ruta tenga que elegir entre `auth.nombre` y
+ * `auth.user?.email`: elegir en cada lugar es exactamente lo que dejó la
+ * columna "Usuario" mostrando tres cosas distintas.
+ */
+export function firmaDeUsuario(
+  auth:
+    | { nombre?: string | null; usuarioNombre?: string | null; user?: { email?: string | null } | null }
+    | null
+    | undefined
+): string {
+  return nombreParaRegistro({
+    nombre: auth?.nombre ?? auth?.usuarioNombre ?? null,
+    email: auth?.user?.email ?? null,
+  });
+}

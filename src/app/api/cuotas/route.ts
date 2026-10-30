@@ -10,6 +10,7 @@ import {
   CuotaError,
 } from "@/lib/cuotas/server/cuotas-pg";
 import type { CuotaPlanInput } from "@/lib/cuotas/cuotas-domain";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 /** GET /api/cuotas?tipo=cobrar|pagar&cuentaId=<uuid> — plan de una cuenta. */
 export async function GET(request: NextRequest) {
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
       cuentaId,
       cuotas,
       createdBy: ctx.auth.usuarioCatalogId ?? null,
-      usuarioNombre: ctx.auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(ctx.auth),
     });
     return NextResponse.json(successResponse({ cuotas: creadas }));
   } catch (err) {

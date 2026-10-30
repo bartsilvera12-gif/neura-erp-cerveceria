@@ -5,6 +5,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { exigirSucursal } from "@/lib/sucursales/filtro";
 import { registrarPagoProveedor, CxpError } from "@/lib/cuentas-por-pagar/server/cxp-pg";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 function esAprobador(rol: string | null | undefined): boolean {
   const r = (rol ?? "").trim().toLowerCase();
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       referencia,
       fecha,
       usuarioId: auth.auth.usuarioCatalogId ?? null,
-      usuarioNombre: auth.auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(auth.auth),
     });
     return NextResponse.json(successResponse(out));
   } catch (err) {

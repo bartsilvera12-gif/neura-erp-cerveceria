@@ -12,6 +12,7 @@ import { anularVentaCore } from "@/lib/ventas/server/anular-venta-core";
 import { downloadSifenCertificadoObject } from "@/lib/sifen/sifen-certificados-storage";
 import { decryptSecret } from "@/lib/sifen/security";
 import { enviarEventoCancelacionSifen, normalizarMotivoEvento } from "@/lib/sifen/evento-cancelacion";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 function trimMotivo(raw: unknown): string | null {
   if (raw == null) return null;
@@ -321,7 +322,7 @@ export async function POST(
         motivo: motivoCascada.length >= 5 ? motivoCascada : `Cancelación SIFEN. Motivo: ${motivo}`,
         userId: auth.user.id,
         movCreatedBy: auth.usuarioCatalogId ?? null,
-        movUsuarioNombre: auth.user?.email ?? null,
+        movUsuarioNombre: firmaDeUsuario(auth),
       });
       if (!resVenta.ok) {
         ventaAnuladaWarning = `Factura cancelada en SIFEN pero no se pudo anular la venta origen: ${resVenta.message}. Anulala manualmente desde /ventas.`;

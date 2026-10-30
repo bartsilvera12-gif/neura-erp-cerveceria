@@ -4,6 +4,7 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { NotaCreditoCompraError } from "@/lib/notas-credito-compra/server/nc-compra-pg";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 export type NccCtx = {
   empresaId: string;
@@ -60,7 +61,7 @@ export async function resolverCtx(
       schema,
       rol: auth.auth.rol ?? null,
       usuarioId: auth.auth.usuarioCatalogId ?? null,
-      usuarioNombre: auth.auth.user?.email ?? null,
+      usuarioNombre: firmaDeUsuario(auth.auth),
     },
   };
 }
