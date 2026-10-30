@@ -26,7 +26,19 @@ import {
 import { errorDesglose } from "@/lib/ventas/pago-mixto";
 import type { Producto } from "@/lib/inventario/types";
 
-import { AlertTriangle, CheckCircle2, ChevronDown, Image as ImageIcon, Plus, Search, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Banknote,
+  CheckCircle2,
+  ChevronDown,
+  CreditCard,
+  Image as ImageIcon,
+  Landmark,
+  Plus,
+  Search,
+  Split,
+  X,
+} from "lucide-react";
 import NumeroInput from "@/components/ui/NumeroInput";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -1415,26 +1427,40 @@ export default function NuevaVentaPage() {
                   {tipoVenta === "CONTADO" && (
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
                       <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Cobro</p>
-                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                      {/* Dos columnas y no cuatro: el panel es angosto y
+                          "Transferencia" no entra en un cuarto de ancho, asi
+                          que el texto quedaba pegado a los bordes. */}
+                      <div className="grid grid-cols-2 gap-2">
                         {([
-                          { v: "efectivo", label: "Efectivo" },
-                          { v: "transferencia", label: "Transferencia" },
-                          { v: "tarjeta", label: "Tarjeta/Débito" },
-                          { v: "mixto", label: "Mixto" },
-                        ] as { v: MetodoPago; label: string }[]).map((m) => (
-                          <button
-                            key={m.v}
-                            type="button"
-                            onClick={() => handleSelectMetodo(m.v)}
-                            className={`text-xs py-2 rounded-md border transition-colors ${
-                              metodoPago === m.v
-                                ? "border-[#0EA5E9] bg-[#0EA5E9]/10 text-[#0EA5E9] font-medium"
-                                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                            }`}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
+                          { v: "efectivo", Icono: Banknote },
+                          { v: "transferencia", Icono: Landmark },
+                          { v: "tarjeta", Icono: CreditCard },
+                          { v: "mixto", Icono: Split },
+                        ] as { v: MetodoPago; Icono: typeof Banknote }[]).map((m) => {
+                          const activo = metodoPago === m.v;
+                          return (
+                            <button
+                              key={m.v}
+                              type="button"
+                              onClick={() => handleSelectMetodo(m.v)}
+                              aria-pressed={activo}
+                              className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
+                                activo
+                                  ? "border-[#0EA5E9] bg-[#0EA5E9]/10 font-medium text-[#0EA5E9]"
+                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                              }`}
+                            >
+                              <m.Icono
+                                className={`h-4 w-4 shrink-0 ${activo ? "text-[#0EA5E9]" : "text-slate-400"}`}
+                                aria-hidden
+                              />
+                              {/* El nombre largo se achica antes que desbordar. */}
+                              {/* El nombre sale de METODO_PAGO_LABEL para que
+                                  el boton y el reparto de abajo digan igual. */}
+                              <span className="min-w-0 truncate">{METODO_PAGO_LABEL[m.v]}</span>
+                            </button>
+                          );
+                        })}
                       </div>
 
                       {/* Efectivo: monto recibido + vuelto, sin datos extra */}

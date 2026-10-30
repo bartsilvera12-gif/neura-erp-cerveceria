@@ -22,7 +22,7 @@ export const METODOS_PAGO_SIMPLES: readonly MetodoPagoSimple[] = [
 export const METODO_PAGO_LABEL: Record<MetodoPago, string> = {
   efectivo: "Efectivo",
   transferencia: "Transferencia",
-  tarjeta: "Tarjeta/Débito",
+  tarjeta: "Tarjeta o débito",
   mixto: "Mixto",
 };
 

@@ -3,6 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { membreteA4, membreteTicket, type MembreteMarca } from "@/lib/documentos/membrete";
 import { getMarcaSucursal } from "@/lib/documentos/marca-sucursal";
+import { lineasPagoTicket } from "@/lib/ventas/ticket-pago";
 
 /**
  * GET /api/ventas/[id]/ticket?w=58|80&mode=comandas&auto=1
@@ -128,36 +129,23 @@ function modalidadLabel(m: string | null | undefined): string {
   return "";
 }
 
-function metodoPagoLabel(m: string | null | undefined): string {
-  if (m === "tarjeta") return "Tarjeta";
-  if (m === "transferencia") return "Transferencia";
-  if (m === "efectivo") return "Efectivo";
-  if (m === "mixto") return "Mixto";
-  return "—";
-}
-
-/**
- * Filas de pago del ticket. En un cobro mixto el cliente tiene que poder leer
- * cuánto puso en cada cosa: "Mixto" solo no le sirve para controlar el vuelto.
- */
-function filasPagoHtml(
-  metodo: string | null | undefined,
-  desglose: unknown
-): string {
-  const fila = (lbl: string, val: string) =>
-    `<tr><td class="lbl">${lbl}</td><td class="val">${val}</td></tr>`;
-  if (metodo !== "mixto" || desglose == null || typeof desglose !== "object") {
-    return fila("Pago", metodoPagoLabel(metodo));
-  }
-  const d = desglose as Record<string, unknown>;
-  const partes = (["efectivo", "transferencia", "tarjeta"] as const)
-    .map((m) => ({ m, monto: Number(d[m]) || 0 }))
-    .filter((x) => x.monto > 0);
-  if (partes.length === 0) return fila("Pago", "Mixto");
-  return (
-    fila("Pago", "Mixto") +
-    partes.map((p) => fila(`· ${metodoPagoLabel(p.m)}`, formatGs(p.monto))).join("")
-  );
+/** Las filas de pago las arma `lineasPagoTicket`, que esta probada aparte. */
+function filasPagoHtml(venta: VentaRow, detalle: PagoDetalleRow[]): string {
+  return lineasPagoTicket(
+    {
+      tipo_venta: venta.tipo_venta,
+      plazo_dias: venta.plazo_dias,
+      metodo_pago: venta.metodo_pago,
+      pagos_desglose: venta.pagos_desglose,
+      detalle,
+    },
+    formatGs
+  )
+    .map(
+      (l) =>
+        `<tr><td class="lbl">${escapeHtml(l.label)}</td><td class="val">${escapeHtml(l.valor)}</td></tr>`
+    )
+    .join("");
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -173,12 +161,23 @@ interface VentaRow {
   observaciones: string | null;
   metodo_pago: string | null;
   pagos_desglose: unknown;
+  /** Sin esto una venta a CREDITO imprimia "Pago: Efectivo", que es el valor
+      por defecto del formulario y lo contrario de lo que paso. */
+  tipo_venta: string | null;
+  plazo_dias: number | null;
   cliente_id: string | null;
   genera_nota_remision: boolean | null;
   nota_remision_numero: string | null;
   estado: string | null;
   anulada_at: string | null;
   anulacion_motivo: string | null;
+}
+
+/** Fila de `ventas_pagos_detalle`: con que banco y con que referencia se cobro. */
+interface PagoDetalleRow {
+  metodo_pago: string | null;
+  entidad_nombre_snapshot: string | null;
+  referencia: string | null;
 }
 
 interface ItemRow {
@@ -212,8 +211,9 @@ function renderCopia(opts: {
   isLast: boolean;
   negocio: string;
   marca?: MembreteMarca;
+  pagoDetalle: PagoDetalleRow[];
 }): string {
-  const { tipo, venta, items, brief, fontPx, isLast, marca } = opts;
+  const { tipo, venta, items, brief, fontPx, isLast, marca, pagoDetalle } = opts;
   const showPrices = tipo === "cliente";
   const sectorBadge = tipo === "pizzeria" ? "COMANDA PIZZERÍA" : tipo === "plancha" ? "COMANDA PLANCHA" : "";
   const modalidad = modalidadLabel(brief?.modalidad);
@@ -268,7 +268,7 @@ function renderCopia(opts: {
            <tr><td class="lbl">Subtotal</td><td class="val">${formatGs(subtotal)}</td></tr>
            ${ivaTotal > 0 ? `<tr><td class="lbl">IVA</td><td class="val">${formatGs(ivaTotal)}</td></tr>` : ""}
            <tr class="total-row"><td class="lbl">TOTAL</td><td class="val">${formatGs(total)}</td></tr>
-           ${filasPagoHtml(venta.metodo_pago, venta.pagos_desglose)}
+           ${filasPagoHtml(venta, pagoDetalle)}
          </tbody>
        </table>`
     : "";
@@ -399,13 +399,28 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   // Venta
   const vQ = await ctx.supabase
     .from("ventas")
-    .select("id, sucursal_id, numero_control, fecha, subtotal, monto_iva, total, observaciones, metodo_pago, pagos_desglose, cliente_id, genera_nota_remision, nota_remision_numero, estado, anulada_at, anulacion_motivo")
+    .select("id, sucursal_id, numero_control, fecha, subtotal, monto_iva, total, observaciones, metodo_pago, pagos_desglose, tipo_venta, plazo_dias, cliente_id, genera_nota_remision, nota_remision_numero, estado, anulada_at, anulacion_motivo")
     .eq("id", id)
     .eq("empresa_id", empresaId)
     .maybeSingle();
   if (vQ.error) return new NextResponse(`Error: ${vQ.error.message}`, { status: 500 });
   if (!vQ.data) return new NextResponse("Venta no encontrada", { status: 404 });
   const venta = vQ.data as unknown as VentaRow;
+
+  // Banco y referencia del cobro. Best-effort a proposito: si esta consulta
+  // falla, el ticket igual tiene que salir — el cajero tiene al cliente
+  // esperando. Se pierde el dato de conciliacion, no el comprobante.
+  let pagoDetalle: PagoDetalleRow[] = [];
+  try {
+    const pdQ = await ctx.supabase
+      .from("ventas_pagos_detalle")
+      .select("metodo_pago, entidad_nombre_snapshot, referencia")
+      .eq("venta_id", id)
+      .eq("empresa_id", empresaId);
+    if (!pdQ.error) pagoDetalle = (pdQ.data ?? []) as unknown as PagoDetalleRow[];
+  } catch {
+    /* ticket sin datos de banco */
+  }
 
   // Membrete por sucursal: los documentos de Reserva Market llevan su logo,
   // teléfono y dirección; los de Matriz caen al membrete por defecto.
@@ -565,7 +580,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 
   const seccionesHtml = copias
     .map((tipo, idx) => {
-      const copia = renderCopia({ tipo, venta, items, brief, fontPx, isLast: idx === copias.length - 1, negocio, marca });
+      const copia = renderCopia({ tipo, venta, items, brief, fontPx, isLast: idx === copias.length - 1, negocio, marca, pagoDetalle });
       // Inyectamos el banner al inicio de cada <section class="paper">.
       return anulada ? copia.replace(/(<section class="paper[^"]*">)/, `$1${anuladaBanner}`) : copia;
     })

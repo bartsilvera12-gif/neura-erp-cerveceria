@@ -65,7 +65,8 @@
     "diag:sifen-rechazo-fac": "tsx scripts/diagnostico-rechazo-fac.ts",
     "db:apply-provision-chat-flow-node-fks": "node scripts/apply-migration-file-pg.cjs supabase/migrations/20260531100000_provision_fix_chat_flow_node_fks_one_schema.sql",
     "test:costeo": "tsx scripts/test-costeo-completo.ts",
-    "test:destino-pedido": "tsx scripts/test-destino-pedido.ts"
+    "test:destino-pedido": "tsx scripts/test-destino-pedido.ts",
+    "test:ticket-pago": "tsx scripts/test-ticket-pago.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
