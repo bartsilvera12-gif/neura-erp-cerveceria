@@ -1,6 +1,6 @@
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 import type { PagosDesglose } from "@/lib/ventas/types";
-import { convertirCantidad } from "@/lib/unidades/convert";
+import { calcularConsumo } from "@/lib/inventario/server/consumo-stock";
 import { asuncionYmd } from "@/lib/fecha/asuncion";
 import { resolverDestinoPedido } from "@/lib/proyectos/server/destino-pedido";
 
@@ -84,6 +84,13 @@ export interface CreateVentaPgParams {
   pedidoCocina?: CreateVentaPedidoCocinaInput | null;
   /** Si true, autoriza vender aunque falte stock de productos o insumos (stock puede quedar negativo). */
   permitirSinStock?: boolean;
+  /**
+   * `true` cuando el stock YA se descontó antes de esta venta: una mesa abierta
+   * que descontó cada ronda al servirla. La venta entonces cobra, factura y
+   * registra todo lo demás, pero no vuelve a tocar el stock ni a validar que
+   * alcance — el chop ya salió del granel hace dos horas.
+   */
+  omitirStock?: boolean;
   /** Si true y hay cliente, la venta emite nota de remisión (documento NO fiscal) con número NR-XXXXXX. */
   generaNotaRemision?: boolean;
   /** Si true (default), la venta activa el puente Venta → Factura ERP: crea
@@ -170,203 +177,26 @@ export async function createVentaTransaccionalPg(
     if (!ck.data) throw new Error("Cliente no encontrado en esta empresa.");
   }
 
-  // 2) Cargar productos del carrito — TODOS los que existan y pertenezcan a la empresa, sin filtrar controla_stock ni stock>0.
-  //    El filtro por sucursal NO es cosmetico: sin el, un producto_id de otra
-  //    sucursal que llegue en el payload descontaria el stock de ESA sucursal.
-  //    Los ids que no pertenezcan a la sucursal caen en el chequeo de abajo.
-  const ids = [...qtyByProduct.keys()];
-  const prodQ = await sb
-    .from("productos")
-    .select("id, stock_actual, costo_promedio, nombre, sku, controla_stock, modo_receta")
-    .eq("empresa_id", params.empresaId)
-    .eq("sucursal_id", params.sucursalId)
-    .in("id", ids);
-  if (prodQ.error) throw new Error(prodQ.error.message);
-  const prodRows = (prodQ.data ?? []) as unknown as Array<{
-    id: string;
-    stock_actual: number | string;
-    costo_promedio: number | string;
-    nombre: string;
-    sku: string;
-    controla_stock: boolean | null;
-    modo_receta: string | null;
-  }>;
-
-  if (prodRows.length !== ids.length) {
-    const found = new Set(prodRows.map((r) => r.id));
-    const faltantes = ids.filter((id) => !found.has(id));
-    throw new Error(
-      `Uno o más productos no existen o no pertenecen a esta empresa. IDs no encontrados: ${faltantes.join(", ")}`
+  // 2) Consumo de stock: qué descuenta esta venta.
+  //    La regla (recetas, merma, rendimiento, conversión de unidades) vive en
+  //    `calcularConsumo` porque la comparte con las rondas de una mesa abierta:
+  //    si cada camino explotara las recetas por su cuenta, el stock del bar
+  //    dejaría de cerrar con el de la fábrica.
+  const consumo = await calcularConsumo(sb, params.empresaId, params.sucursalId, qtyByProduct);
+  const stockMap = consumo.productos;
+  const recetaByProducto = consumo.recetaByProducto;
+  const insumoNeed = consumo.insumoNeed;
+  const insumoMeta = consumo.insumoMeta;
+  if (consumo.incompatibles.length > 0) {
+    console.warn(
+      "[create-venta-pg] receta con unidades incompatibles (no se descuentan):",
+      consumo.incompatibles.join(", ")
     );
   }
 
-  type ProdMeta = { stock: number; costo: number; nombre: string; sku: string; controlaStock: boolean; modo: string };
-  const stockMap = new Map<string, ProdMeta>();
-  for (const r of prodRows) {
-    stockMap.set(r.id, {
-      stock: Number(r.stock_actual),
-      costo: Number(r.costo_promedio),
-      nombre: r.nombre,
-      sku: r.sku,
-      controlaStock: r.controla_stock !== false,
-      modo: r.modo_receta ?? "preparado_al_vender",
-    });
-  }
-
-  // 2b) Recetas: para cada producto vendido con receta activa, calcular el consumo de
-  //     materia prima (insumos). Consistente con el costeo (fn_receta_costeo):
-  //     consumo por unidad vendida = cantidad * (1 + merma_pct) / rendimiento.
-  const recetasQ = await sb
-    .from("recetas")
-    .select("id, producto_id, rendimiento_cantidad")
-    .eq("empresa_id", params.empresaId)
-    .eq("activa", true)
-    .in("producto_id", ids);
-  if (recetasQ.error) throw new Error(recetasQ.error.message);
-  const recetaRows = (recetasQ.data ?? []) as unknown as Array<{
-    id: string;
-    producto_id: string;
-    rendimiento_cantidad: number | string | null;
-  }>;
-  // Solo se explota la receta (descuento de materia prima al vender) para productos en modo
-  // 'preparado_al_vender'. Los productos 'produccion_previa' descuentan su PROPIO stock del
-  // terminado (la materia prima ya se descontó al fabricar) → NO se agregan acá, así caen en
-  // la rama de descuento de stock propio (pasos 3a/7). Evita el doble descuento.
-  const recetaByProducto = new Map<string, { id: string; rendimiento: number }>();
-  for (const r of recetaRows) {
-    const modo = stockMap.get(r.producto_id)?.modo ?? "preparado_al_vender";
-    if (modo === "produccion_previa") continue;
-    const rend = Number(r.rendimiento_cantidad);
-    recetaByProducto.set(r.producto_id, { id: r.id, rendimiento: rend > 0 ? rend : 1 });
-  }
-
-  // insumo_producto_id -> cantidad total a descontar en esta venta (EN LA UNIDAD DEL INSUMO).
-  const insumoNeed = new Map<string, number>();
-  // Metadata de insumos (stock/costo/nombre/sku/unidad) para validar y registrar movimientos.
-  type InsumoMeta = { stock: number; costo: number; nombre: string; sku: string; unidad: string | null };
-  const insumoMeta = new Map<string, InsumoMeta>();
-  // Ítems cuya unidad es incompatible con la del insumo (no se convierten ni descuentan).
-  const insumosIncompatibles: string[] = [];
-
-  if (recetaRows.length) {
-    const recetaIds = recetaRows.map((r) => r.id);
-    const itemsQ = await sb
-      .from("receta_items")
-      .select("receta_id, insumo_producto_id, cantidad, unidad_medida, merma_pct")
-      .in("receta_id", recetaIds);
-    if (itemsQ.error) throw new Error(itemsQ.error.message);
-    const itemsByReceta = new Map<string, Array<{ insumo_producto_id: string; cantidad: number; unidad_item: string | null; merma_pct: number }>>();
-    const insumoIdsSet = new Set<string>();
-    for (const it of (itemsQ.data ?? []) as unknown as Array<{
-      receta_id: string;
-      insumo_producto_id: string;
-      cantidad: number | string;
-      unidad_medida: string | null;
-      merma_pct: number | string | null;
-    }>) {
-      const arr = itemsByReceta.get(it.receta_id) ?? [];
-      arr.push({
-        insumo_producto_id: it.insumo_producto_id,
-        cantidad: Number(it.cantidad),
-        unidad_item: it.unidad_medida ?? null,
-        merma_pct: Number(it.merma_pct ?? 0),
-      });
-      itemsByReceta.set(it.receta_id, arr);
-      insumoIdsSet.add(it.insumo_producto_id);
-    }
-
-    // Cargar meta de insumos (incluida su unidad) ANTES de agregar, para poder convertir.
-    const insumoIds = [...insumoIdsSet];
-    if (insumoIds.length) {
-      const insQ = await sb
-        .from("productos")
-        .select("id, stock_actual, costo_promedio, nombre, sku, unidad_medida")
-        .eq("empresa_id", params.empresaId)
-        .in("id", insumoIds);
-      if (insQ.error) throw new Error(insQ.error.message);
-      const insRows = (insQ.data ?? []) as unknown as Array<{
-        id: string;
-        stock_actual: number | string;
-        costo_promedio: number | string;
-        nombre: string;
-        sku: string;
-        unidad_medida: string | null;
-      }>;
-      if (insRows.length !== insumoIds.length) {
-        const found = new Set(insRows.map((r) => r.id));
-        const faltan = insumoIds.filter((i) => !found.has(i));
-        throw new Error(`La receta referencia insumos inexistentes en esta empresa: ${faltan.join(", ")}`);
-      }
-      for (const r of insRows) {
-        insumoMeta.set(r.id, {
-          stock: Number(r.stock_actual),
-          costo: Number(r.costo_promedio),
-          nombre: r.nombre,
-          sku: r.sku,
-          unidad: r.unidad_medida ?? null,
-        });
-      }
-    }
-
-    // Agregar consumo CONVIRTIENDO la cantidad del ítem a la unidad del insumo.
-    for (const [pid, qtySold] of qtyByProduct) {
-      const rec = recetaByProducto.get(pid);
-      if (!rec) continue;
-      for (const ri of itemsByReceta.get(rec.id) ?? []) {
-        const meta = insumoMeta.get(ri.insumo_producto_id);
-        const unidadInsumo = meta?.unidad ?? null;
-        // Sin unidad declarada en el ítem o en el insumo → se asume misma unidad (sin conversión).
-        const cantConv = (ri.unidad_item == null || unidadInsumo == null)
-          ? ri.cantidad
-          : convertirCantidad(ri.cantidad, ri.unidad_item, unidadInsumo);
-        if (cantConv == null) {
-          // Unidad incompatible (familias distintas): no se descuenta para no corromper el stock.
-          const nombre = meta?.nombre ?? ri.insumo_producto_id;
-          if (!insumosIncompatibles.includes(nombre)) insumosIncompatibles.push(nombre);
-          continue;
-        }
-        const consumo = (qtySold * cantConv * (1 + ri.merma_pct)) / rec.rendimiento;
-        if (!(consumo > 0)) continue;
-        insumoNeed.set(ri.insumo_producto_id, (insumoNeed.get(ri.insumo_producto_id) ?? 0) + consumo);
-      }
-    }
-  }
-  // Redondeo a 6 decimales para evitar ruido de coma flotante (la columna es numeric sin escala).
-  for (const [k, v] of insumoNeed) insumoNeed.set(k, Math.round(v * 1e6) / 1e6);
-  if (insumosIncompatibles.length > 0) {
-    console.warn("[create-venta-pg] receta con unidades incompatibles (no se descuentan):", insumosIncompatibles.join(", "));
-  }
-
-  // 3) Validar stock. Se recolectan TODOS los faltantes (productos de reventa con receta
-  //    consumen insumos, no su propio stock). Si hay faltantes y NO se autorizó la venta sin
-  //    stock, se lanza StockInsuficienteError con el detalle (la UI muestra el modal y reintenta
-  //    con permitir_sin_stock=true). Si se autorizó, se continúa y el stock puede quedar negativo.
-  const faltantes: FaltanteStock[] = [];
-
-  // 3a) Productos de reventa (controla_stock=true, sin receta).
-  for (const [pid, need] of qtyByProduct) {
-    const p = stockMap.get(pid)!;
-    if (recetaByProducto.has(pid)) continue;
-    // produccion_previa: descuenta su propio stock del terminado aunque controla_stock=false.
-    if (!p.controlaStock && p.modo !== "produccion_previa") continue;
-    if (p.stock < need) {
-      faltantes.push({
-        tipo: "producto", producto_id: pid, nombre: p.nombre, sku: p.sku,
-        stock_actual: p.stock, solicitado: need, faltante: Math.round((need - p.stock) * 1e6) / 1e6,
-      });
-    }
-  }
-
-  // 3b) Materia prima (insumos) requerida por las recetas.
-  for (const [insId, need] of insumoNeed) {
-    const m = insumoMeta.get(insId)!;
-    if (m.stock < need) {
-      faltantes.push({
-        tipo: "insumo", producto_id: insId, nombre: m.nombre, sku: m.sku,
-        stock_actual: m.stock, solicitado: need, faltante: Math.round((need - m.stock) * 1e6) / 1e6,
-      });
-    }
-  }
+  // 3) Validar stock. Si la mesa ya descontó (`omitirStock`), no hay nada que
+  //    validar: el chop salió del granel cuando se sirvió, no ahora.
+  const faltantes: FaltanteStock[] = params.omitirStock ? [] : consumo.faltantes;
 
   if (faltantes.length > 0 && !params.permitirSinStock) {
     throw new StockInsuficienteError(faltantes);
@@ -562,7 +392,9 @@ export async function createVentaTransaccionalPg(
     if (insItems.error) throw new Error(insItems.error.message);
 
     // 7) Descuento de stock + movimientos solo para productos con controla_stock=true SIN receta.
-    for (const line of items) {
+    //    `omitirStock`: la mesa ya descontó al servir cada ronda. Descontar de
+    //    nuevo acá dejaría el stock en la mitad de lo que hay en la heladera.
+    for (const line of params.omitirStock ? [] : items) {
       const p = stockMap.get(line.producto_id)!;
       if (recetaByProducto.has(line.producto_id)) continue;
       // produccion_previa: descuenta su propio stock del terminado aunque controla_stock=false.
@@ -599,7 +431,7 @@ export async function createVentaTransaccionalPg(
     }
 
     // 7b) Descontar materia prima (insumos) por explosión de receta + movimiento SALIDA por insumo.
-    for (const [insId, need] of insumoNeed) {
+    for (const [insId, need] of params.omitirStock ? new Map<string, number>() : insumoNeed) {
       const m = insumoMeta.get(insId)!;
       // Igual que productos: el stock de insumos nunca baja de 0 (la salida real
       // queda registrada en el movimiento SALIDA del insumo).

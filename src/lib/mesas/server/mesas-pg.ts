@@ -106,6 +106,28 @@ export async function leerMesa(
   };
 }
 
+/**
+ * Marca que el stock de esta mesa YA se descontó al servir.
+ *
+ * Es lo que lee `/api/ventas/create` para crear la venta con `omitirStock` y no
+ * descontar de nuevo. Se escribe en cada ronda y no sólo en la primera: si una
+ * ronda se cargó antes de que existiera la marca, la siguiente la deja puesta.
+ */
+export async function marcarStockDescontadoEnMesa(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  id: string,
+  metadata: Record<string, unknown>
+): Promise<void> {
+  if (metadata.stock_descontado_en_mesa === true) return;
+  const { error } = await sb
+    .from("proyectos")
+    .update({ metadata: { ...metadata, stock_descontado_en_mesa: true } })
+    .eq("empresa_id", empresaId)
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 /** Guarda los ítems de la mesa y refresca el monto del pedido. */
 export async function guardarItems(
   sb: AppSupabaseClient,

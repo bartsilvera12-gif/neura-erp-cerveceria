@@ -4,7 +4,9 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 import { guardarItems, leerMesa } from "@/lib/mesas/server/mesas-pg";
-import { agregarRonda, type ItemNuevo } from "@/lib/mesas/mesas-domain";
+import { agregarRonda, itemsDeRonda, type ItemNuevo } from "@/lib/mesas/mesas-domain";
+import { descontarRonda } from "@/lib/mesas/server/stock-mesa";
+import { marcarStockDescontadoEnMesa } from "@/lib/mesas/server/mesas-pg";
 
 /**
  * POST /api/mesas/[id]/rondas — agrega una ronda a la cuenta.
@@ -14,8 +16,10 @@ import { agregarRonda, type ItemNuevo } from "@/lib/mesas/mesas-domain";
  * cliente mandara el precio, cualquiera con la consola abierta se cobraría el
  * chop a 1 guaraní.
  *
- * No mueve stock. El stock baja al cobrar, cuando Caja crea la venta — igual
- * que cualquier otro pedido.
+ * EL STOCK BAJA ACA, al servir la ronda — no al cobrar. Una mesa puede estar
+ * abierta tres horas: si el stock bajara recién al final, el sistema diría toda
+ * la noche que hay litros de granel que ya se sirvieron. Al cerrar la mesa, la
+ * venta se crea con `omitirStock` para no descontar dos veces.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -85,7 +89,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const res = agregarRonda(r.mesa.items, nuevos);
     if (!res.ok) return NextResponse.json(errorResponse(res.error), { status: 400 });
 
+    // El stock se descuenta ANTES de guardar la ronda: si no alcanza, la cuenta
+    // queda como estaba y el mozo ve qué falta, en vez de una ronda cargada que
+    // la cocina no puede preparar.
+    const stock = await descontarRonda(sb, {
+      empresaId: auth.empresa_id,
+      sucursalId,
+      mesa: r.mesa.mesa,
+      mesaId: id,
+      ronda: res.ronda,
+      items: itemsDeRonda(res.items, res.ronda),
+      permitirSinStock: body?.permitir_sin_stock === true,
+      createdBy: auth.usuarioCatalogId ?? null,
+      usuarioNombre: auth.user?.email ?? null,
+    });
+    if (!stock.ok) {
+      return NextResponse.json(
+        { success: false, error: "No hay stock para esta ronda.", faltantes: stock.faltantes },
+        { status: 409 }
+      );
+    }
+
     await guardarItems(sb, auth.empresa_id, id, r.brief, res.items);
+    // La venta de esta mesa no tiene que volver a descontar.
+    await marcarStockDescontadoEnMesa(sb, auth.empresa_id, id, r.metadata);
     return NextResponse.json(successResponse({ ronda: res.ronda, items: res.items }));
   } catch (err) {
     const rSuc = respuestaSucursalNoAsignada(err);

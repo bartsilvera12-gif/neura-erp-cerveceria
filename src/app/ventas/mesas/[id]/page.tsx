@@ -11,8 +11,9 @@ import { useDialogos } from "@/components/ui/Dialogos";
  * La cuenta de una mesa: lo pedido por ronda, agregar una ronda nueva,
  * imprimir su comanda y cerrar para cobrar en Caja.
  *
- * Cerrar NO cobra: manda el pedido a Caja y lleva al cajero a la pantalla de
- * venta con todo precargado. El stock baja ahí, al confirmar la venta.
+ * El stock baja al mandar cada ronda a la cocina. Cerrar NO cobra: manda el
+ * pedido a Caja y lleva al cajero a la pantalla de venta con todo precargado,
+ * que cobra y factura sin volver a tocar el stock.
  */
 
 type ItemMesa = {
@@ -108,7 +109,15 @@ export default function MesaDetallePage() {
     setHits([]);
   }
 
-  async function mandarRonda() {
+  /**
+   * Manda la ronda a la cocina. El stock se descuenta ACÁ, al servir.
+   *
+   * Si no alcanza, el servidor devuelve 409 con el detalle y no guarda nada: el
+   * mozo ve qué falta y decide. Servir igual deja el stock en 0 y el faltante
+   * queda registrado en el movimiento — a la una de la mañana, con el cliente
+   * esperando, esa decisión es del bar y no del sistema.
+   */
+  async function mandarRonda(permitirSinStock = false) {
     if (pendientes.length === 0) return;
     setGuardando(true);
     try {
@@ -117,9 +126,26 @@ export default function MesaDetallePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: pendientes.map((p) => ({ producto_id: p.producto_id, cantidad: p.cantidad })),
+          permitir_sin_stock: permitirSinStock,
         }),
       });
       const j = await res.json().catch(() => ({}));
+      if (res.status === 409 && Array.isArray(j?.faltantes) && j.faltantes.length > 0) {
+        const detalle = (j.faltantes as Array<{ nombre: string; stock_actual: number; solicitado: number }>)
+          .map((f) => `${f.nombre}: hay ${f.stock_actual}, hacen falta ${f.solicitado}`)
+          .join("\n");
+        const igual = await confirmar({
+          titulo: "No alcanza el stock",
+          mensaje: `${detalle}\n\n¿Servir igual? El stock queda en cero y el faltante queda registrado.`,
+          confirmar: "Servir igual",
+          tono: "peligro",
+        });
+        if (igual) {
+          setGuardando(false);
+          await mandarRonda(true);
+        }
+        return;
+      }
       if (!res.ok || !j?.success) {
         await avisar({ mensaje: j?.error ?? "No se pudo agregar la ronda.", tono: "peligro" });
         return;
@@ -363,7 +389,7 @@ export default function MesaDetallePage() {
 
           <button
             type="button"
-            onClick={mandarRonda}
+            onClick={() => mandarRonda()}
             disabled={pendientes.length === 0 || guardando}
             className="mt-3 w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-40 sm:w-auto"
           >

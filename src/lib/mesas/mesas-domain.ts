@@ -13,8 +13,9 @@
  * qué ronda entró para que la comanda imprima SOLO lo nuevo: si a la ronda 3 se
  * le imprimiera todo, la cocina volvería a preparar lo de la ronda 1.
  *
- * El stock NO se mueve al agregar una ronda: baja recién al cobrar, que es
- * cuando se crea la venta. Es el mismo criterio que ya tenía el pedido en Caja.
+ * El stock baja AL SERVIR cada ronda, no al cobrar: una mesa puede estar
+ * abierta tres horas y durante toda esa noche el sistema diría que hay granel
+ * que ya se sirvió. Lo hace `stock-mesa.ts`; acá sólo vive la cuenta.
  */
 
 export type ItemMesa = {

@@ -5,6 +5,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 import { guardarItems, leerMesa } from "@/lib/mesas/server/mesas-pg";
 import { quitarItem } from "@/lib/mesas/mesas-domain";
+import { devolverItem } from "@/lib/mesas/server/stock-mesa";
 import { marcarEnviadoACaja } from "@/lib/caja/facturacion";
 import { isoLocalPy } from "@/lib/fecha/paraguay";
 
@@ -88,6 +89,19 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       const indice = Number(body?.indice);
       const res = quitarItem(r.mesa.items, indice);
       if (!res.ok) return NextResponse.json(errorResponse(res.error), { status: 400 });
+      // Lo que se saca de la cuenta vuelve al stock: se descontó al mandar la
+      // ronda, y si no se sirve, los litros siguen en el barril.
+      if (r.metadata.stock_descontado_en_mesa === true) {
+        await devolverItem(sb, {
+          empresaId: auth.empresa_id,
+          sucursalId,
+          mesa: r.mesa.mesa,
+          mesaId: id,
+          item: r.mesa.items[indice],
+          createdBy: auth.usuarioCatalogId ?? null,
+          usuarioNombre: auth.user?.email ?? null,
+        });
+      }
       await guardarItems(sb, auth.empresa_id, id, r.brief, res.items);
       return NextResponse.json(successResponse({ items: res.items }));
     }

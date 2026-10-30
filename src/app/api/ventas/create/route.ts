@@ -16,6 +16,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta } from "@/lib/ventas/types";
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 import { estaFacturado, marcarFacturado } from "@/lib/caja/facturacion";
+import { vincularMovimientosAVenta } from "@/lib/mesas/server/stock-mesa";
 import { resolverCajaParaVenta, CajaError } from "@/lib/caja/server/caja-pg";
 
 /** Error tipado: el pedido que se intenta facturar ya tiene venta. */
@@ -268,6 +269,7 @@ export async function POST(request: NextRequest) {
     // Anti doble facturación: si se factura un pedido, verificar que aún no tenga venta.
     // (Se valida ANTES de crear la venta para no descontar stock por un pedido ya facturado.)
     const sbPedido = pedidoId ? createServiceRoleClientWithDbSchema(schema) : null;
+    let stockYaDescontado = false;
     if (pedidoId && sbPedido) {
       const pq = await sbPedido
         .from("proyectos")
@@ -282,6 +284,14 @@ export async function POST(request: NextRequest) {
       if (estaFacturado((pq.data as { metadata?: unknown }).metadata)) {
         throw new PedidoYaFacturadoError();
       }
+      // Mesa abierta: cada ronda ya descontó el stock al servirse, así que esta
+      // venta cobra y factura pero NO vuelve a tocarlo. Sin esto, la mesa
+      // descontaría dos veces lo mismo.
+      const metaPedido = (pq.data as { metadata?: unknown }).metadata;
+      stockYaDescontado =
+        metaPedido != null &&
+        typeof metaPedido === "object" &&
+        (metaPedido as Record<string, unknown>).stock_descontado_en_mesa === true;
     }
 
     // Caja del turno: resuelve a qué caja abierta se imputa la venta (0→null,
@@ -314,6 +324,7 @@ export async function POST(request: NextRequest) {
       totalDeclarado,
       pedidoCocina,
       permitirSinStock,
+      omitirStock: stockYaDescontado,
       generaNotaRemision: o.genera_nota_remision === true,
       // Default true (compat) — solo se salta el puente venta→factura si el
       // cajero explícitamente eligió "solo ticket" al confirmar la venta.
@@ -343,6 +354,22 @@ export async function POST(request: NextRequest) {
           .eq("id", pedidoId);
         if (upd.error) {
           console.error("[ventas/create] no se pudo marcar pedido facturado:", upd.error.message);
+        }
+        // Las salidas de stock que dejó cada ronda no tenían venta todavía.
+        // Engancharlas acá evita que el kardex quede con salidas huérfanas.
+        if (stockYaDescontado) {
+          try {
+            await vincularMovimientosAVenta(sbPedido, {
+              empresaId: auth.empresa_id,
+              mesaId: pedidoId,
+              ventaId,
+            });
+          } catch (e) {
+            console.error(
+              "[ventas/create] no se pudieron vincular los movimientos de la mesa:",
+              e instanceof Error ? e.message : e
+            );
+          }
         }
       } catch (e) {
         console.error("[ventas/create] link pedido->venta fallo (venta OK):", e instanceof Error ? e.message : e);
