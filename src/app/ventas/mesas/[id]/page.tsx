@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Loader2, Printer, Search, Trash2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useDialogos } from "@/components/ui/Dialogos";
+import PickerProductos, { type ProductoMesa } from "@/components/mesas/PickerProductos";
 
 /**
  * La cuenta de una mesa: lo pedido por ronda, agregar una ronda nueva,
@@ -33,7 +34,6 @@ type Mesa = {
   items: ItemMesa[];
   facturacion_estado: string | null;
 };
-type Hit = { id: string; nombre: string; sku?: string | null; precio_venta?: number };
 
 const fmtGs = (n: number) => `Gs. ${Math.round(Number(n) || 0).toLocaleString("es-PY")}`;
 
@@ -50,9 +50,8 @@ export default function MesaDetallePage() {
 
   // Ronda que se está armando, todavía no mandada.
   const [pendientes, setPendientes] = useState<Array<{ producto_id: string; nombre: string; cantidad: number }>>([]);
-  const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<Hit[]>([]);
-  const [buscando, setBuscando] = useState(false);
+  /** La carta se abre entera: en el salón se pide mirando, no tipeando. */
+  const [pickerAbierto, setPickerAbierto] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
@@ -73,40 +72,17 @@ export default function MesaDetallePage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Buscador de productos, con el mismo endpoint que usa la caja.
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) { setHits([]); return; }
-    setBuscando(true);
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetchWithSupabaseSession(
-          `/api/productos/search?q=${encodeURIComponent(q)}&limit=20`,
-          { cache: "no-store" }
-        );
-        const j = await res.json().catch(() => ({}));
-        setHits(res.ok && j?.success ? ((j.data?.items ?? []) as Hit[]) : []);
-      } catch {
-        setHits([]);
-      } finally {
-        setBuscando(false);
-      }
-    }, 220);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  function agregarPendiente(h: Hit) {
+  /** Tocar el mismo producto dos veces suma cantidad, no agrega otra línea. */
+  function agregarPendiente(p: ProductoMesa, cantidad = 1) {
     setPendientes((prev) => {
-      const i = prev.findIndex((p) => p.producto_id === h.id);
+      const i = prev.findIndex((x) => x.producto_id === p.id);
       if (i >= 0) {
         const copia = [...prev];
-        copia[i] = { ...copia[i], cantidad: copia[i].cantidad + 1 };
+        copia[i] = { ...copia[i], cantidad: copia[i].cantidad + cantidad };
         return copia;
       }
-      return [...prev, { producto_id: h.id, nombre: h.nombre, cantidad: 1 }];
+      return [...prev, { producto_id: p.id, nombre: p.nombre, cantidad }];
     });
-    setQuery("");
-    setHits([]);
   }
 
   /**
@@ -311,39 +287,16 @@ export default function MesaDetallePage() {
             Agregar ronda
           </h2>
 
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar producto por nombre o SKU…"
-              className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-            />
-            {query.trim().length >= 2 && (
-              <div className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                {buscando ? (
-                  <p className="px-3 py-2 text-xs text-slate-400">Buscando…</p>
-                ) : hits.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-slate-400">Sin resultados.</p>
-                ) : (
-                  hits.map((h) => (
-                    <button
-                      key={h.id}
-                      type="button"
-                      onClick={() => agregarPendiente(h)}
-                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                    >
-                      <span className="text-slate-700">{h.nombre}</span>
-                      {h.precio_venta != null && (
-                        <span className="tabular-nums text-xs text-slate-500">{fmtGs(h.precio_venta)}</span>
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
+          {/* Un botón del ancho de la fila, no un campo de texto: lo que
+              abre es la carta entera. */}
+          <button
+            type="button"
+            onClick={() => setPickerAbierto(true)}
+            className="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-3 text-left text-sm text-slate-500 transition-colors hover:border-[#4FAEB2] hover:bg-[#4FAEB2]/5 hover:text-slate-700"
+          >
+            <Search className="h-4 w-4 text-slate-400" aria-hidden />
+            Elegir de la carta…
+          </button>
 
           {pendientes.length > 0 && (
             <ul className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-200">
@@ -397,6 +350,11 @@ export default function MesaDetallePage() {
           </button>
         </div>
       )}
+      <PickerProductos
+        abierto={pickerAbierto}
+        onCerrar={() => setPickerAbierto(false)}
+        onAgregar={(p, cantidad) => agregarPendiente(p, cantidad)}
+      />
     </div>
   );
 }
