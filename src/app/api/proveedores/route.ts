@@ -7,6 +7,7 @@ import type { Proveedor, ProveedorCategoria } from "@/lib/proveedores/types";
 import {
   listProveedores,
   insertProveedor,
+  findProveedorByNombre,
   findProveedorByRuc,
   listCategoriasMin,
   listRelaciones,
@@ -166,6 +167,41 @@ export async function POST(request: NextRequest) {
       if (dup) {
         return NextResponse.json(
           errorResponse(`Ya existe un proveedor con el mismo RUC ("${dup.nombre}").`),
+          { status: 409 }
+        );
+      }
+    }
+
+    /**
+     * Duplicado por NOMBRE.
+     *
+     * El RUC no alcanza: la mitad de los proveedores se carga sin RUC, y dos
+     * fichas con el mismo nombre parten las compras y las cuentas por pagar en
+     * dos, sin que nadie lo note hasta que falta plata en una.
+     *
+     * Se compara sin mayúsculas, sin acentos y sin espacios de más, que es
+     * como lo compara una persona. Si de verdad son dos proveedores distintos
+     * que se llaman igual, el mensaje dice cómo seguir: diferenciarlos en el
+     * nombre.
+     */
+    {
+      let dupNombre: { id: string; nombre: string; ruc: string | null } | null = null;
+      try {
+        dupNombre = await findProveedorByNombre(schema, empresaId, nombre);
+      } catch (e) {
+        console.error("[/api/proveedores POST] findProveedorByNombre", { schema, empresaId, msg: e instanceof Error ? e.message : e });
+        return NextResponse.json(
+          errorResponse("No se pudo verificar si el nombre ya existe. Volvé a intentar."),
+          { status: 503 }
+        );
+      }
+      if (dupNombre) {
+        const conRuc = dupNombre.ruc ? ` (RUC ${dupNombre.ruc})` : " (sin RUC cargado)";
+        return NextResponse.json(
+          errorResponse(
+            `Ya existe un proveedor que se llama "${dupNombre.nombre}"${conRuc}. ` +
+              `Si son dos proveedores distintos, agregale algo al nombre que los diferencie.`
+          ),
           { status: 409 }
         );
       }

@@ -9,6 +9,7 @@ import {
   updateProveedor,
   listRelacionesDeProveedor,
   replaceRelacionesProveedor,
+  findProveedorByNombre,
   findProveedorByRuc,
   listCategoriasMin,
   type ProveedorRow,
@@ -133,6 +134,25 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
           );
         }
       } catch { /* silenciado, se reintenta en el UPDATE */ }
+    }
+
+    // Nombre duplicado (excluyendo el propio): renombrar un proveedor al
+    // nombre de otro deja dos fichas iguales, que es el mismo problema que
+    // crear el duplicado de entrada.
+    if (patch.nombre) {
+      try {
+        const dupN = await findProveedorByNombre(schema, empresaId, patch.nombre, id);
+        if (dupN) {
+          const conRuc = dupN.ruc ? ` (RUC ${dupN.ruc})` : " (sin RUC cargado)";
+          return NextResponse.json(
+            errorResponse(
+              `Ya existe otro proveedor que se llama "${dupN.nombre}"${conRuc}. ` +
+                `Si son distintos, agregale algo al nombre que los diferencie.`
+            ),
+            { status: 409 }
+          );
+        }
+      } catch { /* silenciado: el alta ya valida y el UPDATE no corrompe nada */ }
     }
 
     try {

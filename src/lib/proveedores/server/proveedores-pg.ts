@@ -217,6 +217,52 @@ export async function findProveedorByRuc(
   return rows[0] ?? null;
 }
 
+/**
+ * Busca un proveedor por NOMBRE, comparando como lo haría una persona:
+ * sin mayúsculas, sin espacios de más y sin acentos.
+ *
+ * "Cerveshopp", "CERVESHOPP" y "Cerveshopp  S.A." distinta cosa son, pero las
+ * dos primeras son el mismo proveedor escrito por dos personas distintas. Sin
+ * esto quedan dos fichas, cada una con su parte de las compras, y ninguna
+ * cuenta por pagar completa.
+ *
+ * `unaccent` no está garantizado en la instalación, así que la comparación usa
+ * `translate` con las vocales acentuadas y la ñ: alcanza para el castellano y
+ * no depende de ninguna extensión.
+ */
+export async function findProveedorByNombre(
+  schemaRaw: string,
+  empresaId: string,
+  nombre: string,
+  excluirId?: string | null
+): Promise<{ id: string; nombre: string; ruc: string | null } | null> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const t = quoteSchemaTable(schema, "proveedores");
+  const normalizado = normalizarNombreProveedor(nombre);
+  if (!normalizado) return null;
+  const { rows } = await pool().query<{ id: string; nombre: string; ruc: string | null }>(
+    `SELECT id, nombre, ruc FROM ${t}
+      WHERE empresa_id = $1::uuid
+        AND ($3::uuid IS NULL OR id <> $3::uuid)
+        AND btrim(regexp_replace(
+              translate(upper(coalesce(nombre, '')), 'ÁÉÍÓÚÜÑ', 'AEIOUUN'),
+              '\s+', ' ', 'g')) = $2
+      LIMIT 1`,
+    [empresaId, normalizado, excluirId ?? null]
+  );
+  return rows[0] ?? null;
+}
+
+/** La forma en la que se comparan dos nombres de proveedor. */
+export function normalizarNombreProveedor(nombre: string | null | undefined): string {
+  return String(nombre ?? "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Solo letras y numeros, en mayuscula: la forma en la que se comparan dos RUC. */
 export function normalizarRuc(ruc: string | null | undefined): string {
   return String(ruc ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
