@@ -63,18 +63,20 @@ BEGIN
   -- ---------------------------------------------------------------------------
   -- 2. Los 8 puntos críticos
   -- ---------------------------------------------------------------------------
-  -- `buscar` es el patrón con el que se intenta encontrar el insumo si ya
-  -- existe con otro nombre o SKU. NULL = no buscar, crear directo.
+  -- `buscar` es la expresión con la que se intenta encontrar el insumo si ya
+  -- existe con otro nombre o SKU. `\m` ancla al PRINCIPIO DE PALABRA, y no es
+  -- un detalle: con un LIKE '%botella%' suelto, "Grifo plástico para cubo de
+  -- embotellado" contiene "botella" y se lleva el mínimo de las botellas.
   FOR r IN
     SELECT * FROM (VALUES
-      ('FAB-047',      'Junta clamp 1,5'''' silicona (goma de clamp)', 'UNIDAD',   8::numeric,   '%clamp%1,5%'),
-      ('INS-HIPERAC',  'Ácido hiperacético',                          'L',        5::numeric,   '%hiperac%'),
-      ('INS-STARSAN',  'StarSan (sanitizante)',                       'ML',     118::numeric,   '%star%san%'),
-      ('INS-ALCOHOL',  'Alcohol',                                     'L',       10::numeric,   '%alcohol%'),
-      ('INS-LAVANDINA','Lavandina',                                   'L',       10::numeric,   '%lavandina%'),
-      ('INS-TAPA',     'Tapas corona',                                'UNIDAD', 100::numeric,   '%tapa%corona%'),
-      ('INS-BOTELLA',  'Botellas',                                    'UNIDAD',  50::numeric,   '%botella%'),
-      ('INS-CO2',      'CO2 (balón de 7 litros)',                     'UNIDAD',   1::numeric,   '%co2%')
+      ('FAB-047',      'Junta clamp 1,5'''' silicona (goma de clamp)', 'UNIDAD',   8::numeric,   '\mjunta clamp 1,5'),
+      ('INS-HIPERAC',  'Ácido hiperacético',                          'L',        5::numeric,   '\mhiperac'),
+      ('INS-STARSAN',  'StarSan (sanitizante)',                       'ML',     118::numeric,   '\mstar ?san'),
+      ('INS-ALCOHOL',  'Alcohol',                                     'L',       10::numeric,   '\malcohol'),
+      ('INS-LAVANDINA','Lavandina',                                   'L',       10::numeric,   '\mlavandina'),
+      ('INS-TAPA',     'Tapas corona',                                'UNIDAD', 100::numeric,   '\mtapas? corona'),
+      ('INS-BOTELLA',  'Botellas',                                    'UNIDAD',  50::numeric,   '\mbotellas?\M'),
+      ('INS-CO2',      'CO2 (balón de 7 litros)',                     'UNIDAD',   1::numeric,   '\mco2\M')
     ) AS t(sku, nombre, unidad, minimo, buscar)
   LOOP
     -- Por SKU primero: es el único identificador estable.
@@ -86,7 +88,7 @@ BEGIN
     IF v_prod IS NULL AND r.buscar IS NOT NULL THEN
       SELECT id INTO v_prod FROM cerveceriaerp.productos
        WHERE empresa_id = v_empresa AND sucursal_id = v_sucursal
-         AND lower(nombre) LIKE lower(r.buscar)
+         AND nombre ~* r.buscar
        ORDER BY created_at
        LIMIT 1;
     END IF;
