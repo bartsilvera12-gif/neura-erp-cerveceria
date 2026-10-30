@@ -1,7 +1,5 @@
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { getEmpresaId, getSucursalId } from "@/lib/db/empresa";
 import { ymdInicioFinMesLocal } from "@/lib/fechas/calendario";
-import { getBrowserSupabaseForEmpresaData } from "@/lib/supabase/browser-data-client";
 
 export type MetodoPagoGasto = "efectivo" | "transferencia" | "tarjeta";
 
@@ -54,130 +52,71 @@ function mapRow(r: Record<string, unknown>): Gasto {
   };
 }
 
+/**
+ * Lee la respuesta de la API de gastos y levanta el mensaje de error del server
+ * tal cual, que es el que el usuario necesita leer ("no tenés sucursal
+ * asignada", "estás en consolidado", el mensaje de Postgres).
+ */
+async function pedirGastos<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetchWithSupabaseSession(url, { cache: "no-store", ...init });
+  const texto = await res.text().catch(() => "");
+  type Cuerpo = { success?: boolean; data?: unknown; error?: string };
+  let json: Cuerpo | null = null;
+  try {
+    json = texto ? (JSON.parse(texto) as Cuerpo) : null;
+  } catch {
+    json = null;
+  }
+  if (!res.ok || json?.success === false) {
+    throw new Error(json?.error || texto || `Error ${res.status}`);
+  }
+  return json?.data as T;
+}
+
 /** Obtiene todos los gastos de la empresa, ordenados por fecha desc. */
 export async function getGastos(): Promise<Gasto[]> {
-  if (typeof window !== "undefined") {
-    const res = await fetchWithSupabaseSession("/api/gastos", { cache: "no-store" });
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      throw new Error(t || `Error ${res.status}`);
-    }
-    const json = (await res.json()) as { success?: boolean; data?: Record<string, unknown>[] };
-    if (!json.success || !Array.isArray(json.data)) return [];
-    return json.data.map(mapRow);
-  }
-
-  const supabase = await getBrowserSupabaseForEmpresaData();
-  const { data, error } = await supabase
-    .from("gastos")
-    .select("*")
-    .eq("empresa_id", await getEmpresaId())
-    .eq("sucursal_id", await getSucursalId())
-    .order("fecha", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(mapRow);
+  const data = await pedirGastos<Record<string, unknown>[]>("/api/gastos");
+  return (Array.isArray(data) ? data : []).map(mapRow);
 }
 
-/** Obtiene los gastos del mes actual (para Dashboard). RLS filtra por empresa. */
+/** Obtiene los gastos del mes actual (para Dashboard). */
 export async function getGastosMesActual(): Promise<Gasto[]> {
-  const supabase = await getBrowserSupabaseForEmpresaData();
-  const hoy = new Date();
-  const { inicioYmd: inicioMes, finYmd: finMes } = ymdInicioFinMesLocal(hoy);
-
-  const { data, error } = await supabase
-    .from("gastos")
-    .select("*")
-    .eq("empresa_id", await getEmpresaId())
-    .eq("sucursal_id", await getSucursalId())
-    .gte("fecha", inicioMes)
-    .lte("fecha", finMes)
-    .order("fecha", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(mapRow);
+  const { inicioYmd, finYmd } = ymdInicioFinMesLocal(new Date());
+  const data = await pedirGastos<Record<string, unknown>[]>(
+    `/api/gastos?desde=${inicioYmd}&hasta=${finYmd}`
+  );
+  return (Array.isArray(data) ? data : []).map(mapRow);
 }
 
+/**
+ * Crea un gasto.
+ *
+ * Va por la API y no con el cliente del browser por la sucursal: la API usa la
+ * sucursal ACTIVA (la del selector de arriba), igual que la lista. Escribiendo
+ * desde el browser se usaba `sucursal_predeterminada_id`, así que un usuario
+ * parado en una sucursal distinta de su predeterminada creaba el gasto en la
+ * otra: se guardaba bien y no aparecía en ninguna pantalla.
+ */
 export async function createGasto(input: GastoInput): Promise<Gasto> {
   if (input.monto <= 0) throw new Error("El monto debe ser mayor a 0");
-
-  const supabase = await getBrowserSupabaseForEmpresaData();
-  const empresa_id = await getEmpresaId();
-  const sucursal_id = await getSucursalId();
-
-  const { data, error } = await supabase
-    .from("gastos")
-    .insert({
-      empresa_id,
-      sucursal_id,
-      categoria: input.categoria.trim() || null,
-      descripcion: input.descripcion.trim() || null,
-      monto: input.monto,
-      tipo: input.tipo,
-      recurrente: input.recurrente,
-      frecuencia: input.frecuencia?.trim() || null,
-      fecha: input.fecha,
-      beneficiario: input.beneficiario?.trim() || null,
-      metodo_pago: input.metodo_pago ?? null,
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return mapRow(data as Record<string, unknown>);
+  const data = await pedirGastos<Record<string, unknown>>("/api/gastos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return mapRow(data);
 }
 
 export async function updateGasto(id: string, input: Partial<GastoInput>): Promise<Gasto> {
   if (input.monto !== undefined && input.monto <= 0) throw new Error("El monto debe ser mayor a 0");
-
-  const supabase = await getBrowserSupabaseForEmpresaData();
-  const update: Record<string, unknown> = {};
-  if (input.categoria !== undefined) update.categoria = input.categoria.trim() || null;
-  if (input.descripcion !== undefined) update.descripcion = input.descripcion.trim() || null;
-  if (input.monto !== undefined) update.monto = input.monto;
-  if (input.tipo !== undefined) update.tipo = input.tipo;
-  if (input.recurrente !== undefined) update.recurrente = input.recurrente;
-  if (input.frecuencia !== undefined) update.frecuencia = input.frecuencia?.trim() || null;
-  if (input.fecha !== undefined) update.fecha = input.fecha;
-  if (input.beneficiario !== undefined) update.beneficiario = input.beneficiario?.trim() || null;
-  if (input.metodo_pago !== undefined) update.metodo_pago = input.metodo_pago ?? null;
-
-  const { data, error } = await supabase
-    .from("gastos")
-    .update(update)
-    .eq("empresa_id", await getEmpresaId())
-    .eq("sucursal_id", await getSucursalId())
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return mapRow(data as Record<string, unknown>);
+  const data = await pedirGastos<Record<string, unknown>>(`/api/gastos/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return mapRow(data);
 }
 
 export async function deleteGasto(id: string): Promise<void> {
-  const supabase = await getBrowserSupabaseForEmpresaData();
-  // Antes era .delete().eq("id", id) a secas: podia borrar el gasto de otra
-  // empresa o sucursal si se conocia el UUID.
-  const { data, error } = await supabase
-    .from("gastos")
-    .delete()
-    .eq("empresa_id", await getEmpresaId())
-    .eq("sucursal_id", await getSucursalId())
-    .eq("id", id)
-    .select("id");
-
-  if (error) throw new Error(error.message);
-  /**
-   * Un delete que no matchea ninguna fila no es un error para PostgREST, así
-   * que el gasto desaparecía de la lista y volvía al recargar. Pasa con los
-   * gastos viejos cargados antes de multi-sucursal, que quedaron con
-   * `sucursal_id` nulo y no matchean el filtro de la sucursal activa.
-   */
-  if (!data || data.length === 0) {
-    throw new Error(
-      "No se pudo eliminar el gasto: no pertenece a la sucursal activa. " +
-        "Cambiá de sucursal desde el encabezado y volvé a intentar."
-    );
-  }
+  await pedirGastos<{ id: string }>(`/api/gastos/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
