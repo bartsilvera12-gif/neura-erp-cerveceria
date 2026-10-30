@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
 import { useSearchParams } from "next/navigation";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
@@ -62,15 +63,27 @@ type ClienteColumnDef = {
   render: (cliente: Cliente) => ReactNode;
 };
 
-const DEFAULT_VISIBLE_COLUMN_KEYS: ClienteColumnKey[] = [
-  "codigo",
-  "empresa_nombre",
-  "contacto",
-  "telefono",
-  "plan_activo",
-  "estado",
-  "desde",
-];
+/**
+ * En la instancia de la cervecería no hay suscripciones: los clientes compran
+ * cerveza, no planes mensuales. La columna "Plan activo" sólo mostraba "Sin
+ * suscripción" en todas las filas, que es ruido con forma de dato.
+ *
+ * Es la misma condición que ya usa la ficha del cliente para esconder Origen,
+ * Tipo de servicio, Plan activo y Vendedor.
+ */
+const SIMPLE_CLIENTE = NEURA_CLIENT_SCHEMA === "cerveceriaerp";
+
+const DEFAULT_VISIBLE_COLUMN_KEYS: ClienteColumnKey[] = (
+  [
+    "codigo",
+    "empresa_nombre",
+    "contacto",
+    "telefono",
+    "plan_activo",
+    "estado",
+    "desde",
+  ] as ClienteColumnKey[]
+).filter((k) => !(SIMPLE_CLIENTE && k === "plan_activo"));
 
 function normalizeVisibleColumnKeys(raw: unknown, columns: ClienteColumnDef[]): ClienteColumnKey[] {
   const validKeys = new Set(columns.map((c) => c.key));
@@ -253,7 +266,12 @@ export default function ClientesPage() {
   const [columnasOpen, setColumnasOpen] = useState(false);
   const [columnasInicializadas, setColumnasInicializadas] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<ClienteColumnKey[]>(DEFAULT_VISIBLE_COLUMN_KEYS);
-  const clienteColumns = useMemo(() => buildClienteColumns(), []);
+  // La columna se saca de la lista entera, no sólo de las visibles: si quedara
+  // en el selector de columnas, alguien la prendería y volvería el ruido.
+  const clienteColumns = useMemo(
+    () => buildClienteColumns().filter((c) => !(SIMPLE_CLIENTE && c.key === "plan_activo")),
+    []
+  );
   const visibleColumnSet = useMemo(() => new Set(visibleColumnKeys), [visibleColumnKeys]);
   const visibleColumns = useMemo(
     () => clienteColumns.filter((col) => visibleColumnSet.has(col.key)),
