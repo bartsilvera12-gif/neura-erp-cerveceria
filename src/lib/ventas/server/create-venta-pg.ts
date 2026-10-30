@@ -435,38 +435,72 @@ export async function createVentaTransaccionalPg(
   let numeroControl = await calcularNumeroControl();
   let ventaId = "";
   let intentos = 0;
+  /**
+   * `pagos_desglose` lo agrega el script 10 (pago mixto). Si la instalación
+   * todavía no lo corrió, PostgREST rechaza el insert ENTERO — y como la
+   * columna viaja en toda venta, aunque sea en null, se cae hasta la venta en
+   * efectivo: la caja queda sin poder cobrar nada.
+   *
+   * Una venta sin pago mixto no necesita esa columna, así que se reintenta sin
+   * ella. Una venta MIXTA sí: su reparto es lo que el arqueo usa para saber
+   * cuánto efectivo entró, y guardarla sin eso haría cerrar la caja con menos
+   * plata de la que hay. Esa se rechaza con un mensaje que dice qué correr.
+   */
+  let sinDesglose = false;
   for (;;) {
     intentos++;
-    const insVenta = await sb
-      .from("ventas")
-      .insert({
-        empresa_id: params.empresaId,
-        sucursal_id: params.sucursalId,
-        cliente_id: params.clienteId,
-        numero_control: numeroControl,
-        moneda: params.moneda,
-        tipo_cambio: params.tipoCambio,
-        subtotal: calc.subtotal,
-        monto_iva: calc.montoIva,
-        total: calc.total,
-        estado: "completada",
-        tipo_venta: params.tipoVenta,
-        plazo_dias: params.plazoDias,
-        metodo_pago: params.metodoPago,
-        pagos_desglose: params.metodoPago === "mixto" ? (params.pagosDesglose ?? null) : null,
-        genera_nota_remision: generaNota,
-        nota_remision_numero: notaRemisionNumero,
-        fecha: fechaIso,
-        observaciones: observacionesFinal,
-        caja_id: params.cajaId ?? null,
-      })
-      .select("id")
-      .single();
+    const fila: Record<string, unknown> = {
+      empresa_id: params.empresaId,
+      sucursal_id: params.sucursalId,
+      cliente_id: params.clienteId,
+      numero_control: numeroControl,
+      moneda: params.moneda,
+      tipo_cambio: params.tipoCambio,
+      subtotal: calc.subtotal,
+      monto_iva: calc.montoIva,
+      total: calc.total,
+      estado: "completada",
+      tipo_venta: params.tipoVenta,
+      plazo_dias: params.plazoDias,
+      metodo_pago: params.metodoPago,
+      pagos_desglose: params.metodoPago === "mixto" ? (params.pagosDesglose ?? null) : null,
+      genera_nota_remision: generaNota,
+      nota_remision_numero: notaRemisionNumero,
+      fecha: fechaIso,
+      observaciones: observacionesFinal,
+      caja_id: params.cajaId ?? null,
+    };
+    if (sinDesglose) delete fila.pagos_desglose;
+
+    const insVenta = await sb.from("ventas").insert(fila).select("id").single();
     if (!insVenta.error) {
       ventaId = String((insVenta.data as { id: string }).id);
       break;
     }
     const msg = insVenta.error.message ?? "";
+
+    const faltaDesglose =
+      !sinDesglose &&
+      /pagos_desglose/.test(msg) &&
+      ((insVenta.error as { code?: string }).code === "PGRST204" ||
+        /could not find|schema cache|does not exist/i.test(msg));
+    if (faltaDesglose) {
+      if (params.metodoPago === "mixto") {
+        throw new Error(
+          "El cobro mixto todavía no está habilitado en la base: falta la columna " +
+            "`pagos_desglose` en ventas. Corré el script 10 (10_pago_mixto.sql) y " +
+            "volvé a intentar. Mientras tanto se puede cobrar con un solo método."
+        );
+      }
+      console.warn(
+        "[ventas] falta ventas.pagos_desglose (correr 10_pago_mixto.sql); " +
+          "la venta se registra sin esa columna."
+      );
+      sinDesglose = true;
+      intentos--; // este intento no gastó número de control
+      continue;
+    }
+
     const esConflictoNumero =
       (insVenta.error as { code?: string }).code === "23505" || /duplicate key|unique/i.test(msg);
     if (!esConflictoNumero || intentos >= 3) throw new Error(msg);
