@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 /** Formatea número con separador de miles (Paraguay: 1.200.000) */
 export function formatMontoDisplay(value: number | string, decimals = true): string {
   const n = typeof value === "string" ? parseMontoInput(value) : value;
@@ -38,6 +40,17 @@ type MontoInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type" 
 /**
  * Input de monto con separador de miles.
  * Muestra el valor formateado (ej: 1.200.000) y emite el número al cambiar.
+ *
+ * EL "0" QUE NO SE PODIA BORRAR
+ * Antes el valor mostrado se derivaba siempre del número: al borrar el último
+ * dígito, `parseMontoInput("")` devolvía 0 y React volvía a escribir "0". El
+ * campo nunca quedaba vacío, así que lo que se tipeaba se sumaba detrás del
+ * cero y había que seleccionar todo a mano para corregirlo. Es el mismo
+ * problema que ya se arregló en `NumeroInput`.
+ *
+ * Ahora, mientras el campo está en edición, el texto vive acá: se puede dejar
+ * vacío, el número se avisa igual (vacío = 0) y al salir del campo se vuelve a
+ * mostrar formateado. Al enfocar se selecciona todo, así tipear reemplaza.
  */
 export default function MontoInput({
   value,
@@ -46,24 +59,41 @@ export default function MontoInput({
   className = "",
   ...rest
 }: MontoInputProps) {
+  const [texto, setTexto] = useState<string | null>(null);
+
   const numValue = typeof value === "string"
     ? (value === "" ? 0 : parseMontoInput(value))
     : Number(value) || 0;
-  const display = (typeof value === "string" && value === "") ? "" : formatMontoDisplay(numValue, decimals);
+  const formateado = (typeof value === "string" && value === "") ? "" : formatMontoDisplay(numValue, decimals);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const n = parseMontoInput(e.target.value);
-    onChange(n);
+    const crudo = e.target.value;
+    // Sólo dígitos y un separador: así no se pega texto que después se
+    // interpreta como 0 sin que se note.
+    if (!/^[0-9.,\s]*$/.test(crudo)) return;
+    setTexto(crudo);
+    onChange(parseMontoInput(crudo));
   };
 
   return (
     <input
+      // `rest` va primero: si lo spreadeamos al final, un `onBlur` del caller
+      // reemplazaria al de aca y el texto en edicion nunca se soltaria.
+      {...rest}
       type="text"
       inputMode="decimal"
-      value={display}
+      value={texto ?? formateado}
       onChange={handleChange}
+      onFocus={(e) => {
+        setTexto(e.target.value);
+        e.target.select();
+        rest.onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setTexto(null);
+        rest.onBlur?.(e);
+      }}
       className={className}
-      {...rest}
     />
   );
 }
