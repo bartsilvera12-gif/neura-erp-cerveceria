@@ -7,6 +7,7 @@ import MontoInput from "@/components/ui/MontoInput";
 import type { Gasto, GastoInput } from "@/lib/gastos/actions";
 import { hoyAsuncionYmd } from "@/lib/fecha/asuncion";
 import { ClipboardList } from "lucide-react";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 const fLabel = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
 const fInput =
@@ -19,6 +20,7 @@ type Props = {
 
 export default function GastoForm({ gasto, onSuccess }: Props) {
   const router = useRouter();
+  const { avisar } = useDialogos();
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,12 +51,25 @@ export default function GastoForm({ gasto, onSuccess }: Props) {
     }
   }
 
+  /**
+   * El cartel rojo vive arriba del formulario, que es alto: apretando "Crear
+   * gasto" desde abajo el error quedaba fuera de pantalla y parecía que el
+   * botón no hacía nada. Por eso además del cartel se abre el diálogo del ERP,
+   * que no se puede no ver, y se deja el mensaje en la consola para poder
+   * pegarlo cuando el error viene de la base.
+   */
+  function mostrarError(mensaje: string) {
+    setError(mensaje);
+    console.error("[gastos] no se pudo guardar:", mensaje);
+    void avisar({ titulo: "No se pudo guardar el gasto", mensaje, tono: "peligro" });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
     if (form.monto <= 0) {
-      return setError("El monto debe ser mayor a 0.");
+      return mostrarError("El monto debe ser mayor a 0.");
     }
 
     setGuardando(true);
@@ -68,7 +83,7 @@ export default function GastoForm({ gasto, onSuccess }: Props) {
       onSuccess?.();
       router.push("/gastos");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error al guardar");
+      mostrarError(err instanceof Error ? err.message : "Error al guardar");
     } finally {
       setGuardando(false);
     }
