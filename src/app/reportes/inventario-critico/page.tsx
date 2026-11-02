@@ -48,7 +48,20 @@ export default function InventarioCriticoPage() {
     cargar();
   }, [cargar]);
 
-  const criticos = useMemo(() => filas.filter((f) => f.critico_minimo), [filas]);
+  /**
+   * Qué cuenta como crítico.
+   *
+   * No alcanza con "por debajo del mínimo": ese cálculo sólo aplica a los
+   * productos que TIENEN un mínimo cargado, y casi ninguno lo tiene todavía.
+   * Con eso la pantalla decía "0 productos críticos" aunque hubiera productos
+   * en cero, que es el estado más crítico que existe.
+   *
+   * Entra entonces lo que no tiene stock, aunque nadie le haya puesto mínimo.
+   */
+  const criticos = useMemo(
+    () => filas.filter((f) => f.critico_minimo || f.stock_actual <= 0),
+    [filas]
+  );
   const filtrados = useMemo(() => {
     const t = q.trim().toLowerCase();
     return criticos
@@ -70,7 +83,7 @@ export default function InventarioCriticoPage() {
           Inventario crítico
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Productos de tu sucursal con stock igual o por debajo del mínimo.
+          Productos de tu sucursal sin stock, o con stock igual o por debajo del mínimo.
         </p>
       </div>
 
@@ -98,7 +111,9 @@ export default function InventarioCriticoPage() {
           </div>
         ) : filtrados.length === 0 ? (
           <div className="px-4 py-16 text-center text-sm text-slate-400">
-            {criticos.length === 0 ? "No hay productos por debajo del mínimo." : "Ningún producto coincide con la búsqueda."}
+            {criticos.length === 0
+              ? "No hay productos sin stock ni por debajo del mínimo."
+              : "Ningún producto coincide con la búsqueda."}
           </div>
         ) : (
           <>
@@ -118,11 +133,24 @@ export default function InventarioCriticoPage() {
                   return (
                     <tr key={f.producto_id} className="hover:bg-slate-50">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-slate-800">{f.nombre}</div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-slate-800">{f.nombre}</span>
+                          {f.stock_actual <= 0 ? (
+                            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                              Sin stock
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                              Bajo el mínimo
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-slate-400">{f.sku}</div>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-700">{fmtNum(f.stock_actual)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-500">{fmtNum(f.stock_minimo)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-500">
+                        {f.stock_minimo > 0 ? fmtNum(f.stock_minimo) : <span className="text-slate-300">sin mínimo</span>}
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold text-red-600">{fmtNum(faltante)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-600">
                         {f.dias_cobertura == null ? "—" : `${fmtNum(f.dias_cobertura)} d`}
