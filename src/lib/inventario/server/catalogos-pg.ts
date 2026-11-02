@@ -235,6 +235,49 @@ export async function listUbicaciones(
   }));
 }
 
+export interface ProductoEnUbicacionRow {
+  id: string;
+  nombre: string;
+  sku: string | null;
+  stock_actual: string | number;
+  costo_promedio: string | number;
+  unidad_medida: string | null;
+}
+
+/**
+ * Qué hay guardado en una ubicación.
+ *
+ * Los mismos productos que la lista cuenta en la columna "Productos": los que
+ * tienen esta ubicación como principal, en las sucursales que el usuario ve.
+ * Si contara otra cosa, el detalle no cerraría con el número de la fila y
+ * habría que elegir a cuál de los dos creerle.
+ *
+ * Los que no tienen stock van al final, no se esconden: siguen guardados ahí,
+ * y son los que hay que mover o dar de baja.
+ */
+export async function listProductosDeUbicacion(
+  schemaRaw: string,
+  empresaId: string,
+  ubicacionId: string,
+  opts: { sucursalIds?: readonly string[] } = {}
+): Promise<ProductoEnUbicacionRow[]> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tProd = quoteSchemaTable(schema, "productos");
+  const filtroSucursal =
+    opts.sucursalIds && opts.sucursalIds.length > 0 ? andSucursales(opts.sucursalIds, "p.") : "";
+  const { rows } = await pool().query<ProductoEnUbicacionRow>(
+    `SELECT p.id, p.nombre, p.sku, p.stock_actual, p.costo_promedio, p.unidad_medida
+       FROM ${tProd} p
+      WHERE p.empresa_id = $1::uuid
+        AND p.activo = true
+        AND p.ubicacion_principal_id = $2::uuid${filtroSucursal}
+      ORDER BY (COALESCE(p.stock_actual, 0) <= 0), p.nombre
+      LIMIT 500`,
+    [empresaId, ubicacionId]
+  );
+  return rows;
+}
+
 export async function insertUbicacion(
   schemaRaw: string,
   empresaId: string,

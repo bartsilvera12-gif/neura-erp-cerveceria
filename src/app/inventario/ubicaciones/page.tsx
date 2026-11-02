@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
+import { ChevronRight } from "lucide-react";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import { useDialogos } from "@/components/ui/Dialogos";
 
@@ -29,11 +30,27 @@ const fmtNum = (n: number) =>
   Number(n).toLocaleString("es-PY", { maximumFractionDigits: 2 });
 const fmtGs = (n: number) => `Gs. ${Math.round(Number(n)).toLocaleString("es-PY")}`;
 
+interface ProductoEnUbi {
+  id: string;
+  nombre: string;
+  sku: string | null;
+  stock_actual: number;
+  costo_promedio: number;
+  unidad_medida: string | null;
+}
+
 const TIPOS = ["deposito","salon","pasillo","gondola","estante","zona","otro"] as const;
 
 export default function UbicacionesPage() {
   const { isAdmin } = useIsAdmin();
   const { avisar, confirmar } = useDialogos();
+  /**
+   * Qué ubicación está abierta y qué hay adentro. Se pide al abrirla y no
+   * antes: la lista puede tener cincuenta ubicaciones y nadie mira las
+   * cincuenta.
+   */
+  const [abierta, setAbierta] = useState<string | null>(null);
+  const [contenido, setContenido] = useState<Record<string, ProductoEnUbi[] | "cargando" | "error">>({});
   /** Fila que se está editando, con lo que se escribió hasta ahora. */
   const [editando, setEditando] = useState<{ id: string; nombre: string; codigo: string; tipo: string } | null>(null);
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
@@ -145,6 +162,32 @@ export default function UbicacionesPage() {
     const j = await r.json().catch(() => ({}));
     if (r.ok && j?.success) load();
     else await avisar({ mensaje: j?.error ?? "No se pudo borrar.", tono: "peligro" });
+  }
+
+  /** Abrir o cerrar una ubicación para ver qué hay guardado adentro. */
+  async function alternarDetalle(u: Ubicacion) {
+    if (abierta === u.id) {
+      setAbierta(null);
+      return;
+    }
+    setAbierta(u.id);
+    // Lo ya traído no se vuelve a pedir: abrir y cerrar no castiga a la base.
+    if (Array.isArray(contenido[u.id])) return;
+    setContenido((prev) => ({ ...prev, [u.id]: "cargando" }));
+    try {
+      const r = await fetch(`/api/inventario/ubicaciones/${u.id}/productos`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        setContenido((prev) => ({ ...prev, [u.id]: "error" }));
+        return;
+      }
+      setContenido((prev) => ({ ...prev, [u.id]: (j.data?.productos ?? []) as ProductoEnUbi[] }));
+    } catch {
+      setContenido((prev) => ({ ...prev, [u.id]: "error" }));
+    }
   }
 
   async function toggleActivo(u: Ubicacion) {
@@ -268,8 +311,11 @@ export default function UbicacionesPage() {
             <tbody>
               {items.map((u) => {
                 const parent = items.find((i) => i.id === u.parent_id);
+                const detalle = contenido[u.id];
+                const estaAbierta = abierta === u.id;
                 return (
-                  <tr key={u.id} className="border-t border-slate-100">
+                  <Fragment key={u.id}>
+                  <tr className={`border-t border-slate-100 ${estaAbierta ? "bg-slate-50" : ""}`}>
                     {editando?.id === u.id ? (
                       <>
                         <td className="px-4 py-2">
@@ -302,7 +348,20 @@ export default function UbicacionesPage() {
                       </>
                     ) : (
                       <>
-                        <td className="px-4 py-2 font-medium">{u.nombre}</td>
+                        <td className="px-4 py-2 font-medium">
+                          <button
+                            type="button"
+                            onClick={() => alternarDetalle(u)}
+                            className="inline-flex items-center gap-1.5 text-left hover:text-[#2F6F72]"
+                            title="Ver qué hay guardado acá"
+                          >
+                            <ChevronRight
+                              className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${estaAbierta ? "rotate-90" : ""}`}
+                              aria-hidden
+                            />
+                            {u.nombre}
+                          </button>
+                        </td>
                         <td className="px-4 py-2 text-gray-500">{u.tipo}</td>
                         <td className="px-4 py-2 text-gray-500">{u.codigo ?? "—"}</td>
                       </>
@@ -376,6 +435,57 @@ export default function UbicacionesPage() {
                       )}
                     </td>
                   </tr>
+                  {estaAbierta && (
+                    <tr className="border-t border-slate-100 bg-slate-50">
+                      <td colSpan={9} className="px-4 py-3">
+                        {detalle === "cargando" ? (
+                          <p className="text-xs text-slate-400">Cargando…</p>
+                        ) : detalle === "error" ? (
+                          <p className="text-xs text-red-600">
+                            No se pudo cargar lo que hay en esta ubicación.
+                          </p>
+                        ) : !detalle || detalle.length === 0 ? (
+                          <p className="text-xs text-slate-500">
+                            No hay ningún producto guardado acá. Se asigna desde la ficha del
+                            producto, en <span className="font-medium">Ubicación principal</span>.
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              {detalle.length} {detalle.length === 1 ? "producto" : "productos"} en {u.nombre}
+                            </p>
+                            <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+                              {detalle.map((p) => (
+                                <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+                                  <Link
+                                    href={`/inventario/${p.id}/editar`}
+                                    className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 hover:text-[#2F6F72] hover:underline"
+                                  >
+                                    {p.nombre}
+                                  </Link>
+                                  <span className="font-mono text-[11px] text-slate-400">{p.sku ?? "—"}</span>
+                                  <span
+                                    className={`w-28 text-right text-sm tabular-nums ${
+                                      p.stock_actual > 0 ? "text-slate-700" : "text-amber-700"
+                                    }`}
+                                  >
+                                    {fmtNum(p.stock_actual)}{" "}
+                                    <span className="text-[11px] text-slate-400">
+                                      {p.unidad_medida ?? ""}
+                                    </span>
+                                  </span>
+                                  <span className="w-28 text-right text-xs tabular-nums text-slate-500">
+                                    {p.stock_actual > 0 ? fmtGs(p.stock_actual * p.costo_promedio) : "—"}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
