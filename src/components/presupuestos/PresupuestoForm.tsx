@@ -335,7 +335,7 @@ export default function PresupuestoForm({
       {/* Productos */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">Productos</h2>
-        <div className="sticky top-0 z-10 -mx-5 mb-4 border-b border-slate-200 bg-white/95 px-5 py-3 backdrop-blur">
+        <div className="-mx-5 mb-4 border-b border-slate-200 bg-white px-5 py-3">
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex-1 min-w-[220px]">
               <label className={labelClass}>Agregar desde inventario</label>

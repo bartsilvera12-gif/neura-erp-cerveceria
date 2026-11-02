@@ -32,9 +32,12 @@ function fmtFecha(iso: string | null): string {
 }
 
 /**
- * Card autónoma de facturas de proveedores por vencer (dashboard), por sucursal.
- * Lee su propio resumen de /api/cuentas-por-pagar/resumen. No altera el resto del
- * dashboard. Si no hay nada por vencer, no renderiza (evita ruido).
+ * Card de facturas de proveedores por vencer (dashboard), por sucursal.
+ *
+ * Antes desaparecía cuando no había nada por vencer, y como la deuda está
+ * cargada en una sucursal y no en la otra, el panel Financiero del Bar y el de
+ * la Cervecería mostraban dos cosas distintas: parecían dos diseños. Ahora el
+ * bloque está siempre; lo que cambia es lo que dice.
  */
 export default function CuentasPorPagarResumenCard() {
   const [r, setR] = useState<Resumen | null>(null);
@@ -53,7 +56,27 @@ export default function CuentasPorPagarResumenCard() {
     return () => { cancel = true; };
   }, []);
 
-  if (!loaded || !r || r.items.length === 0) return null;
+  // Mientras no se sabe, no se dibuja nada: media pantalla que aparece dos
+  // segundos tarde se lee como un error.
+  if (!loaded) return null;
+
+  if (!r || r.items.length === 0) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-sm font-bold text-slate-700">
+            <Wallet className="h-4 w-4 text-slate-400" /> Facturas de proveedores por vencer
+          </h3>
+          <Link href="/compras/cuentas-por-pagar" className="text-xs font-semibold text-slate-500 hover:underline">
+            Ver todas
+          </Link>
+        </div>
+        <p className="mt-2 text-sm text-slate-500">
+          No hay facturas de proveedores por vencer en esta sucursal.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm">

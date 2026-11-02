@@ -20,6 +20,9 @@ const origenLabel: Record<OrigenMovimiento, string> = {
   devolucion_venta: "Devolución de venta",
   anulacion_compra: "Anulación de compra",
   produccion: "Producción",
+  envasado: "Envasado",
+  transferencia_salida: "Reposición enviada",
+  transferencia_entrada: "Reposición recibida",
 };
 
 const origenBadge: Record<OrigenMovimiento, string> = {
@@ -31,6 +34,9 @@ const origenBadge: Record<OrigenMovimiento, string> = {
   devolucion_venta: "bg-amber-50 text-amber-700",
   anulacion_compra: "bg-rose-50 text-rose-700",
   produccion: "bg-emerald-50 text-emerald-700",
+  envasado: "bg-teal-50 text-teal-700",
+  transferencia_salida: "bg-indigo-50 text-indigo-700",
+  transferencia_entrada: "bg-sky-50 text-sky-700",
 };
 
 function formatGs(valor: number) {
@@ -149,6 +155,9 @@ export default function MovimientosPage() {
             <option value="produccion">Producción</option>
             <option value="anulacion_venta">Anulación de venta</option>
             <option value="devolucion_venta">Devolución de venta</option>
+            <option value="transferencia_entrada">Reposición recibida</option>
+            <option value="transferencia_salida">Reposición enviada</option>
+            <option value="envasado">Envasado</option>
             <option value="anulacion_compra">Anulación de compra</option>
             <option value="ajuste_manual">Ajuste manual</option>
           </select>
@@ -244,8 +253,12 @@ export default function MovimientosPage() {
                         {formatGs(m.costo_unitario)}
                       </td>
                       <td className="py-4 pr-4 hidden md:table-cell">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${origenBadge[m.origen]}`}>
-                          {origenLabel[m.origen]}
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            origenBadge[m.origen] ?? "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {origenLabel[m.origen] ?? m.origen}
                         </span>
                       </td>
                       <td className="py-4 pr-4 text-gray-600 text-xs hidden lg:table-cell">
