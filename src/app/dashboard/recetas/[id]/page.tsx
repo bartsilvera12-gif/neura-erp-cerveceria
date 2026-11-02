@@ -309,6 +309,29 @@ export default function EditarRecetaPage() {
     if (!receta || savingHeader) return;
     setError(null);
     setSavedOk(false);
+    // Una receta sin materia prima no sirve para producir ni costear.
+    if (items.length === 0) {
+      setError("Agregá al menos una materia prima antes de guardar la receta.");
+      return;
+    }
+    // Materia prima que no alcanza ni para un lote: se avisa y se pide confirmación
+    // explícita (antes guardaba en silencio y el faltante aparecía recién al producir).
+    const faltantes = (costeo?.items ?? []).filter(
+      (r) => !r.unidad_incompatible && r.unidades_aporte != null && r.unidades_aporte < 1
+    );
+    if (faltantes.length > 0) {
+      const lista = faltantes.map((r) => `• ${r.insumo_nombre}`).join("\n");
+      const ok = await confirmar({
+        titulo: "Materia prima insuficiente",
+        mensaje: `No hay stock suficiente para producir un lote de esta receta:\n${lista}\n\n¿Querés guardarla igual? Vas a tener que reponer antes de producir.`,
+        confirmar: "Guardar igual",
+        tono: "peligro",
+      });
+      if (!ok) {
+        setError(`Materia prima insuficiente: ${faltantes.map((r) => r.insumo_nombre).join(", ")}.`);
+        return;
+      }
+    }
     setSavingHeader(true);
     try {
       const res = await fetchWithSupabaseSession(`/api/recetas/${id}`, {

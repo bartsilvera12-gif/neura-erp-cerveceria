@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import NuevaEntidadBancariaInline from "@/components/ui/NuevaEntidadBancariaInline";
 import Link from "next/link";
 import NuevoClienteRapidoModal, { type NuevoClienteCreado } from "./NuevoClienteRapidoModal";
 import { useRouter } from "next/navigation";
@@ -1722,7 +1723,7 @@ export default function NuevaVentaPage() {
               />
               <div className="mt-1 max-h-40 overflow-auto rounded-lg border border-slate-100">
                 {entidadesFiltradas.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-gray-400">Sin entidades. Cargalas en Configuración → Entidades bancarias.</p>
+                  <p className="px-3 py-2 text-xs text-gray-400">Sin entidades. Agregá una con el botón de abajo.</p>
                 ) : (
                   entidadesFiltradas.map((en) => (
                     <button
@@ -1738,6 +1739,10 @@ export default function NuevaVentaPage() {
                 )}
               </div>
               {entidadSel && <p className="mt-1 text-[11px] text-emerald-600">Seleccionada: {entidadSel.nombre}</p>}
+              <NuevaEntidadBancariaInline
+                tipo={metodoPago === "tarjeta" ? "tarjeta" : "banco"}
+                onCreada={(en) => { setEntidades((prev) => [...prev, en]); setPagoEntidadId(en.id); setEntidadQuery(""); }}
+              />
             </div>
 
             {(metodoPago === "transferencia" ||

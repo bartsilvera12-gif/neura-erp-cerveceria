@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import NuevaEntidadBancariaInline from "@/components/ui/NuevaEntidadBancariaInline";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
@@ -191,6 +192,10 @@ export function RegistrarCobroModalCxc({
                     <option value="">— Elegí —</option>
                     {entidadesFiltradas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                   </select>
+                  <NuevaEntidadBancariaInline
+                    tipo={metodo === "tarjeta" ? "tarjeta" : "banco"}
+                    onCreada={(en) => { setEntidades((prev) => [...prev, en]); setEntidadId(en.id); }}
+                  />
                 </div>
               )}
               <div>

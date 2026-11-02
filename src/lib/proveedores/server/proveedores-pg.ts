@@ -244,23 +244,27 @@ export async function findProveedorByNombre(
     `SELECT id, nombre, ruc FROM ${t}
       WHERE empresa_id = $1::uuid
         AND ($3::uuid IS NULL OR id <> $3::uuid)
-        AND btrim(regexp_replace(
-              translate(upper(coalesce(nombre, '')), 'ÁÉÍÓÚÜÑ', 'AEIOUUN'),
-              '\s+', ' ', 'g')) = $2
+        AND regexp_replace(
+              translate(upper(coalesce(nombre, '')), 'ÁÉÍÓÚÜÑÀÈÌÒÙÂÊÎÔÛ', 'AEIOUUNAEIOUAEIOU'),
+              '[^A-Z0-9]', '', 'g') = $2
       LIMIT 1`,
     [empresaId, normalizado, excluirId ?? null]
   );
   return rows[0] ?? null;
 }
 
-/** La forma en la que se comparan dos nombres de proveedor. */
+/**
+ * La forma en la que se comparan dos nombres de proveedor: mayúsculas, sin
+ * acentos y SOLO letras y números. Así "Bebidas QA S.R.L", "BEBIDAS QA S.R.L."
+ * y "Bebidas QA SRL" cuentan como el mismo (antes la puntuación los separaba
+ * y se colaban duplicados).
+ */
 export function normalizarNombreProveedor(nombre: string | null | undefined): string {
   return String(nombre ?? "")
     .toUpperCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/[^A-Z0-9]/g, "");
 }
 
 /** Solo letras y numeros, en mayuscula: la forma en la que se comparan dos RUC. */
