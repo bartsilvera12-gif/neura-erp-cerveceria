@@ -35,6 +35,9 @@ export default function EditarProductoPage() {
 
   const [cargando, setCargando] = useState(true);
   const [errorDuplicado, setErrorDuplicado] = useState<string | null>(null);
+  /** El stock que tenía el producto al abrir la ficha, para saber si cambió. */
+  const [stockOriginal, setStockOriginal] = useState<string>("");
+  const [motivoAjuste, setMotivoAjuste] = useState("");
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
 
   // descripcion live separately because form se inicializa al cargar
@@ -209,6 +212,7 @@ export default function EditarProductoPage() {
         metodo_valuacion: p.metodo_valuacion,
         tipo_iva: (p.tipo_iva ?? "10%") as TipoIvaProducto,
       });
+      setStockOriginal(String(p.stock_actual));
       setCodigoOriginal(p.codigo_barras ?? null);
       setImagenPath(p.imagen_path ?? null);
       setImagenUrl(p.imagen_url ?? null);
@@ -345,6 +349,10 @@ export default function EditarProductoPage() {
         cantidad_minima_mayorista: form.cantidad_minima_mayorista.trim() !== "" ? parseFloat(form.cantidad_minima_mayorista) || null : null,
         precio_distribuidor: form.precio_distribuidor.trim() !== "" ? parseFloat(form.precio_distribuidor) || null : null,
         stock_actual: parseInt(form.stock_actual) || 0,
+        // Si el stock cambió, el servidor lo registra como AJUSTE: esto es lo
+        // que va a decir el kardex. Sin motivo, nadie puede explicar después
+        // por qué cambió.
+        motivo_ajuste: motivoAjuste.trim() || undefined,
         stock_minimo: parseInt(form.stock_minimo) || 0,
         unidad_medida: form.unidad_medida.trim().toUpperCase() || "UNIDAD",
         metodo_valuacion: form.metodo_valuacion,
@@ -384,6 +392,9 @@ export default function EditarProductoPage() {
       setSubmitting(false);
     }
   }
+
+  const stockCambio =
+    stockOriginal !== "" && (parseInt(form.stock_actual) || 0) !== (parseInt(stockOriginal) || 0);
 
   const inputClass =
     "w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:border-gray-500 transition-colors text-sm";
@@ -935,9 +946,25 @@ export default function EditarProductoPage() {
                 min={0}
                 required={showStock}
               />
-              <p className="mt-1 text-xs text-gray-400">
-                Para ajustes de stock, preferí registrar un <Link href="/inventario/movimientos/nuevo" className="underline">movimiento</Link>.
-              </p>
+              {stockCambio ? (
+                <div className="mt-2">
+                  <label className="block text-xs font-medium text-amber-700 mb-1">
+                    ¿Por qué cambia el stock? (queda en el kardex)
+                  </label>
+                  <input
+                    type="text"
+                    value={motivoAjuste}
+                    onChange={(e) => setMotivoAjuste(e.target.value)}
+                    placeholder="Ej: conteo físico, rotura, vencido"
+                    className={inputClass}
+                  />
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-gray-400">
+                  Cambiarlo acá registra un ajuste en el{" "}
+                  <Link href="/inventario/movimientos" className="underline">kardex</Link>.
+                </p>
+              )}
             </div>
             <div>
               <label className={labelClass}>Stock mínimo</label>

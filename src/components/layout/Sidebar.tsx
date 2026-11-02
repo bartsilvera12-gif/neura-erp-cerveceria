@@ -121,7 +121,9 @@ const MENU_STRUCTURE: MenuItem[] = [
     { label: "Productos", href: "/inventario" },
     { label: "Movimientos", href: "/inventario/movimientos" },
     { label: "Categorías", href: "/inventario/categorias" },
-    // "Depósitos / Ubicaciones" oculto en instancia En lo de Mari (no aplica para gastronomía).
+    // Dónde está cada cosa: cámara, depósito, barra. La pantalla existía y
+    // estaba sólo escondida del menú.
+    { label: "Ubicaciones", href: "/inventario/ubicaciones" },
   ]},
   // Módulo propio (no hijo de Inventario): un `usuario` puede tener acceso a
   // Reposición sin tener el Inventario completo. Gate por slug 'reposicion'.

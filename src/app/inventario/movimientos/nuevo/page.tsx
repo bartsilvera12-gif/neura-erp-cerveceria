@@ -16,7 +16,11 @@ export default function NuevoMovimientoPage() {
     tipo: "ENTRADA" as TipoMovimiento,
     cantidad: "",
     costo_unitario: "",
-    origen: "compra" as OrigenMovimiento,
+    // Lo que se carga acá es SIEMPRE un ajuste manual. Una compra y una venta
+    // generan su propio movimiento con su documento atrás; dejar elegir esos
+    // orígenes hacía que el kardex mostrara "Venta" en una salida que ninguna
+    // venta explicaba.
+    origen: "ajuste_manual" as OrigenMovimiento,
     motivo: "",
   });
   const [guardando, setGuardando] = useState(false);
@@ -54,14 +58,11 @@ export default function NuevoMovimientoPage() {
   }
 
   function handleTipoChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const tipo = e.target.value as TipoMovimiento;
-    const origenSugerido: OrigenMovimiento =
-      tipo === "ENTRADA" ? "compra" : tipo === "SALIDA" ? "venta" : "ajuste_manual";
-    setForm((prev) => ({ ...prev, tipo, origen: origenSugerido }));
+    setForm((prev) => ({ ...prev, tipo: e.target.value as TipoMovimiento }));
   }
 
-  /** Un ajuste manual no tiene documento que lo explique: pide motivo. */
-  const exigeMotivo = form.tipo === "AJUSTE" || form.origen === "ajuste_manual";
+  /** Ninguno de estos movimientos tiene documento atrás: el motivo es la única explicación. */
+  const exigeMotivo = true;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -178,16 +179,12 @@ export default function NuevoMovimientoPage() {
 
             <div>
               <label className={labelClass}>Origen</label>
-              <select
-                name="origen"
-                value={form.origen}
-                onChange={handleChange}
-                className={inputClass}
-              >
-                <option value="compra">Compra</option>
-                <option value="venta">Venta</option>
-                <option value="ajuste_manual">Ajuste manual</option>
-              </select>
+              <div className={`${inputClass} flex items-center bg-gray-50 text-gray-600`}>
+                Ajuste manual
+              </div>
+              <p className="mt-1.5 text-xs text-gray-500">
+                Las compras y las ventas registran su movimiento solas, con su documento.
+              </p>
             </div>
           </div>
 

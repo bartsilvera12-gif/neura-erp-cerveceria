@@ -57,3 +57,86 @@ export async function PATCH(
     return NextResponse.json(errorResponse("No se pudo actualizar la categoría."), { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/inventario/categorias/[id] — borra una categoría vacía.
+ *
+ * Sólo si no la usa ningún producto y no tiene subcategorías: borrarla igual
+ * dejaría productos apuntando a una categoría que ya no existe, y nadie
+ * sabría en qué estaban clasificados. Cuando no se puede, la respuesta dice
+ * cuántos productos la usan, que es lo que hay que mover primero. Para una
+ * categoría con historia, desactivarla es lo correcto: deja de ofrecerse sin
+ * borrar lo que ya está clasificado.
+ */
+export async function DELETE(
+  request: NextRequest,
+  ctxParams: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await ctxParams.params;
+    const ctx = await getTenantSupabaseFromAuth(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const sb = ctx.supabase;
+    const empresaId = ctx.auth.empresa_id;
+
+    const { data: cat, error: errCat } = await sb
+      .from("categorias_productos")
+      .select("id, nombre")
+      .eq("empresa_id", empresaId)
+      .eq("id", id)
+      .maybeSingle();
+    if (errCat) throw new Error(errCat.message);
+    if (!cat) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+
+    const hijas = await sb
+      .from("categorias_productos")
+      .select("id", { count: "exact", head: true })
+      .eq("empresa_id", empresaId)
+      .eq("parent_id", id);
+    if ((hijas.count ?? 0) > 0) {
+      return NextResponse.json(
+        errorResponse(`Esa categoría tiene ${hijas.count} subcategoría(s). Borralas o movelas primero.`),
+        { status: 409 }
+      );
+    }
+
+    const usados = await sb
+      .from("productos")
+      .select("id", { count: "exact", head: true })
+      .eq("empresa_id", empresaId)
+      .eq("categoria_principal_id", id);
+    if ((usados.count ?? 0) > 0) {
+      return NextResponse.json(
+        errorResponse(
+          `${usados.count} producto(s) están en esa categoría. Cambiales la categoría, o desactivala en vez de borrarla.`
+        ),
+        { status: 409 }
+      );
+    }
+
+    // El puente producto_categorias puede tener filas sueltas de una categoría
+    // que ya no es la principal de nadie: se limpian con ella.
+    await sb.from("producto_categorias").delete().eq("empresa_id", empresaId).eq("categoria_id", id);
+
+    const del = await sb
+      .from("categorias_productos")
+      .delete()
+      .eq("empresa_id", empresaId)
+      .eq("id", id);
+    if (del.error) {
+      const msg = del.error.message ?? "";
+      if (/foreign key|23503/i.test(msg)) {
+        return NextResponse.json(
+          errorResponse("Esa categoría está en uso en otra parte del sistema. Desactivala en vez de borrarla."),
+          { status: 409 }
+        );
+      }
+      console.error("[/api/inventario/categorias/[id] DELETE]", msg);
+      return NextResponse.json(errorResponse("No se pudo borrar la categoría."), { status: 500 });
+    }
+    return NextResponse.json(successResponse({ id }));
+  } catch (err) {
+    console.error("[/api/inventario/categorias/[id] DELETE] outer", err);
+    return NextResponse.json(errorResponse("No se pudo borrar la categoría."), { status: 500 });
+  }
+}

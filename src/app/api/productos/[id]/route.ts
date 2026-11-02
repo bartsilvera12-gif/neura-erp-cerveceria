@@ -5,6 +5,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import { normalizeUpperText, normalizeUpperCodigoBarras } from "@/lib/text/normalize";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
 import { aplicarFiltroSucursal, exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { firmaDeUsuario } from "@/lib/auth/nombre-para-registro";
 
 const PRODUCTO_COLS =
   "id, empresa_id, nombre, sku, costo_promedio, precio_venta, stock_actual, stock_minimo, " +
@@ -104,7 +105,19 @@ export async function PATCH(
     if (body.sku !== undefined) patch.sku = normalizeUpperText(body.sku);
     if (body.costo_promedio !== undefined) patch.costo_promedio = Number(body.costo_promedio) || 0;
     if (body.precio_venta !== undefined) patch.precio_venta = Number(body.precio_venta) || 0;
-    if (body.stock_actual !== undefined) patch.stock_actual = Number(body.stock_actual) || 0;
+    /**
+     * El stock NO se cambia a mano sin dejar rastro.
+     *
+     * Editar el stock desde la ficha escribía el número nuevo y listo: el
+     * kardex no mostraba nada, así que el stock decía una cosa y los
+     * movimientos otra, y después una salida se validaba contra un número que
+     * nadie podía explicar. Ahora el cambio se aplica como un AJUSTE, igual
+     * que si se cargara desde Movimientos.
+     */
+    let stockPedido: number | null = null;
+    if (body.stock_actual !== undefined) {
+      stockPedido = Number(body.stock_actual) || 0;
+    }
     if (body.stock_minimo !== undefined) patch.stock_minimo = Number(body.stock_minimo) || 0;
     if (body.unidad_medida !== undefined) patch.unidad_medida = normalizeUpperText(body.unidad_medida) || "UNIDAD";
     if (body.metodo_valuacion !== undefined) {
@@ -172,6 +185,37 @@ export async function PATCH(
       patch.tipo_iva = body.tipo_iva;
     }
 
+    /** Lo que había antes del cambio: hace falta para el ajuste y para avisar. */
+    let ajuste: { delta: number; antes: number; nombre: string; sku: string; costo: number } | null = null;
+    if (stockPedido !== null) {
+      const { data: previo, error: errPrevio } = await aplicarFiltroSucursal(
+        sb.from("productos").select("id, nombre, sku, stock_actual, costo_promedio, controla_stock")
+          .eq("empresa_id", empresaId).eq("id", id),
+        exigirSucursal(ctx.auth)
+      ).maybeSingle();
+      if (errPrevio) throw new Error(errPrevio.message);
+      if (!previo) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+      const fila = previo as unknown as {
+        nombre?: string; sku?: string; stock_actual?: unknown; costo_promedio?: unknown; controla_stock?: boolean | null;
+      };
+      const antes = Number(fila.stock_actual) || 0;
+      const delta = stockPedido - antes;
+      if (stockPedido < 0 && fila.controla_stock !== false) {
+        return NextResponse.json(errorResponse("El stock no puede quedar en negativo."), { status: 400 });
+      }
+      // Guardar el mismo número que ya tenía no es un ajuste: no ensucia el kardex.
+      if (delta !== 0) {
+        patch.stock_actual = stockPedido;
+        ajuste = {
+          delta,
+          antes,
+          nombre: String(fila.nombre ?? ""),
+          sku: String(fila.sku ?? ""),
+          costo: Number(fila.costo_promedio) || 0,
+        };
+      }
+    }
+
     if (Object.keys(patch).length === 0) {
       const { data: existing, error: errGet } = await sb
         .from("productos")
@@ -203,6 +247,43 @@ export async function PATCH(
     }
     if (!upd.data) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
     const updRow = upd.data as unknown as Record<string, unknown>;
+
+    // El movimiento que explica el stock nuevo. Si esto fallara, el stock
+    // quedaría sin explicación: se vuelve atrás y se avisa.
+    if (ajuste) {
+      const motivo =
+        typeof body.motivo_ajuste === "string" && body.motivo_ajuste.trim()
+          ? body.motivo_ajuste.trim()
+          : "Ajuste desde la ficha del producto";
+      const movError = (
+        await sb.from("movimientos_inventario").insert([{
+          empresa_id: empresaId,
+          sucursal_id: exigirSucursal(ctx.auth),
+          producto_id: id,
+          producto_nombre: ajuste.nombre,
+          producto_sku: ajuste.sku,
+          tipo: "AJUSTE",
+          cantidad: ajuste.delta,
+          costo_unitario: ajuste.costo,
+          origen: "ajuste_manual",
+          referencia: motivo,
+          fecha: new Date().toISOString(),
+          created_by: ctx.auth.usuarioCatalogId ?? null,
+          usuario_nombre: firmaDeUsuario(ctx.auth),
+        }])
+      ).error;
+      if (movError) {
+        await aplicarFiltroSucursal(
+          sb.from("productos").update({ stock_actual: ajuste.antes }).eq("empresa_id", empresaId).eq("id", id),
+          exigirSucursal(ctx.auth)
+        );
+        console.error("[/api/productos/[id] PATCH] movimiento de ajuste:", movError.message);
+        return NextResponse.json(
+          errorResponse("No se pudo registrar el ajuste de stock. El stock quedó como estaba."),
+          { status: 500 }
+        );
+      }
+    }
 
     // Sincronizar categoría principal en puente producto_categorias
     if (categoriaCambia) {
@@ -253,5 +334,92 @@ export async function PATCH(
     if (rSuc) return rSuc;
     console.error("[/api/productos/[id] PATCH] outer", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo actualizar el producto."), { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/productos/[id] — borra un producto que todavía no tiene historia.
+ *
+ * Un producto que ya se movió NO se borra: su nombre está en el kardex, en las
+ * ventas y en las compras, y borrarlo dejaría esos documentos hablando de algo
+ * que no existe. Para ésos está desactivar, que los saca de las pantallas de
+ * venta y deja el historial en pie.
+ *
+ * Se borra el producto cargado por error o de prueba: el que no tiene ningún
+ * movimiento, no está en ninguna receta y no se vendió ni se compró nunca.
+ * La respuesta dice qué lo retiene, para no dejar a nadie adivinando.
+ */
+export async function DELETE(
+  request: NextRequest,
+  ctxParams: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await ctxParams.params;
+    const ctx = await getTenantSupabaseFromAuth(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const sb = ctx.supabase;
+    const empresaId = ctx.auth.empresa_id;
+
+    const { data: prod, error: errProd } = await aplicarFiltroSucursal(
+      sb.from("productos").select("id, nombre").eq("empresa_id", empresaId).eq("id", id),
+      exigirSucursal(ctx.auth)
+    ).maybeSingle();
+    if (errProd) throw new Error(errProd.message);
+    if (!prod) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+
+    const retenes: string[] = [];
+    const contar = async (tabla: string, columna: string) => {
+      const r = await sb
+        .from(tabla)
+        .select("id", { count: "exact", head: true })
+        .eq("empresa_id", empresaId)
+        .eq(columna, id);
+      // Una tabla que no existe en esta instancia no retiene nada.
+      return r.error ? 0 : r.count ?? 0;
+    };
+
+    const movs = await contar("movimientos_inventario", "producto_id");
+    if (movs > 0) retenes.push(`${movs} movimiento(s) de stock`);
+    const ventas = await contar("ventas_items", "producto_id");
+    if (ventas > 0) retenes.push(`${ventas} venta(s)`);
+    const compras = await contar("compras_items", "producto_id");
+    if (compras > 0) retenes.push(`${compras} compra(s)`);
+    const recetas = await contar("receta_items", "producto_id");
+    if (recetas > 0) retenes.push(`${recetas} receta(s)`);
+
+    if (retenes.length > 0) {
+      return NextResponse.json(
+        errorResponse(
+          `No se puede borrar: el producto ya figura en ${retenes.join(", ")}. ` +
+            "Desactivalo y deja de aparecer para vender, sin borrar el historial."
+        ),
+        { status: 409 }
+      );
+    }
+
+    // Las filas propias del producto que no son historia: su clasificación.
+    await sb.from("producto_categorias").delete().eq("empresa_id", empresaId).eq("producto_id", id);
+
+    const del = await aplicarFiltroSucursal(
+      sb.from("productos").delete().eq("empresa_id", empresaId).eq("id", id),
+      exigirSucursal(ctx.auth)
+    );
+    if (del.error) {
+      const msg = del.error.message ?? "";
+      if (/foreign key|23503/i.test(msg)) {
+        return NextResponse.json(
+          errorResponse("El producto está en uso en otra parte del sistema. Desactivalo en vez de borrarlo."),
+          { status: 409 }
+        );
+      }
+      console.error("[/api/productos/[id] DELETE]", msg);
+      return NextResponse.json(errorResponse("No se pudo borrar el producto."), { status: 500 });
+    }
+    return NextResponse.json(successResponse({ id }));
+  } catch (err) {
+    const rSuc = respuestaSucursalNoAsignada(err);
+    if (rSuc) return rSuc;
+    console.error("[/api/productos/[id] DELETE]", err instanceof Error ? err.message : err);
+    return NextResponse.json(errorResponse("No se pudo borrar el producto."), { status: 500 });
   }
 }

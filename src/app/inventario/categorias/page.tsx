@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 interface Categoria {
   id: string;
@@ -17,6 +18,7 @@ interface Categoria {
 
 export default function CategoriasProductosPage() {
   const { isAdmin } = useIsAdmin();
+  const { avisar, confirmar, pedirTexto } = useDialogos();
   const [items, setItems] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +85,50 @@ export default function CategoriasProductosPage() {
     const j = await r.json();
     if (r.ok && j?.success) load();
     else setError(j?.error ?? "No se pudo actualizar.");
+  }
+
+  /** Renombrar. El código y el padre se cambian desde la importación. */
+  async function renombrar(cat: Categoria) {
+    const nuevo = await pedirTexto({
+      titulo: "Cambiar el nombre",
+      mensaje: `Se llama "${cat.nombre}".`,
+      valorInicial: cat.nombre,
+      confirmar: "Guardar",
+    });
+    if (nuevo == null) return;
+    const limpio = nuevo.trim();
+    if (limpio === "" || limpio.toUpperCase() === cat.nombre.toUpperCase()) return;
+    const r = await fetch(`/api/inventario/categorias/${cat.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ nombre: limpio }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j?.success) load();
+    else await avisar({ mensaje: j?.error ?? "No se pudo cambiar el nombre.", tono: "peligro" });
+  }
+
+  /**
+   * Borrar. El servidor la deja borrar sólo si no la usa ningún producto ni
+   * tiene subcategorías; si no, dice cuántos la usan y queda la opción de
+   * desactivarla, que es lo correcto para una categoría con historia.
+   */
+  async function borrar(cat: Categoria) {
+    const seguir = await confirmar({
+      titulo: `Borrar "${cat.nombre}"`,
+      mensaje: "Sólo se puede borrar si ningún producto la usa. Si tiene productos, desactivala.",
+      confirmar: "Borrar",
+      tono: "peligro",
+    });
+    if (!seguir) return;
+    const r = await fetch(`/api/inventario/categorias/${cat.id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j?.success) load();
+    else await avisar({ mensaje: j?.error ?? "No se pudo borrar.", tono: "peligro" });
   }
 
   return (
@@ -200,12 +246,26 @@ export default function CategoriasProductosPage() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <button
-                        onClick={() => toggleActivo(c)}
-                        className="text-xs text-sky-700 hover:text-sky-900 underline"
-                      >
-                        {c.activo ? "Desactivar" : "Activar"}
-                      </button>
+                      <div className="inline-flex items-center gap-3">
+                        <button
+                          onClick={() => renombrar(c)}
+                          className="text-xs text-slate-600 hover:text-slate-900 underline"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => toggleActivo(c)}
+                          className="text-xs text-sky-700 hover:text-sky-900 underline"
+                        >
+                          {c.activo ? "Desactivar" : "Activar"}
+                        </button>
+                        <button
+                          onClick={() => borrar(c)}
+                          className="text-xs text-red-600 hover:text-red-800 underline"
+                        >
+                          Borrar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

@@ -9,6 +9,7 @@ import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import StatCard from "@/components/ui/StatCard";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none";
@@ -62,6 +63,37 @@ export default function InventarioPage() {
   const [tab,              setTab]               = useState<"reventa" | "menu" | "materia">("reventa");
   const [cargandoLista,    setCargandoLista]     = useState(true);
   const [soloStockBajo,    setSoloStockBajo]    = useState(false);
+
+  const { avisar, confirmar } = useDialogos();
+
+  /**
+   * Borrar un producto cargado por error.
+   *
+   * El servidor lo deja borrar SOLO si no tiene historia: ningún movimiento,
+   * ninguna venta, ninguna compra y ninguna receta. Si la tiene, contesta qué
+   * lo retiene — borrarlo dejaría el kardex y las facturas hablando de algo
+   * que ya no existe.
+   */
+  async function borrarProducto(p: Producto) {
+    const seguir = await confirmar({
+      titulo: `Borrar "${p.nombre}"`,
+      mensaje: "Sólo se puede borrar un producto sin movimientos, ventas, compras ni recetas.",
+      confirmar: "Borrar",
+      tono: "peligro",
+    });
+    if (!seguir) return;
+    try {
+      const r = await fetch(`/api/productos/${p.id}`, { method: "DELETE", credentials: "include" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        await avisar({ mensaje: j?.error ?? "No se pudo borrar el producto.", tono: "peligro" });
+        return;
+      }
+      setTodos((prev) => prev.filter((x) => x.id !== p.id));
+    } catch {
+      await avisar({ mensaje: "Error de red al borrar el producto.", tono: "peligro" });
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -500,12 +532,22 @@ export default function InventarioPage() {
                       </td>
                     )}
                     <td className="border-l border-slate-100 px-4 py-4 text-center">
-                      <Link
-                        href={`/inventario/${p.id}/editar`}
-                        className="inline-flex items-center justify-center min-h-[40px] rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
-                      >
-                        Editar
-                      </Link>
+                      <div className="inline-flex items-center gap-2">
+                        <Link
+                          href={`/inventario/${p.id}/editar`}
+                          className="inline-flex items-center justify-center min-h-[40px] rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                        >
+                          Editar
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => borrarProducto(p)}
+                          title="Borrar (sólo si no tiene movimientos)"
+                          className="inline-flex min-h-[40px] items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:border-red-300 hover:bg-red-50"
+                        >
+                          Borrar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

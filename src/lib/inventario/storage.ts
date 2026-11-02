@@ -261,10 +261,16 @@ export async function updateProductoPrecios(
   await updateProducto(productoId, datos);
 }
 
-/** Actualiza producto via API server-side (PATCH /api/productos/[id]). */
+/**
+ * Actualiza producto via API server-side (PATCH /api/productos/[id]).
+ *
+ * `motivo_ajuste` no es un campo del producto: es lo que va a decir el kardex
+ * si el stock cambió. El servidor registra ese cambio como un AJUSTE, así que
+ * el stock nunca se mueve sin un movimiento que lo explique.
+ */
 export async function updateProducto(
   id: string,
-  datos: Partial<Omit<Producto, "id">>
+  datos: Partial<Omit<Producto, "id">> & { motivo_ajuste?: string }
 ): Promise<Producto | null> {
   const body: Record<string, unknown> = {};
   if (datos.nombre !== undefined) body.nombre = datos.nombre;
@@ -275,6 +281,7 @@ export async function updateProducto(
   if (datos.cantidad_minima_mayorista !== undefined) body.cantidad_minima_mayorista = datos.cantidad_minima_mayorista ?? null;
   if (datos.precio_distribuidor !== undefined) body.precio_distribuidor = datos.precio_distribuidor ?? null;
   if (datos.stock_actual !== undefined) body.stock_actual = datos.stock_actual;
+  if (datos.motivo_ajuste !== undefined) body.motivo_ajuste = datos.motivo_ajuste;
   if (datos.stock_minimo !== undefined) body.stock_minimo = datos.stock_minimo;
   if (datos.unidad_medida !== undefined) body.unidad_medida = datos.unidad_medida;
   if (datos.metodo_valuacion !== undefined) body.metodo_valuacion = datos.metodo_valuacion;
@@ -346,6 +353,17 @@ function calcularDelta(tipo: TipoMovimiento, cantidad: number): number {
 export type NuevoMovimientoData = Omit<MovimientoInventario, "id">;
 
 /**
+ * El error de la base, en castellano. La regla de "no hay stock negativo" vive
+ * en un trigger (script 27), y su mensaje no es para mostrarle a nadie.
+ */
+function mensajeDeStock(msg: string, nombre: string, hay: number, delta: number): string {
+  if (/stock_negativo|stock negativo|23514/i.test(msg)) {
+    return `No hay stock suficiente de ${nombre}: hay ${hay} y querés sacar ${Math.abs(delta)}.`;
+  }
+  return `No se pudo actualizar el stock de ${nombre}.`;
+}
+
+/**
  * Registra un movimiento y actualiza stock_actual del producto.
  * empresa_id se obtiene del usuario; RLS valida acceso.
  */
@@ -386,7 +404,56 @@ export async function saveMovimiento(
     }
   }
 
-  // 2. Insertar movimiento
+  /**
+   * 2. PRIMERO el stock, DESPUES el movimiento.
+   *
+   * Antes era al revés, y cuando la base rechazaba el stock (una salida mayor
+   * a lo que hay) el movimiento YA estaba escrito: el kardex mostraba una
+   * salida que nunca pasó. Con este orden, si el stock no se puede aplicar no
+   * queda rastro de nada.
+   *
+   * El update es condicional sobre el stock que se leyó: si entre la lectura y
+   * la escritura otro movimiento tocó el producto, no matchea ninguna fila y se
+   * reintenta sobre el valor nuevo. Sin eso, dos movimientos simultáneos se
+   * pisan y uno se pierde sin dejar rastro.
+   */
+  let stockPrevio = producto.stock_actual;
+  if (debeActualizarStock) {
+    let aplicado = false;
+    for (let intento = 0; intento < 4 && !aplicado; intento++) {
+      const objetivo = stockPrevio + delta;
+      if (objetivo < 0 && producto.controla_stock !== false) {
+        throw new Error(
+          `No hay stock suficiente de ${producto.nombre}: hay ${stockPrevio} y querés sacar ${Math.abs(delta)}.`
+        );
+      }
+      const { data: updData, error: updError } = await supabase
+        .from("productos")
+        .update({ stock_actual: objetivo })
+        .eq("id", mov.producto_id)
+        .eq("stock_actual", stockPrevio)
+        .select("id");
+      if (updError) {
+        // La base tiene la última palabra sobre el stock negativo.
+        throw new Error(mensajeDeStock(updError.message, producto.nombre, stockPrevio, delta));
+      }
+      if (updData && updData.length > 0) {
+        aplicado = true;
+        break;
+      }
+      // Nadie matcheó: releer y volver a intentar con el stock actual.
+      const refrescado = await getProducto(mov.producto_id);
+      if (!refrescado) break;
+      stockPrevio = refrescado.stock_actual;
+    }
+    if (!aplicado) {
+      throw new Error(
+        `No se pudo aplicar el stock de ${producto.nombre}: alguien más lo está moviendo. Probá de nuevo.`
+      );
+    }
+  }
+
+  // 3. El movimiento, que es lo que explica ese stock
   const insert = {
     empresa_id: usuario.empresa_id,
     sucursal_id: await getSucursalId(),
@@ -412,51 +479,17 @@ export async function saveMovimiento(
     .single();
 
   if (movError) {
-    console.error("[inventario] saveMovimiento:", movError.message);
-    return null;
-  }
-
-  /**
-   * 3. Actualizar stock del producto (salvo inventario_inicial, que ya viene en
-   *    el insert).
-   *
-   * El update es condicional sobre el stock que se leyó: si entre la lectura y
-   * la escritura otro movimiento tocó el producto, no matchea ninguna fila y se
-   * reintenta sobre el valor nuevo. Antes se escribía el valor absoluto sin
-   * condición, así que dos movimientos simultáneos se pisaban y uno de los dos
-   * se perdía sin dejar rastro.
-   */
-  if (debeActualizarStock) {
-    let stockLeido = producto.stock_actual;
-    let aplicado = false;
-    for (let intento = 0; intento < 4 && !aplicado; intento++) {
-      // El negativo ya se rechazó arriba; acá el valor es exacto.
-      const objetivo = stockLeido + delta;
-      const { data: updData, error: updError } = await supabase
+    // El stock ya se movió: devolverlo, o el producto queda con un stock que
+    // ningún movimiento explica — justo lo que esto viene a evitar.
+    if (debeActualizarStock) {
+      await supabase
         .from("productos")
-        .update({ stock_actual: objetivo })
+        .update({ stock_actual: stockPrevio })
         .eq("id", mov.producto_id)
-        .eq("stock_actual", stockLeido)
-        .select("id");
-      if (updError) {
-        console.error("[inventario] saveMovimiento (update stock):", updError.message);
-        break;
-      }
-      if (updData && updData.length > 0) {
-        aplicado = true;
-        break;
-      }
-      // Nadie matcheó: releer y volver a intentar con el stock actual.
-      const refrescado = await getProducto(mov.producto_id);
-      if (!refrescado) break;
-      stockLeido = refrescado.stock_actual;
+        .eq("stock_actual", stockPrevio + delta);
     }
-    if (!aplicado) {
-      console.error(
-        "[inventario] saveMovimiento: no se pudo aplicar el stock de",
-        mov.producto_id
-      );
-    }
+    console.error("[inventario] saveMovimiento:", movError.message);
+    throw new Error("No se pudo registrar el movimiento. El stock quedó como estaba.");
   }
 
   return rowToMovimiento(movData as MovimientoRow);
