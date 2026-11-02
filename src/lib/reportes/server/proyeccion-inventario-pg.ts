@@ -105,7 +105,9 @@ export async function getProyeccionInventario(
        FROM ${tP} p
        LEFT JOIN ventas30 v ON v.producto_id = p.id
       WHERE p.empresa_id = $1::uuid AND p.sucursal_id = ANY($2::uuid[])
-        AND p.activo = true
+        -- activo nulo es "sí, está activo": igual que controla_stock, los
+        -- productos viejos lo tienen en NULL y "= true" los dejaba afuera.
+        AND coalesce(p.activo, true)
         -- controla_stock nulo es "sí controla": los productos viejos lo tienen
         -- en null y quedaban FUERA del informe, así que la pantalla salía en
         -- blanco aunque hubiera productos sin stock.
