@@ -5,8 +5,8 @@ import { X } from "lucide-react";
 import { errorNombre, errorRuc, primerError } from "@/lib/validacion/documentos";
 
 /**
- * Alta rápida de una categoría o un proveedor sin salir del formulario de
- * producto.
+ * Alta rápida de una categoría, un proveedor o una ubicación sin salir del
+ * formulario de producto.
  *
  * Antes el "+ Crear" era un link a otra pantalla: el operador perdía el
  * producto a medio cargar y tenía que empezarlo de nuevo. Acá se crea lo que
@@ -17,7 +17,7 @@ import { errorNombre, errorRuc, primerError } from "@/lib/validacion/documentos"
  * Proveedores a completarlo antes de poder usarlo.
  */
 
-export type CrearRapidoTipo = "categoria" | "proveedor";
+export type CrearRapidoTipo = "categoria" | "proveedor" | "ubicacion";
 
 const COPY: Record<CrearRapidoTipo, { titulo: string; etiquetaNombre: string; placeholder: string }> = {
   categoria: {
@@ -29,6 +29,11 @@ const COPY: Record<CrearRapidoTipo, { titulo: string; etiquetaNombre: string; pl
     titulo: "Nuevo proveedor",
     etiquetaNombre: "Nombre o razón social",
     placeholder: "Ej: DISTRIBUIDORA DEL SUR S.A.",
+  },
+  ubicacion: {
+    titulo: "Nueva ubicación",
+    etiquetaNombre: "Nombre de la ubicación",
+    placeholder: "Ej: Cámara de frío, Depósito, Barra",
   },
 };
 
@@ -77,7 +82,7 @@ export default function CrearRapidoModal({
     if (guardando) return;
 
     const eFormato = primerError(
-      errorNombre(nombre, tipo === "categoria" ? "El nombre" : "La razón social", { obligatorio: true }),
+      errorNombre(nombre, tipo === "proveedor" ? "La razón social" : "El nombre", { obligatorio: true }),
       // El RUC es obligatorio solo para proveedores: una categoría no tiene.
       tipo === "proveedor" ? errorRuc(ruc, { obligatorio: true }) : null
     );
@@ -86,11 +91,19 @@ export default function CrearRapidoModal({
     setGuardando(true);
     setError(null);
     try {
-      const url = tipo === "categoria" ? "/api/inventario/categorias" : "/api/proveedores";
+      const url =
+        tipo === "categoria"
+          ? "/api/inventario/categorias"
+          : tipo === "ubicacion"
+            ? "/api/inventario/ubicaciones"
+            : "/api/proveedores";
       const body =
         tipo === "categoria"
           ? { nombre: nombre.trim() }
-          : { nombre: nombre.trim(), ruc: ruc.trim(), estado: "activo" };
+          : tipo === "ubicacion"
+            // `deposito` es el tipo más neutro: después se cambia en Ubicaciones.
+            ? { nombre: nombre.trim(), tipo: "deposito" }
+            : { nombre: nombre.trim(), ruc: ruc.trim(), estado: "activo" };
       const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -102,7 +115,7 @@ export default function CrearRapidoModal({
         setError(j?.error ?? `No se pudo crear (${r.status}).`);
         return;
       }
-      const creado = (j.data?.categoria ?? j.data?.proveedor ?? null) as
+      const creado = (j.data?.categoria ?? j.data?.ubicacion ?? j.data?.proveedor ?? null) as
         | { id?: string; nombre?: string }
         | null;
       if (!creado?.id) {

@@ -705,8 +705,9 @@ export default function EditarProductoPage() {
                   </button>
                 </div>
               </div>
-              {/* Ubicación principal — oculta en instancia En lo de Mari (no aplica para gastronomía). */}
-              <div className="hidden md:col-span-4 min-w-0">
+              {/* Dónde se guarda: cámara, depósito, barra. Estuvo oculta por una
+                  decisión de otra instancia; acá sí se usa. */}
+              <div className="md:col-span-4 min-w-0">
                 <label className={labelClass}>Ubicación principal</label>
                 <SelectFromList
                   value={ubicacionId}
@@ -718,12 +719,13 @@ export default function EditarProductoPage() {
                   <span className="text-xs text-gray-400 truncate">
                     {ubicaciones.length === 0 ? "Todavía no cargaste ubicaciones." : `${ubicaciones.length} disponibles`}
                   </span>
-                  <Link
-                    href="/inventario/ubicaciones"
+                  <button
+                    type="button"
+                    onClick={() => setCrearRapido("ubicacion")}
                     className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 border border-sky-200 hover:bg-sky-50 px-2.5 py-1 rounded-md transition-colors"
                   >
                     + Crear
-                  </Link>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1021,7 +1023,10 @@ export default function EditarProductoPage() {
         open={crearRapido !== null}
         onClose={() => setCrearRapido(null)}
         onCreado={(creado) => {
-          if (crearRapido === "categoria") {
+          if (crearRapido === "ubicacion") {
+            setUbicaciones((prev) => [...prev, { id: creado.id, nombre: creado.nombre, tipo: "deposito" }]);
+            setUbicacionId(creado.id);
+          } else if (crearRapido === "categoria") {
             setCategorias((prev) => [...prev, { id: creado.id, nombre: creado.nombre }]);
             setCategoriaId(creado.id);
           } else {
