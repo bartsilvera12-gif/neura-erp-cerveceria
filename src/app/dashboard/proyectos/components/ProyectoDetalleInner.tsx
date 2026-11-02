@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { useDialogos } from "@/components/ui/Dialogos";
+import { getCurrentUser } from "@/lib/auth";
 import { getFacturacionEstado, asMetadataObject } from "@/lib/caja/facturacion";
 import {
   ProyectoModuloSelector,
@@ -125,7 +127,16 @@ export default function ProyectoDetalleInner({
   });
   const [responsableTecnicoId, setResponsableTecnicoId] = useState("");
   const [observaciones, setObservaciones] = useState("");
+  const { confirmar } = useDialogos();
+  /**
+   * Quién está mirando. Hace falta para saber qué comentarios son suyos: sólo
+   * su autor puede editar lo que escribió.
+   */
+  const [usuarioActualId, setUsuarioActualId] = useState<string | null>(null);
   const [datosSnapshot, setDatosSnapshot] = useState("");
+  /** Tarea o comentario que se está editando, con el texto en curso. */
+  const [tareaEditando, setTareaEditando] = useState<{ id: string; titulo: string } | null>(null);
+  const [comEditando, setComEditando] = useState<{ id: string; texto: string } | null>(null);
 
   const load = useCallback(async () => {
     if (!projectId) return;
@@ -227,6 +238,21 @@ export default function ProyectoDetalleInner({
     onProjectUpdated?.();
   }
 
+  useEffect(() => {
+    let vivo = true;
+    getCurrentUser()
+      .then((u) => {
+        if (vivo && u?.id) setUsuarioActualId(String(u.id));
+      })
+      .catch(() => {
+        /* Sin usuario resuelto no se ofrece editar: sólo borrar, que el
+           servidor autoriza igual. */
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
   async function agregarComentario(e: React.FormEvent) {
     e.preventDefault();
     if (!comTexto.trim()) return;
@@ -275,6 +301,72 @@ export default function ProyectoDetalleInner({
       await load();
       onProjectUpdated?.();
     }
+  }
+
+  async function borrarTarea(tareaId: string, titulo: string) {
+    const seguir = await confirmar({
+      titulo: `Borrar la tarea "${titulo}"`,
+      mensaje: "La tarea desaparece del pedido. El historial del pedido no cambia.",
+      confirmar: "Borrar",
+      tono: "peligro",
+    });
+    if (!seguir) return;
+    const res = await fetchWithSupabaseSession(`/api/proyectos/${projectId}/tareas/${tareaId}`, {
+      method: "DELETE",
+    });
+    const j = (await res.json()) as { success?: boolean; error?: string };
+    if (!res.ok || !j.success) {
+      setErr(j.error ?? "No se pudo borrar la tarea.");
+      return;
+    }
+    await load();
+    onProjectUpdated?.();
+  }
+
+  /** Guardar el texto editado de un comentario. Sólo lo puede hacer su autor. */
+  async function guardarComentario(comentarioId: string, texto: string) {
+    const limpio = texto.trim();
+    if (!limpio) {
+      setErr("El comentario no puede quedar vacío.");
+      return;
+    }
+    const res = await fetchWithSupabaseSession(
+      `/api/proyectos/${projectId}/comentarios/${comentarioId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comentario: limpio }),
+      }
+    );
+    const j = (await res.json()) as { success?: boolean; error?: string };
+    if (!res.ok || !j.success) {
+      setErr(j.error ?? "No se pudo guardar el comentario.");
+      return;
+    }
+    setComEditando(null);
+    await load();
+    onProjectUpdated?.();
+  }
+
+  async function borrarComentario(comentarioId: string) {
+    const seguir = await confirmar({
+      titulo: "Borrar el comentario",
+      mensaje: "Se borra para todos. Esto no se puede deshacer.",
+      confirmar: "Borrar",
+      tono: "peligro",
+    });
+    if (!seguir) return;
+    const res = await fetchWithSupabaseSession(
+      `/api/proyectos/${projectId}/comentarios/${comentarioId}`,
+      { method: "DELETE" }
+    );
+    const j = (await res.json()) as { success?: boolean; error?: string };
+    if (!res.ok || !j.success) {
+      setErr(j.error ?? "No se pudo borrar el comentario.");
+      return;
+    }
+    await load();
+    onProjectUpdated?.();
   }
 
   async function cambiarEstado(estadoId: string) {
@@ -818,17 +910,66 @@ export default function ProyectoDetalleInner({
                 const estado = String(t.estado ?? "");
                 return (
                   <li key={tid} className="flex flex-wrap items-center gap-2 py-3 text-sm">
-                    <span className="flex-1 font-medium text-slate-900">{String(t.titulo ?? "")}</span>
-                    <select
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
-                      value={estado}
-                      onChange={(e) => void patchTarea(tid, { estado: e.target.value })}
-                    >
-                      <option value="pendiente">pendiente</option>
-                      <option value="en_proceso">en_proceso</option>
-                      <option value="completada">completada</option>
-                      <option value="bloqueada">bloqueada</option>
-                    </select>
+                    {tareaEditando?.id === tid ? (
+                      <>
+                        <input
+                          className={`flex-1 ${inputCls}`}
+                          value={tareaEditando.titulo}
+                          onChange={(e) => setTareaEditando({ id: tid, titulo: e.target.value })}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const titulo = tareaEditando.titulo.trim();
+                            if (!titulo) {
+                              setErr("La tarea necesita un título.");
+                              return;
+                            }
+                            setTareaEditando(null);
+                            void patchTarea(tid, { titulo });
+                          }}
+                          className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F8E91]"
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTareaEditando(null)}
+                          className="text-xs text-slate-500 hover:underline"
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1 font-medium text-slate-900">{String(t.titulo ?? "")}</span>
+                        <select
+                          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+                          value={estado}
+                          onChange={(e) => void patchTarea(tid, { estado: e.target.value })}
+                        >
+                          <option value="pendiente">pendiente</option>
+                          <option value="en_proceso">en_proceso</option>
+                          <option value="completada">completada</option>
+                          <option value="bloqueada">bloqueada</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setTareaEditando({ id: tid, titulo: String(t.titulo ?? "") })}
+                          className="text-xs text-slate-600 hover:text-slate-900 hover:underline"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void borrarTarea(tid, String(t.titulo ?? ""))}
+                          className="text-xs text-red-600 hover:text-red-800 hover:underline"
+                        >
+                          Borrar
+                        </button>
+                      </>
+                    )}
                   </li>
                 );
               })}
@@ -854,15 +995,74 @@ export default function ProyectoDetalleInner({
               </button>
             </form>
             <ul className="space-y-3">
-              {(data.comentarios ?? []).map((c) => (
-                <li key={String(c.id)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                  <div className="text-xs text-slate-500">
-                    {String((c as { usuario_nombre?: string }).usuario_nombre ?? "")} ·{" "}
-                    {formatFechaPyFull(String(c.created_at ?? ""))}
-                  </div>
-                  <div className="mt-1 text-slate-700">{String(c.comentario ?? "")}</div>
-                </li>
-              ))}
+              {(data.comentarios ?? []).map((c) => {
+                const cid = String(c.id);
+                const cr = c as { usuario_nombre?: string; usuario_id?: string; updated_at?: string };
+                // Las palabras son de quien las escribió: sólo su autor las
+                // edita. Borrar puede además un administrador.
+                const esMio = usuarioActualId != null && String(cr.usuario_id ?? "") === usuarioActualId;
+                const editado =
+                  cr.updated_at && String(cr.updated_at) !== String(c.created_at ?? "")
+                    ? formatFechaPyFull(String(cr.updated_at))
+                    : null;
+                return (
+                  <li key={cid} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+                      <span>
+                        {String(cr.usuario_nombre ?? "")} · {formatFechaPyFull(String(c.created_at ?? ""))}
+                      </span>
+                      {editado && <span className="italic text-slate-400">editado {editado}</span>}
+                      <span className="ml-auto flex items-center gap-2">
+                        {esMio && comEditando?.id !== cid && (
+                          <button
+                            type="button"
+                            onClick={() => setComEditando({ id: cid, texto: String(c.comentario ?? "") })}
+                            className="text-slate-600 hover:text-slate-900 hover:underline"
+                          >
+                            Editar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void borrarComentario(cid)}
+                          className="text-red-600 hover:text-red-800 hover:underline"
+                        >
+                          Borrar
+                        </button>
+                      </span>
+                    </div>
+                    {comEditando?.id === cid ? (
+                      <div className="mt-2 space-y-2">
+                        <textarea
+                          className={`${inputCls} min-h-[70px]`}
+                          rows={3}
+                          value={comEditando.texto}
+                          onChange={(e) => setComEditando({ id: cid, texto: e.target.value })}
+                          autoFocus
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void guardarComentario(cid, comEditando.texto)}
+                            className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F8E91]"
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setComEditando(null)}
+                            className="text-xs text-slate-500 hover:underline"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-slate-700">{String(c.comentario ?? "")}</div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ) : null}
@@ -871,7 +1071,8 @@ export default function ProyectoDetalleInner({
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
             <p className="font-medium text-slate-700">Archivos del proyecto</p>
             <p className="mt-2 text-xs">
-              Registro en base de datos listo; subida a almacenamiento en una siguiente iteración.
+              Todavía no se pueden subir archivos desde acá: falta conectar el almacenamiento. Por
+              eso tampoco hay botones para editar o borrar — no habría qué borrar.
             </p>
             <ul className="mt-4 space-y-2">
               {(data.archivos ?? []).length === 0 ? (
@@ -889,6 +1090,12 @@ export default function ProyectoDetalleInner({
         ) : null}
 
         {tab === "historial" ? (
+          <div className="space-y-2">
+            <p className="text-xs text-slate-500">
+              El historial no se edita ni se borra: es el registro de por dónde pasó el pedido y
+              cuánto tardó en cada estado. Si se pudiera corregir, dejaría de servir para
+              reclamar o para medir.
+            </p>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -940,6 +1147,7 @@ export default function ProyectoDetalleInner({
                 </tbody>
               </table>
             </div>
+          </div>
           </div>
         ) : null}
       </div>

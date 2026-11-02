@@ -79,3 +79,51 @@ export async function PATCH(
     return NextResponse.json(errorResponse(msg), { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/proyectos/[id]/tareas/[tareaId] — borra una tarea.
+ *
+ * Una tarea es una nota de trabajo del pedido, no un documento: la que se
+ * cargó mal se borra y listo. El pedido queda marcado como tocado para que el
+ * tablero muestre el movimiento.
+ */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string; tareaId: string }> }
+) {
+  const auth = await requireProyectosApiAccess(request);
+  if (!auth.ok) {
+    return NextResponse.json(errorResponse(auth.message), { status: auth.status });
+  }
+
+  const { id: proyectoId, tareaId } = await params;
+  const pid = proyectoId?.trim() ?? "";
+  const tid = tareaId?.trim() ?? "";
+  if (!pid || !tid) return NextResponse.json(errorResponse("ids obligatorios"), { status: 400 });
+
+  try {
+    const sb = await getChatServiceClientForEmpresa(auth.empresaId);
+    const { data, error } = await sb
+      .from("proyecto_tareas")
+      .delete()
+      .eq("empresa_id", auth.empresaId)
+      .eq("proyecto_id", pid)
+      .eq("id", tid)
+      .select("id");
+    if (error) return NextResponse.json(errorResponse(error.message), { status: 400 });
+    if (!Array.isArray(data) || data.length === 0) {
+      return NextResponse.json(errorResponse("No encontrado"), { status: 404 });
+    }
+
+    await sb
+      .from("proyectos")
+      .update({ last_activity_at: new Date().toISOString(), updated_by: auth.usuarioCatalogId })
+      .eq("empresa_id", auth.empresaId)
+      .eq("id", pid);
+
+    return NextResponse.json(successResponse({ id: tid }));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error";
+    return NextResponse.json(errorResponse(msg), { status: 500 });
+  }
+}
