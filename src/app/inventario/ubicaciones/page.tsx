@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { useDialogos } from "@/components/ui/Dialogos";
 
 interface Ubicacion {
   id: string;
@@ -32,6 +33,10 @@ const TIPOS = ["deposito","salon","pasillo","gondola","estante","zona","otro"] a
 
 export default function UbicacionesPage() {
   const { isAdmin } = useIsAdmin();
+  const { avisar, confirmar } = useDialogos();
+  /** Fila que se está editando, con lo que se escribió hasta ahora. */
+  const [editando, setEditando] = useState<{ id: string; nombre: string; codigo: string; tipo: string } | null>(null);
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
   const [items, setItems] = useState<Ubicacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +92,59 @@ export default function UbicacionesPage() {
     } finally {
       setCreating(false);
     }
+  }
+
+  /**
+   * Guardar el renombre. La ubicación es un rótulo: lo que cambia es cómo se
+   * llama, de qué tipo es y su código. Mover productos de lugar se hace desde
+   * el producto, no desde acá.
+   */
+  async function guardarEdicion() {
+    if (!editando || guardandoEdicion) return;
+    const nombre = editando.nombre.trim();
+    if (nombre === "") {
+      await avisar({ mensaje: "La ubicación necesita un nombre.", tono: "peligro" });
+      return;
+    }
+    setGuardandoEdicion(true);
+    try {
+      const r = await fetch(`/api/inventario/ubicaciones/${editando.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ nombre, codigo: editando.codigo.trim() || null, tipo: editando.tipo }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        await avisar({ mensaje: j?.error ?? "No se pudo guardar.", tono: "peligro" });
+        return;
+      }
+      setEditando(null);
+      load();
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  }
+
+  /**
+   * Borrar. El servidor la deja borrar sólo si está vacía: sin productos
+   * guardados ahí y sin ubicaciones adentro. Si tiene algo, dice qué.
+   */
+  async function borrar(u: Ubicacion) {
+    const seguir = await confirmar({
+      titulo: `Borrar "${u.nombre}"`,
+      mensaje: "Sólo se puede borrar una ubicación vacía. Si tiene productos, movelos o desactivala.",
+      confirmar: "Borrar",
+      tono: "peligro",
+    });
+    if (!seguir) return;
+    const r = await fetch(`/api/inventario/ubicaciones/${u.id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j?.success) load();
+    else await avisar({ mensaje: j?.error ?? "No se pudo borrar.", tono: "peligro" });
   }
 
   async function toggleActivo(u: Ubicacion) {
@@ -212,9 +270,43 @@ export default function UbicacionesPage() {
                 const parent = items.find((i) => i.id === u.parent_id);
                 return (
                   <tr key={u.id} className="border-t border-slate-100">
-                    <td className="px-4 py-2 font-medium">{u.nombre}</td>
-                    <td className="px-4 py-2 text-gray-500">{u.tipo}</td>
-                    <td className="px-4 py-2 text-gray-500">{u.codigo ?? "—"}</td>
+                    {editando?.id === u.id ? (
+                      <>
+                        <td className="px-4 py-2">
+                          <input
+                            value={editando.nombre}
+                            onChange={(e) => setEditando({ ...editando, nombre: e.target.value })}
+                            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm outline-none focus:border-[#4FAEB2]"
+                            autoFocus
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <select
+                            value={editando.tipo}
+                            onChange={(e) => setEditando({ ...editando, tipo: e.target.value })}
+                            className="rounded-md border border-slate-300 px-2 py-1 text-sm outline-none focus:border-[#4FAEB2]"
+                          >
+                            {TIPOS.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            value={editando.codigo}
+                            onChange={(e) => setEditando({ ...editando, codigo: e.target.value })}
+                            placeholder="—"
+                            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm outline-none focus:border-[#4FAEB2]"
+                          />
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-2 font-medium">{u.nombre}</td>
+                        <td className="px-4 py-2 text-gray-500">{u.tipo}</td>
+                        <td className="px-4 py-2 text-gray-500">{u.codigo ?? "—"}</td>
+                      </>
+                    )}
                     <td className="px-4 py-2 text-gray-500">{parent?.nombre ?? "—"}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-gray-700">
                       {u.productos > 0 ? fmtNum(u.productos) : "—"}
@@ -241,12 +333,47 @@ export default function UbicacionesPage() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <button
-                        onClick={() => toggleActivo(u)}
-                        className="text-xs text-sky-700 hover:text-sky-900 underline"
-                      >
-                        {u.activo ? "Desactivar" : "Activar"}
-                      </button>
+                      {editando?.id === u.id ? (
+                        <div className="inline-flex items-center gap-3">
+                          <button
+                            onClick={guardarEdicion}
+                            disabled={guardandoEdicion}
+                            className="text-xs font-semibold text-[#2F6F72] hover:underline disabled:opacity-50"
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            onClick={() => setEditando(null)}
+                            disabled={guardandoEdicion}
+                            className="text-xs text-slate-500 hover:underline disabled:opacity-50"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-3">
+                          <button
+                            onClick={() =>
+                              setEditando({ id: u.id, nombre: u.nombre, codigo: u.codigo ?? "", tipo: u.tipo })
+                            }
+                            className="text-xs text-slate-600 hover:text-slate-900 underline"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => toggleActivo(u)}
+                            className="text-xs text-sky-700 hover:text-sky-900 underline"
+                          >
+                            {u.activo ? "Desactivar" : "Activar"}
+                          </button>
+                          <button
+                            onClick={() => borrar(u)}
+                            className="text-xs text-red-600 hover:text-red-800 underline"
+                          >
+                            Borrar
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

@@ -288,6 +288,54 @@ export async function updateUbicacion(
   return rows[0] ?? null;
 }
 
+/**
+ * Borra una ubicación vacía.
+ *
+ * Vacía de verdad: sin productos apuntando a ella y sin ubicaciones adentro.
+ * Borrar una que tiene cosas dejaría productos señalando un lugar que no
+ * existe, y nadie sabría dónde están. Para una ubicación con historia está
+ * desactivar, que la saca de los selectores sin perder lo que ya está
+ * clasificado.
+ *
+ * Devuelve qué la retiene, para no dejar a nadie adivinando por qué no se pudo.
+ */
+export async function deleteUbicacion(
+  schemaRaw: string,
+  empresaId: string,
+  id: string
+): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const t = quoteSchemaTable(schema, "inventario_ubicaciones");
+  const tProd = quoteSchemaTable(schema, "productos");
+
+  const hijas = await pool().query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM ${t} WHERE parent_id = $1::uuid AND empresa_id = $2::uuid`,
+    [id, empresaId]
+  );
+  const cuantasHijas = Number(hijas.rows[0]?.n ?? "0");
+  if (cuantasHijas > 0) {
+    return {
+      ok: false,
+      motivo: `Esa ubicación tiene ${cuantasHijas} ubicación(es) adentro. Borralas o movelas primero.`,
+    };
+  }
+
+  const usados = await pool().query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM ${tProd} WHERE ubicacion_principal_id = $1::uuid AND empresa_id = $2::uuid`,
+    [id, empresaId]
+  );
+  const cuantos = Number(usados.rows[0]?.n ?? "0");
+  if (cuantos > 0) {
+    return {
+      ok: false,
+      motivo: `${cuantos} producto(s) están guardados ahí. Movelos a otra ubicación, o desactivala en vez de borrarla.`,
+    };
+  }
+
+  await pool().query(`DELETE FROM ${t} WHERE id = $1::uuid AND empresa_id = $2::uuid`, [id, empresaId]);
+  return { ok: true };
+}
+
 // ─── Relacion producto<->categoria principal ────────────────────────────
 
 /**

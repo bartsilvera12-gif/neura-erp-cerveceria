@@ -3,7 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
-import { updateUbicacion } from "@/lib/inventario/server/catalogos-pg";
+import { deleteUbicacion, updateUbicacion } from "@/lib/inventario/server/catalogos-pg";
 import { normalizeUpperText, normalizeUpperNullable } from "@/lib/text/normalize";
 
 export async function PATCH(
@@ -29,5 +29,29 @@ export async function PATCH(
   } catch (err) {
     console.error("[/api/inventario/ubicaciones/[id] PATCH]", err);
     return NextResponse.json(errorResponse("No se pudo actualizar la ubicación."), { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/inventario/ubicaciones/[id] — borra una ubicación vacía.
+ *
+ * Sólo si no hay productos guardados ahí ni ubicaciones adentro. Cuando no se
+ * puede, la respuesta dice qué la retiene: lo que hay que mover primero.
+ */
+export async function DELETE(
+  request: NextRequest,
+  ctxParams: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await ctxParams.params;
+    const ctx = await getTenantSupabaseFromAuth(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
+    const res = await deleteUbicacion(schema, ctx.auth.empresa_id, id);
+    if (!res.ok) return NextResponse.json(errorResponse(res.motivo), { status: 409 });
+    return NextResponse.json(successResponse({ id }));
+  } catch (err) {
+    console.error("[/api/inventario/ubicaciones/[id] DELETE]", err);
+    return NextResponse.json(errorResponse("No se pudo borrar la ubicación."), { status: 500 });
   }
 }
