@@ -1,5 +1,5 @@
 // Gestiona el env de la app en Coolify vía API. Credenciales fuera del repo.
-// Subcomandos: list | getenv <uuid> | setdburl <uuid> | redeploy <uuid>
+// Subcomandos: list | getenv <uuid> | setdburl <uuid> | rename <uuid> <nombre> | redeploy <uuid>
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -81,6 +81,32 @@ if (cmd === "list") {
   console.log("PATCH status:", patch.status, "→", JSON.stringify(patch.json).slice(0, 200));
   if (patch.status >= 200 && patch.status < 300) console.log("✔ SUPABASE_DB_URL actualizado. Falta redeploy para que tome efecto.");
   else { console.log("✗ Falló el PATCH — el env NO se cambió."); process.exit(1); }
+} else if (cmd === "rename") {
+  // Renombra el app en el panel. Es SOLO la etiqueta de Coolify: no toca el
+  // dominio, ni el contenedor, ni las variables, ni dispara un deploy.
+  // DRY-RUN por defecto; muta sólo con el 4to arg literal "apply".
+  const nombre = (process.argv[4] ?? "").trim();
+  const apply = process.argv[5] === "apply";
+  if (!uuid || !nombre) { console.log("uso: rename <uuid> <nombre> [apply]"); process.exit(1); }
+
+  const actual = await call(`/applications/${uuid}`);
+  if (actual.status !== 200) { console.log("ERR", actual.status, JSON.stringify(actual.json).slice(0, 300)); process.exit(1); }
+  const app = actual.json?.data ?? actual.json;
+  console.log("ANTES  :", app?.name, "| fqdn:", app?.fqdn ?? "(sin dominio)");
+  console.log("DESPUÉS:", nombre);
+  if (app?.name === nombre) { console.log("Sin cambios — ya se llama así. No-op."); process.exit(0); }
+  if (!apply) {
+    console.log("\n*** DRY-RUN — no se aplicó nada. Para renombrar de verdad:");
+    console.log(`    node scripts/coolify-apply.mjs rename ${uuid} "${nombre}" apply`);
+    process.exit(0);
+  }
+  const patch = await call(`/applications/${uuid}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name: nombre }),
+  });
+  console.log("PATCH status:", patch.status, "→", JSON.stringify(patch.json).slice(0, 200));
+  if (patch.status >= 200 && patch.status < 300) console.log("✔ Renombrado. No hace falta redeploy: es sólo el nombre del panel.");
+  else { console.log("✗ Falló el PATCH — el nombre NO cambió."); process.exit(1); }
 } else if (cmd === "redeploy") {
   // Dispara un redeploy del app. DRY-RUN por defecto; ejecuta sólo con 3er arg literal "apply".
   const apply = process.argv[4] === "apply";
@@ -93,5 +119,5 @@ if (cmd === "list") {
   const dep = await call(`/deploy?uuid=${encodeURIComponent(uuid)}&force=false`);
   console.log("DEPLOY status:", dep.status, "→", JSON.stringify(dep.json).slice(0, 300));
 } else {
-  console.log("uso: list | getenv <uuid> | showdburl <uuid> | setdburl <uuid> [apply] | redeploy <uuid> [apply]");
+  console.log("uso: list | getenv <uuid> | showdburl <uuid> | setdburl <uuid> [apply] | rename <uuid> <nombre> [apply] | redeploy <uuid> [apply]");
 }
