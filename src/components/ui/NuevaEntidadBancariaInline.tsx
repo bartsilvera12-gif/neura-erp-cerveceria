@@ -94,7 +94,7 @@ export default function NuevaEntidadBancariaInline({
         </button>
       </div>
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-      <p className="mt-1 text-[11px] text-slate-400">También se gestionan en Configuración → Entidades bancarias.</p>
+      <p className="mt-1 text-[11px] text-slate-400">También se gestionan en Caja → Entidades bancarias.</p>
     </div>
   );
 }
