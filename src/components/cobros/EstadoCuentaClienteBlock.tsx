@@ -154,6 +154,11 @@ export function EstadoCuentaClienteBlock({
 
           {loading ? (
             <div className="p-8 flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</div>
+          ) : error ? (
+            // Con la carga fallada no se sabe si el cliente tiene cuentas o no:
+            // decir "no tiene cuentas pendientes" al lado del error era afirmar
+            // algo que nadie comprobó.
+            null
           ) : sinCuentas ? (
             <div className="p-8 text-center text-sm text-gray-500">El cliente no tiene cuentas pendientes.</div>
           ) : (

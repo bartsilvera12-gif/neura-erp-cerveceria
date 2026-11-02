@@ -1,4 +1,4 @@
-import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { exigirSucursales, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
@@ -15,6 +15,10 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const empresaId = ctx.auth.empresa_id;
+    // El estado de cuenta de un cliente es un informe de lectura: en la vista
+    // consolidada tiene que sumar las dos sucursales, no cortar con un error.
+    // La deuda es del cliente, no del local donde la generó.
+    const sucursales = exigirSucursales(ctx.auth);
     const hoy = new Date().toISOString().slice(0, 10);
 
     const cq = await ctx.supabase
@@ -40,7 +44,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       .from("ventas")
       .select("total")
       .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth))
+      .in("sucursal_id", sucursales)
       .eq("cliente_id", id);
     if (vq.error) throw new Error(vq.error.message);
     const totalVendido = ((vq.data ?? []) as Record<string, unknown>[]).reduce((acc, r) => acc + (Number(r.total) || 0), 0);
@@ -50,7 +54,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       .from("cuentas_por_cobrar")
       .select("id, venta_id, numero_venta, fecha_emision, fecha_vencimiento, moneda, total, saldo, estado")
       .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth))
+      .in("sucursal_id", sucursales)
       .eq("cliente_id", id)
       .order("fecha_emision", { ascending: false });
     if (cxcQ.error) throw new Error(cxcQ.error.message);
@@ -119,7 +123,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       .from("cobros_clientes")
       .select("id, cuenta_por_cobrar_id, venta_id, fecha_pago, monto, metodo_pago, referencia")
       .eq("empresa_id", empresaId)
-      .eq("sucursal_id", exigirSucursal(ctx.auth))
+      .in("sucursal_id", sucursales)
       .eq("cliente_id", id)
       .order("fecha_pago", { ascending: false })
       .limit(500);
