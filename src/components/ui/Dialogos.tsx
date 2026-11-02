@@ -60,10 +60,13 @@ export type OpcionesTexto = {
   multilinea?: boolean;
 };
 
-type Pendiente =
+type PendienteSinId =
   | { tipo: "confirmar"; op: Required<Omit<OpcionesConfirmar, "titulo">> & { titulo?: string }; resolver: (v: boolean) => void }
   | { tipo: "aviso"; op: OpcionesAviso; resolver: (v: void) => void }
   | { tipo: "texto"; op: OpcionesTexto; resolver: (v: string | null) => void };
+
+/** Cada diálogo lleva un id propio: es la `key` del componente (ver más abajo). */
+type Pendiente = PendienteSinId & { uid: number };
 
 type Api = {
   confirmar: (op: OpcionesConfirmar | string) => Promise<boolean>;
@@ -101,7 +104,12 @@ export default function DialogosProvider({ children }: { children: React.ReactNo
   const [cola, setCola] = useState<Pendiente[]>([]);
   const actual = cola[0] ?? null;
 
-  const encolar = useCallback((p: Pendiente) => setCola((q) => [...q, p]), []);
+  const siguienteUid = useRef(0);
+  const encolar = useCallback((p: PendienteSinId) => {
+    siguienteUid.current += 1;
+    const conId = { ...p, uid: siguienteUid.current } as Pendiente;
+    setCola((q) => [...q, conId]);
+  }, []);
 
   const cerrar = useCallback(() => setCola((q) => q.slice(1)), []);
 
@@ -138,7 +146,11 @@ export default function DialogosProvider({ children }: { children: React.ReactNo
   return (
     <Ctx.Provider value={api}>
       {children}
-      {actual && <Dialogo key={cola.length} pendiente={actual} alCerrar={cerrar} />}
+      {/* La key tiene que ser única por diálogo. Antes era `cola.length`: al
+          encadenar dos pedidos (p. ej. nombre → capacidad del fermentador) el
+          segundo llegaba con la misma key, React reutilizaba la instancia ya
+          resuelta y ningún botón respondía (ni Guardar, ni Cancelar, ni la X). */}
+      {actual && <Dialogo key={actual.uid} pendiente={actual} alCerrar={cerrar} />}
     </Ctx.Provider>
   );
 }

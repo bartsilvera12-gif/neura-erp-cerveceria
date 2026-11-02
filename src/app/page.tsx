@@ -131,19 +131,22 @@ function formatGsFull(n: number): string {
   return Math.round(num).toLocaleString("es-PY");
 }
 
-/** Formato abreviado (mantengo para charts/ejes donde el espacio es limitado). */
+/**
+ * Formato abreviado para charts/ejes donde el espacio es limitado.
+ * Siempre en millones (M) — o miles de millones (B) — nunca en miles (K):
+ * 286.000 → "0,29M", 1.250.000 → "1,25M".
+ */
 function formatGsM(n: number): string {
   const num = Number(n);
   if (!Number.isFinite(num) || num < 0) return "0";
+  if (num === 0) return "0";
   if (num >= 1_000_000_000) {
-    const b = num / 1_000_000_000;
-    return b % 1 === 0 ? `${b}B` : `${b.toFixed(1)}B`;
+    return `${(num / 1_000_000_000).toLocaleString("es-PY", { maximumFractionDigits: 1 })}B`;
   }
-  if (num >= 1_000_000) {
+  if (num >= 1_000) {
     const m = num / 1_000_000;
-    return m % 1 === 0 ? `${m}M` : `${m.toFixed(1)}M`;
+    return `${m.toLocaleString("es-PY", { maximumFractionDigits: m >= 0.1 ? 2 : 3 })}M`;
   }
-  if (num >= 1_000) return `${Math.round(num / 1_000)}K`;
   return num.toLocaleString("es-PY");
 }
 
@@ -1069,6 +1072,89 @@ function composicionFacturacionPorModalidad(facturasPeriodo: FacturaRaw[]) {
   };
 }
 
+/** Tabla ordenada (mayor a menor) de montos por tipo de cliente: tipo · monto · % · barra. */
+function FinTablaPorTipo({
+  className,
+  titulo,
+  subtitulo,
+  vacio,
+  totalLabel,
+  rows,
+  total,
+  max,
+}: {
+  className: string;
+  titulo: string;
+  subtitulo: string;
+  vacio: string;
+  totalLabel: string;
+  rows: { key: string; label: string; value: number; color: string }[];
+  total: number;
+  max: number;
+}) {
+  const ordenadas = [...rows].sort((a, b) => b.value - a.value);
+  return (
+    <div className={`${className} flex h-full flex-col`}>
+      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">{titulo}</h3>
+      <p className="mt-1 text-[11px] text-slate-400">{subtitulo}</p>
+      {ordenadas.length === 0 ? (
+        <p className="mt-6 text-sm text-slate-500">{vacio}</p>
+      ) : (
+        <div className="mt-5 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-200">
+          <table className="w-full table-fixed text-sm">
+            <colgroup>
+              <col />
+              <col className="w-[9.5rem]" />
+              <col className="w-16" />
+            </colgroup>
+            <thead className="border-b border-slate-200 bg-slate-50">
+              <tr>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Tipo de cliente</th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Monto</th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">%</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {ordenadas.map((row) => {
+                const pct = total > 0 ? (row.value / total) * 100 : 0;
+                return (
+                  <tr key={row.key} className="hover:bg-slate-50/70">
+                    <td className="px-4 py-3 align-middle">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
+                        <span className="truncate font-medium text-slate-700" title={row.label}>{row.label}</span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${max > 0 ? (row.value / max) * 100 : 0}%`, backgroundColor: row.color }}
+                        />
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right align-middle font-semibold tabular-nums text-slate-900">
+                      Gs. {formatGs(row.value)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right align-middle tabular-nums text-slate-500">
+                      {pct.toFixed(1)}%
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="border-t border-slate-200 bg-slate-50">
+              <tr>
+                <td className="px-4 py-3 font-semibold text-slate-600">{totalLabel}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums text-slate-900">Gs. {formatGs(total)}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-500">100%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // memo: el sub-dashboard financiero hace muchos useMemo internos sobre facturas
 // y pagos. Sin memo, cualquier render del padre (ej: cambio de tab) los invalidaba.
 const DashFinanciero = memo(function DashFinanciero({
@@ -1437,104 +1523,30 @@ const DashFinanciero = memo(function DashFinanciero({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
-        <div className={finCard}>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Deuda por tipo de cliente</h3>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Σ <span className="font-medium text-slate-500">saldo</span> de facturas emitidas en el rango, por{" "}
-            <span className="font-medium text-slate-500">clientes.tipo_servicio_cliente</span> (nombre desde catálogo
-            CRM).
-          </p>
-          {deudaPorTipoServicio.list.length === 0 ? (
-            <p className="mt-6 text-sm text-slate-500">No hay deuda pendiente (saldo &gt; 0) en el período o sin segmentos con saldo.</p>
-          ) : (
-            <div className="mt-6 space-y-4">
-              {deudaPorTipoServicio.list.map((row) => (
-                <div key={row.key}>
-                  <div className="flex min-w-0 items-baseline justify-between gap-3 text-sm">
-                    <span className="min-w-0 break-words font-medium text-slate-700" title={row.label}>
-                      <span
-                        className="mr-2 inline-block h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: row.color }}
-                      />
-                      {row.label}
-                    </span>
-                    <span className="shrink-0 text-right text-sm font-bold tabular-nums text-slate-900">
-                      Gs. {formatGs(row.value)}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full min-w-0 rounded-full"
-                      style={{
-                        width: `${deudaMaxTipo > 0 ? (row.value / deudaMaxTipo) * 100 : 0}%`,
-                        backgroundColor: row.color,
-                      }}
-                      title={row.label}
-                    />
-                  </div>
-                </div>
-              ))}
-              <div className="flex min-w-0 items-baseline justify-between gap-2 border-t border-slate-100 pt-4 text-sm">
-                <span className="font-semibold text-slate-600">Total deuda (vista)</span>
-                <span className="shrink-0 text-right text-base font-bold tabular-nums text-slate-900">
-                  Gs. {formatGs(deudaPorTipoServicio.total)}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className={finCard}>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Cobrado por tipo de cliente</h3>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Σ <span className="font-medium text-slate-500">monto de pagos</span> con fecha de pago en el rango (misma
-            lógica que <span className="font-medium text-slate-500">Cobrado por día</span> / factura no anulada),
-            asignado al <span className="font-medium text-slate-500">cliente</span> vía{" "}
-            <span className="font-medium text-slate-500">tipo_servicio_cliente</span> (nombre catálogo CRM). No
-            incluye contado sin fila de pago.
-          </p>
-          {cobradoPorTipoServicio.list.length === 0 ? (
-            <p className="mt-6 text-sm text-slate-500">No hay pagos en el período con factura vinculada a cliente.</p>
-          ) : (
-            <div className="mt-6 space-y-4">
-              {cobradoPorTipoServicio.list.map((row) => (
-                <div key={row.key}>
-                  <div className="flex min-w-0 items-baseline justify-between gap-3 text-sm">
-                    <span className="min-w-0 break-words font-medium text-slate-700" title={row.label}>
-                      <span
-                        className="mr-2 inline-block h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: row.color }}
-                      />
-                      {row.label}
-                    </span>
-                    <span className="shrink-0 text-right text-sm font-bold tabular-nums text-slate-900">
-                      Gs. {formatGs(row.value)}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full min-w-0 rounded-full"
-                      style={{
-                        width: `${cobradoMaxTipo > 0 ? (row.value / cobradoMaxTipo) * 100 : 0}%`,
-                        backgroundColor: row.color,
-                      }}
-                      title={row.label}
-                    />
-                  </div>
-                </div>
-              ))}
-              <div className="flex min-w-0 items-baseline justify-between gap-2 border-t border-slate-100 pt-4 text-sm">
-                <span className="font-semibold text-slate-600">Total cobrado (vista)</span>
-                <span className="shrink-0 text-right text-base font-bold tabular-nums text-slate-900">
-                  Gs. {formatGs(cobradoPorTipoServicio.total)}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-stretch">
+        <FinTablaPorTipo
+          className={finCard}
+          titulo="Deuda por tipo de cliente"
+          subtitulo="Saldo pendiente de las facturas emitidas en el período."
+          vacio="No hay deuda pendiente en el período."
+          totalLabel="Total deuda"
+          rows={deudaPorTipoServicio.list}
+          total={deudaPorTipoServicio.total}
+          max={deudaMaxTipo}
+        />
+        <FinTablaPorTipo
+          className={finCard}
+          titulo="Cobrado por tipo de cliente"
+          subtitulo="Pagos registrados en el período (no incluye contado sin pago registrado)."
+          vacio="No hay pagos registrados en el período."
+          totalLabel="Total cobrado"
+          rows={cobradoPorTipoServicio.list}
+          total={cobradoPorTipoServicio.total}
+          max={cobradoMaxTipo}
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5 lg:gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5 lg:items-stretch lg:gap-8">
         <motion.div whileHover={{ y: -2 }} className={`${finCard} lg:col-span-3`}>
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Progreso de metas</h3>
           <div className="mt-6 grid grid-cols-1 gap-8 sm:grid-cols-2">
@@ -1630,8 +1642,7 @@ const DashInventario = memo(function DashInventario({
   const criticos = useMemo(() =>
     productos
       .filter(p => p.stock_actual <= p.stock_minimo)
-      .sort((a, b) => a.stock_actual - b.stock_actual)
-      .slice(0, 10),
+      .sort((a, b) => a.stock_actual - b.stock_actual),
     [productos]
   );
 
@@ -1676,7 +1687,7 @@ const DashInventario = memo(function DashInventario({
             </h3>
             {criticos.length > 0 && (
               <span className="shrink-0 text-xs font-medium text-slate-400 tabular-nums">
-                {criticos.length} de {inventarioSinCargar ? totalProductos : bajosStock}
+                {criticos.length} {criticos.length === 1 ? "producto" : "productos"}
               </span>
             )}
           </div>
@@ -1703,9 +1714,9 @@ const DashInventario = memo(function DashInventario({
               <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> Todos los productos tienen stock suficiente.
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <div className="max-h-[420px] overflow-auto rounded-lg border border-slate-200">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                   <tr>
                     <th className="w-10 px-3 py-3">
                       <input type="checkbox" className="rounded border-slate-300 text-[#0EA5E9] focus:ring-[#0EA5E9]" />
@@ -1876,7 +1887,13 @@ const DashVentas = memo(function DashVentas({
       value: 0,
     }));
     ventasHoy.forEach(v => {
-      const h = new Date(v.fecha).getHours();
+      // `fecha` viene truncada a día (YYYY-MM-DD): new Date() la toma como medianoche UTC
+      // y la hora caía siempre en 21h (PY). Usamos el timestamp real de la venta.
+      const ts = v.fecha_hora && v.fecha_hora.includes("T") ? v.fecha_hora : "";
+      if (!ts) return;
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())) return;
+      const h = d.getHours();
       if (h >= 0 && h < 24) horas[h].value += v.total;
     });
     const ahora = new Date().getHours();

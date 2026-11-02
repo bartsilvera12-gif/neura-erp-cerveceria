@@ -3,6 +3,7 @@ import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { normalizeUpperText, normalizeUpperNullable } from "@/lib/text/normalize";
 import type { PreviewRow, PreviewResponse } from "@/lib/excel/import-types";
 import { pick, pickBool, chunked } from "./import-helpers";
+import { normalizarNombreProveedor } from "@/lib/proveedores/server/proveedores-pg";
 
 export interface ProveedorParsed {
   row_number: number;
@@ -72,7 +73,7 @@ export async function buildProvResolverMaps(schemaRaw: string, empresaId: string
   const byNombre = new Map<string, ProvEx>();
   for (const p of prods.rows) {
     if (p.ruc) byRuc.set(p.ruc.toUpperCase(), p);
-    byNombre.set(p.nombre.trim().toUpperCase(), p);
+    byNombre.set(normalizarNombreProveedor(p.nombre), p);
   }
   const rubrosByName = new Map<string, string>();
   for (const c of cats.rows) rubrosByName.set(c.nombre.trim().toUpperCase(), c.id);
@@ -83,12 +84,32 @@ export function buildProvPreview(parsed: ProveedorParsed[], maps: ProvResolverMa
   const rubrosFaltantes = new Set<string>();
   let insertar = 0, actualizar = 0, errores = 0, warnings = 0;
   const rucsVistos = new Set<string>();
+  const nombresVistos = new Set<string>();
   const rows: PreviewRow[] = parsed.map((p) => {
     if (p.ruc && rucsVistos.has(p.ruc)) p.errors.push(`RUC duplicado en archivo: ${p.ruc}`);
     if (p.ruc) rucsVistos.add(p.ruc);
+    const nombreKey = normalizarNombreProveedor(p.nombre);
+    if (nombreKey && nombresVistos.has(nombreKey)) p.errors.push(`Nombre duplicado en archivo: ${p.nombre}`);
+    if (nombreKey) nombresVistos.add(nombreKey);
     let matchId: string | null = null;
-    if (p.ruc && maps.byRuc.has(p.ruc)) matchId = maps.byRuc.get(p.ruc)!.id;
-    else if (!p.ruc && maps.byNombre.has(p.nombre)) matchId = maps.byNombre.get(p.nombre)!.id;
+    const porNombre = nombreKey ? maps.byNombre.get(nombreKey) : undefined;
+    if (p.ruc && maps.byRuc.has(p.ruc)) {
+      matchId = maps.byRuc.get(p.ruc)!.id;
+      // El RUC apunta a una ficha y el nombre a otra: actualizar dejaría dos con el mismo nombre.
+      if (porNombre && porNombre.id !== matchId) {
+        p.errors.push(`Ya existe otro proveedor llamado "${porNombre.nombre}".`);
+      }
+    } else if (porNombre) {
+      // Mismo nombre que uno existente. Sin RUC (o con el mismo) es el mismo proveedor;
+      // con un RUC distinto ya cargado, son dos fichas con el mismo nombre: no se crea.
+      if (p.ruc && porNombre.ruc && porNombre.ruc.toUpperCase() !== p.ruc) {
+        p.errors.push(
+          `Ya existe un proveedor llamado "${porNombre.nombre}" con otro RUC (${porNombre.ruc}). Diferencialo en el nombre.`
+        );
+      } else {
+        matchId = porNombre.id;
+      }
+    }
     p.match_id = matchId;
     for (const ru of p.rubros) {
       if (!maps.rubrosByName.has(ru)) {

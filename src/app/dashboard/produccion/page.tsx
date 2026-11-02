@@ -83,14 +83,38 @@ export default function ProduccionPage() {
    * sin nada que lo explique.
    */
   async function borrarLote(id: string, codigoLote: string, estado: string) {
-    if (estado !== "planificado") {
+    if (estado === "cerrado" || estado === "cancelado") {
       await avisar({
-        titulo: `El lote ${codigoLote} ya arrancó`,
+        titulo: `El lote ${codigoLote} está ${estado}`,
         mensaje:
-          "Consumió materia prima, así que borrarlo dejaría ese consumo sin explicación. " +
-          "Abrí el lote y cancelalo: libera el fermentador y deja el rastro.",
+          "Un lote terminado queda como registro de lo que se produjo (o se perdió) y no se borra.",
         tono: "peligro",
       });
+      return;
+    }
+    if (estado !== "planificado") {
+      // Ya arrancó: no se borra, pero se puede cancelar desde acá mismo
+      // (antes solo se avisaba y había que buscar la opción dentro del lote).
+      const cancelar = await confirmar({
+        titulo: `El lote ${codigoLote} ya arrancó`,
+        mensaje:
+          "Consumió materia prima, así que no se puede borrar. Lo que sí podés es cancelarlo: " +
+          "libera el fermentador, devuelve la materia prima si todavía no se envasó nada y deja el rastro.\n\n" +
+          "¿Cancelar el lote?",
+        confirmar: "Cancelar lote",
+        cancelar: "Volver",
+        tono: "peligro",
+      });
+      if (!cancelar) return;
+      await accion(
+        `/api/produccion/lotes/${id}/etapa`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cancelar: true, nota: null }),
+        },
+        "No se pudo cancelar el lote."
+      );
       return;
     }
     const seguir = await confirmar({
@@ -456,7 +480,9 @@ export default function ProduccionPage() {
                             title={
                               l.estado === "planificado"
                                 ? "Borrar este lote"
-                                : "Ya arrancó: se cancela desde la pantalla del lote"
+                                : l.estado === "cerrado" || l.estado === "cancelado"
+                                  ? "Lote terminado: queda como registro"
+                                  : "Ya arrancó: se cancela en lugar de borrarse"
                             }
                             aria-label={`Borrar el lote ${l.codigo}`}
                             className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"

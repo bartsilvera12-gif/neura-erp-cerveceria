@@ -87,6 +87,8 @@ export interface VentaRaw {
   moneda: string;
   tipo_cambio?: number;
   fecha: string;
+  /** Timestamp ISO real de la venta (created_at, o fecha si trae hora). Para "ventas por hora". */
+  fecha_hora?: string;
 }
 
 export interface CompraRaw {
@@ -472,6 +474,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         moneda: (r.moneda as string) ?? "GS",
         tipo_cambio: Number(r.tipo_cambio) ?? 1,
         fecha: toCalendarDateStr(r.fecha as string) || toIsoTimestampStr(r.fecha as string),
+        fecha_hora: toIsoTimestampStr((r.created_at as string) ?? (r.fecha as string)),
       };
     });
 

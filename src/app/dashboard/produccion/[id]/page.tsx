@@ -12,6 +12,7 @@ import { abvEstimado, atenuacion, ogFg } from "@/lib/produccion/densidad";
 import { Thermometer, Trash2 } from "lucide-react";
 
 import NumeroInput from "@/components/ui/NumeroInput";
+import { useDialogos } from "@/components/ui/Dialogos";
 type Lote = {
   id: string;
   codigo: string;
@@ -76,6 +77,7 @@ export default function LoteDetallePage() {
   const { id } = useParams<{ id: string }>();
   const { rol } = useRolErp();
   const puedeEditar = puedeEditarRecetas(rol);
+  const { confirmar } = useDialogos();
 
   const [lote, setLote] = useState<Lote | null>(null);
   const [etapas, setEtapas] = useState<Etapa[]>([]);
@@ -159,6 +161,27 @@ export default function LoteDetallePage() {
     }
   }
 
+  async function cancelarLote() {
+    if (!lote) return;
+    const arrancado = lote.estado !== "planificado";
+    const ok = await confirmar({
+      titulo: `Cancelar el lote ${lote.codigo}`,
+      mensaje: arrancado
+        ? "Libera el fermentador y deja el rastro de lo que pasó. Si todavía no se envasó nada, la materia prima vuelve al stock. No se puede deshacer."
+        : "El lote todavía no arrancó: se cancela sin mover stock y libera el fermentador. No se puede deshacer.",
+      confirmar: "Cancelar lote",
+      cancelar: "Volver",
+      tono: "peligro",
+    });
+    if (!ok) return;
+    const hecho = await accion(
+      `/api/produccion/lotes/${id}/etapa`,
+      { cancelar: true, nota: notaEtapa || null },
+      "No se pudo cancelar el lote."
+    );
+    if (hecho) setNotaEtapa("");
+  }
+
   async function guardarMedicion() {
     const ok = await accion(
       `/api/produccion/lotes/${id}/mediciones`,
@@ -240,9 +263,24 @@ export default function LoteDetallePage() {
             </p>
           </div>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-          {ETAPA_LABEL[lote.estado] ?? lote.estado}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+            {ETAPA_LABEL[lote.estado] ?? lote.estado}
+          </span>
+          {/* Cancelar está siempre a mano mientras el lote no terminó (también en
+              planificado): antes solo aparecía junto a "Pasar a…" y desde el
+              planificado no había forma de cancelarlo. */}
+          {puedeEditar && !terminado && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void cancelarLote()}
+              className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <X className="h-4 w-4" aria-hidden /> Cancelar lote
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -414,20 +452,6 @@ export default function LoteDetallePage() {
               Pasar a {ETAPA_LABEL[proxima] ?? proxima} <ArrowRight className="h-4 w-4" />
             </button>
           )}
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void accion(
-                `/api/produccion/lotes/${id}/etapa`,
-                { cancelar: true, nota: notaEtapa || null },
-                "No se pudo cancelar el lote."
-              )
-            }
-            className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
-          >
-            <X className="h-4 w-4" /> Cancelar lote
-          </button>
         </div>
       )}
 

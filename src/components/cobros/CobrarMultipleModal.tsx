@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import NuevaEntidadBancariaInline from "@/components/ui/NuevaEntidadBancariaInline";
 import { Loader2, Search, X } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
@@ -779,6 +780,10 @@ export function CobrarMultipleModal({
                     <option value="">— Elegí —</option>
                     {entidadesFiltradas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                   </select>
+                  <NuevaEntidadBancariaInline
+                    tipo={metodo === "tarjeta" ? "tarjeta" : "banco"}
+                    onCreada={(en) => { setEntidades((prev) => [...prev, en]); setEntidadId(en.id); }}
+                  />
                 </div>
               )}
               <div className={pideBanco ? "sm:col-span-2" : ""}>

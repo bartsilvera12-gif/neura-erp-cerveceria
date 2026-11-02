@@ -564,9 +564,27 @@ function ClienteBusquedaGlobal({
         </div>
       </div>
 
-      {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-          <div className="max-h-[60vh] overflow-y-auto overscroll-y-contain">
+      {/* En la pantalla inicial la lista va integrada debajo del buscador (no
+          flotante): antes era un desplegable de hasta 60vh colgando de un
+          buscador centrado y, con varios clientes, quedaba muy por debajo. */}
+      {(open || variant === "landing") && (
+        <div
+          className={
+            variant === "landing"
+              ? "mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+              : "absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+          }
+        >
+          {variant === "landing" && resultados.length > 0 ? (
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              <span>{query.trim() ? "Resultados" : "Clientes"}</span>
+              <span className="tabular-nums">
+                {resultados.length}
+                {!query.trim() && clientes.length > resultados.length ? ` de ${clientes.length}` : ""}
+              </span>
+            </div>
+          ) : null}
+          <div className={`${variant === "landing" ? "max-h-[min(22rem,45vh)]" : "max-h-[60vh]"} overflow-y-auto overscroll-y-contain`}>
             {resultados.length === 0 ? (
               <div className="px-4 py-8 text-center text-xs text-slate-400">
                 {query.trim() ? <>Sin resultados para &ldquo;{query.trim()}&rdquo;</> : <>Sin clientes cargados</>}
@@ -577,30 +595,42 @@ function ClienteBusquedaGlobal({
                   key={c.id}
                   type="button"
                   onClick={() => handleSelect(c)}
-                  className={`w-full border-b border-slate-100 px-3 py-2 text-left transition last:border-0 hover:bg-slate-50 ${
+                  className={`w-full border-b border-slate-100 px-3 py-2.5 text-left transition last:border-0 hover:bg-slate-50 ${
                     i === 0 && query.trim() ? "bg-sky-50/70" : ""
                   }`}
                 >
-                  <p className="truncate text-xs font-semibold text-slate-900">{clienteNombre(c)}</p>
-                  <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
-                    <span className="font-mono text-[10px] text-slate-400">{c.codigo_cliente}</span>
-                    {c.ruc ? <span className="text-[10px] text-slate-500">RUC {c.ruc}</span> : null}
-                    {c.telefono ? <span className="text-[10px] text-slate-500">{c.telefono}</span> : null}
+                  <div className="flex items-center gap-3">
+                    <span
+                      aria-hidden
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#4FAEB2]/10 text-[11px] font-bold uppercase text-[#3F8E91]"
+                    >
+                      {clienteNombre(c).trim().charAt(0) || "?"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-slate-900">{clienteNombre(c)}</p>
+                      <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                        <span className="font-mono text-[10px] text-slate-400">{c.codigo_cliente}</span>
+                        {c.ruc ? <span className="text-[10px] text-slate-500">RUC {c.ruc}</span> : null}
+                        {c.telefono ? <span className="text-[10px] text-slate-500">{c.telefono}</span> : null}
+                      </div>
+                    </div>
                   </div>
                 </button>
               ))
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] text-slate-400">
-            <span className="inline-flex items-center gap-1">
-              <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[9px] leading-none">↵</kbd>
-              primer resultado
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[9px] leading-none">Esc</kbd>
-              cerrar
-            </span>
-          </div>
+          {variant !== "landing" && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] text-slate-400">
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[9px] leading-none">↵</kbd>
+                primer resultado
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded border border-slate-200 bg-white px-1 py-0.5 font-mono text-[9px] leading-none">Esc</kbd>
+                cerrar
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -809,7 +839,7 @@ function GestionClientesPageInner() {
         style={{ minHeight: "min(560px, calc(100dvh - 10.5rem))" }}
       >
         {selected === null ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4 py-8">
+          <div className="flex flex-1 flex-col items-center justify-start gap-4 px-4 py-6 sm:py-8">
             <div className="space-y-1 text-center">
               <p className="text-sm font-semibold text-slate-800">Buscá un cliente</p>
               <p className="mx-auto max-w-md text-xs leading-relaxed text-slate-500">

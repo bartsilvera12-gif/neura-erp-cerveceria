@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
           stock <= 0
             ? `Sin stock · mínimo ${num(minimo)}${unidad ? " " + unidad : ""}`
             : `Quedan ${num(stock)}${unidad ? " " + unidad : ""} · mínimo ${num(minimo)}`,
-        href: `/inventario/${p.id}`,
+        href: `/inventario/${p.id}/editar`,
         // Sin stock es otra cosa que estar justo en el mínimo: una frena la
         // producción hoy, la otra avisa para comprar.
         severidad: stock <= 0 ? "alta" : "media",

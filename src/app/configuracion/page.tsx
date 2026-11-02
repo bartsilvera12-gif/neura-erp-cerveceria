@@ -6,7 +6,6 @@ import {
   FileText,
   GitBranch,
   Inbox,
-  Landmark,
   LayoutGrid,
   MessageCircle,
   Percent,
@@ -86,16 +85,6 @@ export default function ConfiguracionPage() {
               icon={Receipt}
               badge={editorBadge}
               href="/configuracion/facturacion"
-            />
-          </li>
-          <li>
-            <SettingsModuleCard
-              title="Entidades bancarias"
-              subtitle="GLOBAL · COBROS"
-              description="Cajas, bancos, tarjetas/POS y billeteras para el cobro de ventas y la conciliación. Código corto para búsqueda rápida del cajero."
-              icon={Landmark}
-              badge={editorBadge}
-              href="/configuracion/entidades-bancarias"
             />
           </li>
           <li>

@@ -85,6 +85,41 @@ export async function insertEntidadBancaria(
 }
 
 /** Update parcial de una entidad. Devuelve la fila o null si no pertenece a la empresa. */
+/**
+ * Borra una entidad bancaria si NUNCA se usó en un cobro.
+ * Las tablas de cobro guardan `entidad_bancaria_id` sin FK: borrar una usada
+ * dejaría esos cobros apuntando a nada y la conciliación sin banco. En ese
+ * caso devuelve `{ enUso: n }` y la entidad se desactiva en vez de borrarse.
+ */
+export async function deleteEntidadBancaria(
+  schemaRaw: string,
+  empresaId: string,
+  id: string
+): Promise<{ borrada: boolean; enUso: number }> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  let enUso = 0;
+  for (const tabla of ["ventas_pagos_detalle", "cobros_clientes", "recibos_dinero"]) {
+    try {
+      const { rows } = await pool().query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM ${quoteSchemaTable(schema, tabla)}
+          WHERE empresa_id = $1::uuid AND entidad_bancaria_id = $2::uuid`,
+        [empresaId, id]
+      );
+      enUso += Number(rows[0]?.n ?? 0);
+    } catch (e) {
+      // Tabla/columna inexistente en este esquema (42P01 / 42703): no hay usos ahí.
+      const code = (e as { code?: string })?.code;
+      if (code !== "42P01" && code !== "42703") throw e;
+    }
+  }
+  if (enUso > 0) return { borrada: false, enUso };
+  const { rowCount } = await pool().query(
+    `DELETE FROM ${quoteSchemaTable(schema, "entidades_bancarias")} WHERE id = $1::uuid AND empresa_id = $2::uuid`,
+    [id, empresaId]
+  );
+  return { borrada: (rowCount ?? 0) > 0, enUso: 0 };
+}
+
 export async function updateEntidadBancaria(
   schemaRaw: string,
   empresaId: string,
