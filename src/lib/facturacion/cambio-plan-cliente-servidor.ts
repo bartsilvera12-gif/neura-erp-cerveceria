@@ -7,6 +7,7 @@ import { aplicarPlanPendienteSiVencido } from "./suscripcion-plan-pendiente";
 import { emitEvent, EVENT_TYPES } from "@/lib/integrations/events";
 import { registrarClienteHistorialCambioPlan } from "@/lib/auditoria/cliente-historial-servidor";
 import type { CasoCambioPlan, CambioPlanContexto, ModoCambioPlan } from "./cambio-plan-cliente-types";
+import { insertarFacturaItems } from "@/lib/facturacion/insertar-factura-items";
 
 export type { CasoCambioPlan, CambioPlanContexto, ModoCambioPlan } from "./cambio-plan-cliente-types";
 
@@ -569,17 +570,21 @@ export async function actualizarFacturaSuscripcionAlPlan(opts: {
     .limit(1);
   const itemId = it && it[0] ? (it[0] as { id: string }).id : null;
   if (!itemId) {
-    const { error: iE } = await supabase.from("factura_items").insert({
-      factura_id: facturaId,
-      empresa_id: empresaId,
-      descripcion: descripcionLinea,
-      cantidad: 1,
-      precio_unitario: linea.precio_unitario,
-      subtotal: linea.subtotal,
-      iva: linea.iva,
-      total: linea.total,
-    });
-    if (iE) throw new Error(iE.message);
+    const { error: iE } = await insertarFacturaItems(
+      supabase,
+      [{
+        factura_id: facturaId,
+        empresa_id: empresaId,
+        descripcion: descripcionLinea,
+        cantidad: 1,
+        precio_unitario: linea.precio_unitario,
+        subtotal: linea.subtotal,
+        iva: linea.iva,
+        total: linea.total,
+      }],
+      10
+    );
+    if (iE) throw new Error(iE);
   } else {
     const { error: uI } = await supabase
       .from("factura_items")

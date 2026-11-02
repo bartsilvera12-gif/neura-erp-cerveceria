@@ -243,6 +243,7 @@ export default function ClienteDetailPage() {
   const [facturaPago, setFacturaPago] = useState<Factura | null>(null);
   const [formPago, setFormPago] = useState({ factura_id: "" as string, monto: "", fecha_pago: "", metodo_pago: "efectivo" as const, referencia: "" });
   const [guardandoPago, setGuardandoPago] = useState(false);
+  const [errorPago, setErrorPago] = useState<string | null>(null);
   const [modalFacturaContado, setModalFacturaContado] = useState(false);
   const [formFacturaContado, setFormFacturaContado] = useState<{
     monto: string;
@@ -2176,25 +2177,56 @@ export default function ClienteDetailPage() {
 
       {/* Modal Registrar pago */}
       {modalPago && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalPago(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => { setModalPago(false); setErrorPago(null); }}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-gray-800 mb-4">Registrar pago</h3>
             {facturaPago && <p className="text-sm text-slate-600 mb-4">Factura {facturaPago.numero_factura} — Saldo: Gs. {facturaPago.saldo.toLocaleString("es-PY")}</p>}
+            {errorPago && (
+              <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {errorPago}
+              </p>
+            )}
+            {/*
+              El pago se guardaba "en silencio": si la API fallaba o no había
+              factura elegida, el modal se cerraba igual y no quedaba nada. Lo
+              que se ve ahora es por qué no se pudo guardar.
+            */}
             <form onSubmit={async (e) => {
               e.preventDefault();
+              setErrorPago(null);
               const fid = facturaPago?.id ?? formPago.factura_id;
-              if (!fid) return;
+              if (!fid) {
+                setErrorPago("Elegí la factura que estás cobrando.");
+                return;
+              }
+              const monto = parseFloat(formPago.monto) || 0;
+              if (monto <= 0) {
+                setErrorPago("El monto tiene que ser mayor a 0.");
+                return;
+              }
+              const saldo = facturaPago?.saldo ?? facturas.find((f) => f.id === fid)?.saldo ?? null;
+              if (saldo != null && monto > saldo) {
+                setErrorPago(`El monto no puede ser mayor al saldo (Gs. ${saldo.toLocaleString("es-PY")}).`);
+                return;
+              }
               setGuardandoPago(true);
-              await apiCreatePago({
-                factura_id: fid,
-                monto: parseFloat(formPago.monto) || 0,
-                fecha_pago: formPago.fecha_pago,
-                metodo_pago: formPago.metodo_pago,
-                referencia: formPago.referencia || undefined,
-              });
-              setModalPago(false);
-              getFacturas(id).then(setFacturas);
-              setGuardandoPago(false);
+              try {
+                const creado = await apiCreatePago({
+                  factura_id: fid,
+                  monto,
+                  fecha_pago: formPago.fecha_pago,
+                  metodo_pago: formPago.metodo_pago,
+                  referencia: formPago.referencia || undefined,
+                });
+                if (!creado) {
+                  setErrorPago("No se pudo registrar el pago. Revisá los datos y probá de nuevo.");
+                  return;
+                }
+                setModalPago(false);
+                getFacturas(id).then(setFacturas);
+              } finally {
+                setGuardandoPago(false);
+              }
             }} className="space-y-4">
               {!facturaPago && facturas.filter((f) => f.saldo > 0).length > 0 && (
                 <div>

@@ -6,6 +6,7 @@ import { montosFacturaItemParaInsert } from "./factura-item-montos";
 import { emitEvent, EVENT_TYPES } from "@/lib/integrations/events";
 import { fechaVencimientoSuscripcion, hoyYmdLocal } from "@/lib/fechas/calendario";
 import { aplicarPlanPendienteSiVencido } from "./suscripcion-plan-pendiente";
+import { insertarFacturaItems } from "@/lib/facturacion/insertar-factura-items";
 
 export async function obtenerSiguienteNumeroFacturaEmpresa(
   supabase: AppSupabaseClient,
@@ -177,19 +178,23 @@ export async function crearFacturaInicialSuscripcionSiCorresponde(opts: {
     precioUnitario: monto,
   });
 
-  const { error: errItem } = await supabase.from("factura_items").insert({
-    factura_id: factura.id,
-    empresa_id: empresaId,
-    descripcion: planNombre,
-    cantidad: 1,
-    precio_unitario: linea.precio_unitario,
-    subtotal: linea.subtotal,
-    iva: linea.iva,
-    total: linea.total,
-  });
+  const { error: errItem } = await insertarFacturaItems(
+    supabase,
+    [{
+      factura_id: factura.id,
+      empresa_id: empresaId,
+      descripcion: planNombre,
+      cantidad: 1,
+      precio_unitario: linea.precio_unitario,
+      subtotal: linea.subtotal,
+      iva: linea.iva,
+      total: linea.total,
+    }],
+    10
+  );
 
   if (errItem) {
-    console.error("[crearFacturaInicialSuscripcionSiCorresponde] factura_items:", errItem.message);
+    console.error("[crearFacturaInicialSuscripcionSiCorresponde] factura_items:", errItem);
     await supabase.from("facturas").delete().eq("id", factura.id).eq("empresa_id", empresaId);
     return;
   }

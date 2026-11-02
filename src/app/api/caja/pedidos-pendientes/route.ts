@@ -41,6 +41,11 @@ export async function GET(request: Request) {
           (typeof brief.cliente_nombre === "string" && brief.cliente_nombre) ||
           (typeof brief.cliente_telefono === "string" && brief.cliente_telefono) ||
           null,
+        // Una mesa no tiene cliente cargado: nadie le pide el nombre a quien se
+        // sienta a tomar un chop. Lo que la identifica es la mesa, y eso es lo
+        // que el cajero necesita leer para saber a quién está cobrando.
+        mesa: typeof brief.mesa === "string" && brief.mesa.trim() !== "" ? brief.mesa : null,
+        modalidad: typeof brief.modalidad === "string" ? brief.modalidad : "local",
         cliente_id: p.cliente_id ? String(p.cliente_id) : null,
         total_estimado: Number(p.monto_vendido) || 0,
         origen: typeof meta.source === "string" ? meta.source : "manual",

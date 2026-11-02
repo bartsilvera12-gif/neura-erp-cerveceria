@@ -11,6 +11,7 @@ import {
   replaceRelacionesProveedor,
   findProveedorByNombre,
   findProveedorByRuc,
+  deleteProveedor,
   listCategoriasMin,
   type ProveedorRow,
   type InsertProveedorInput,
@@ -188,5 +189,77 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
   } catch (err) {
     console.error("[/api/proveedores/[id] PATCH] outer", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo actualizar el proveedor."), { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/proveedores/[id] — borra un proveedor sin historia.
+ *
+ * Un proveedor con compras, deuda u órdenes NO se borra: su nombre está en
+ * esas facturas y en las cuentas por pagar, y borrarlo dejaría esos documentos
+ * hablando de alguien que no existe. Para ése está dejarlo inactivo, que lo
+ * saca de los selectores sin tocar el historial.
+ *
+ * Se borra el cargado por error: el que no tiene ninguna compra, ninguna
+ * cuenta por pagar, ninguna orden y ningún producto que lo tenga de proveedor
+ * principal. La respuesta dice qué lo retiene.
+ */
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await ctx.params;
+    const auth = await getTenantSupabaseFromAuth(request);
+    if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const schema = await fetchDataSchemaForEmpresaId(auth.auth.empresa_id);
+    const empresaId = auth.auth.empresa_id;
+
+    const actual = await getProveedorById(schema, empresaId, id);
+    if (!actual) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+
+    const contar = async (tabla: string, columna: string): Promise<number> => {
+      const r = await auth.supabase
+        .from(tabla)
+        .select("id", { count: "exact", head: true })
+        .eq("empresa_id", empresaId)
+        .eq(columna, id);
+      // Una tabla que no existe en esta instancia no retiene nada.
+      return r.error ? 0 : r.count ?? 0;
+    };
+
+    const retenes: string[] = [];
+    const compras = await contar("compras", "proveedor_id");
+    if (compras > 0) retenes.push(`${compras} compra(s)`);
+    const cxp = await contar("cuentas_por_pagar", "proveedor_id");
+    if (cxp > 0) retenes.push(`${cxp} cuenta(s) por pagar`);
+    const ordenes = await contar("ordenes_compra", "proveedor_id");
+    if (ordenes > 0) retenes.push(`${ordenes} orden(es) de compra`);
+    const productos = await contar("productos", "proveedor_principal_id");
+    if (productos > 0) retenes.push(`${productos} producto(s) que lo tienen como proveedor`);
+
+    if (retenes.length > 0) {
+      return NextResponse.json(
+        errorResponse(
+          `No se puede borrar: el proveedor ya figura en ${retenes.join(", ")}. ` +
+            "Ponelo inactivo y deja de aparecer para elegir, sin borrar el historial."
+        ),
+        { status: 409 }
+      );
+    }
+
+    // Las categorías del proveedor son suyas: se van con él.
+    await replaceRelacionesProveedor(schema, empresaId, id, []);
+
+    const borrado = await deleteProveedor(schema, empresaId, id);
+    if (!borrado) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+    return NextResponse.json(successResponse({ id }));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (/foreign key|23503/i.test(msg)) {
+      return NextResponse.json(
+        errorResponse("El proveedor está en uso en otra parte del sistema. Ponelo inactivo en vez de borrarlo."),
+        { status: 409 }
+      );
+    }
+    console.error("[/api/proveedores/[id] DELETE]", err);
+    return NextResponse.json(errorResponse("No se pudo borrar el proveedor."), { status: 500 });
   }
 }

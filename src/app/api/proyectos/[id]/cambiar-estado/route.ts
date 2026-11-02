@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { data: proyecto, error: e1 } = await sb
       .from("proyectos")
-      .select("id, estado_id")
+      .select("id, estado_id, titulo, metadata")
       .eq("empresa_id", empresaId)
       .eq("id", pid)
       .maybeSingle();
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { data: estNuevo, error: e2 } = await sb
       .from("proyecto_estados")
-      .select("id, tipo_sla")
+      .select("id, tipo_sla, es_estado_final")
       .eq("empresa_id", empresaId)
       .eq("id", nuevoEstadoId)
       .eq("activo", true)
@@ -63,6 +63,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const tipoSla = String((estNuevo as { tipo_sla?: string }).tipo_sla ?? "interno");
+
+    /**
+     * Un pedido no se da por entregado mientras la Caja no lo haya cobrado.
+     *
+     * Se podía arrastrar un pedido directo a "Entregado" con la cuenta todavía
+     * esperando en Caja. Después nadie lo cobra: el pedido ya figura cerrado,
+     * sale del tablero y la plata no entró. Pasar por los estados del medio es
+     * cuestión de orden; cobrar antes de entregar es cuestión de plata, así que
+     * lo que se bloquea es esto.
+     *
+     * Lo que ya se cobró (`facturado`) pasa sin problema, y lo que nunca fue a
+     * Caja también: no todo pedido se cobra desde acá.
+     */
+    if ((estNuevo as { es_estado_final?: boolean }).es_estado_final === true) {
+      const meta = (proyecto as { metadata?: unknown }).metadata;
+      const estadoFact =
+        meta && typeof meta === "object" && !Array.isArray(meta)
+          ? String((meta as Record<string, unknown>).facturacion_estado ?? "")
+          : "";
+      if (estadoFact === "pendiente_caja") {
+        return NextResponse.json(
+          errorResponse(
+            "Este pedido está esperando cobro en Caja. Cobralo primero: si se da por entregado ahora, sale del tablero sin que nadie cobre."
+          ),
+          { status: 409 }
+        );
+      }
+    }
 
     await cerrarSegmentoHistorialAbierto(sb, empresaId, pid);
 

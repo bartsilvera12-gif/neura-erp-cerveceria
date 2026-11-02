@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Calendar, CalendarDays, ChevronDown, ChevronUp, ClipboardList, Clock, FileDown, FileText, Link2, Printer, Receipt, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, Calendar, CalendarDays, ChevronDown, ChevronUp, ClipboardList, Clock, FileDown, FileText, Link2, Printer, Receipt, SlidersHorizontal } from "lucide-react";
 import { ModalCambioPlanGestion } from "@/components/gestion-clientes/ModalCambioPlanGestion";
 import { ModalHistorialClienteGestion } from "@/components/gestion-clientes/ModalHistorialClienteGestion";
 import { RegistrarPagoModal } from "@/components/pagos/RegistrarPagoModal";
@@ -962,12 +962,6 @@ function GestionClientesPageInner() {
                     onClick={() => setModalFacturacion(true)}
                   />
                   <BotonOperativo label="Servicios asociados" icon={<Link2 className="h-3.5 w-3.5" />} />
-                  <BotonOperativo
-                    label="Cambio de plan"
-                    icon={<RefreshCw className="h-3.5 w-3.5" />}
-                    activo
-                    onClick={() => setModalCambioPlan(true)}
-                  />
                   <BotonOperativo label="Cambio fecha venc." icon={<CalendarDays className="h-3.5 w-3.5" />} />
                   <BotonOperativo
                     label="Historial cliente"

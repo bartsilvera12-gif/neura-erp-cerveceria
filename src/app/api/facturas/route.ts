@@ -5,6 +5,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import { emitEvent, EVENT_TYPES } from "@/lib/integrations/events";
 import { fechaMasDiasCalendario, fechaVencimientoSuscripcion, toCalendarDateStr } from "@/lib/fechas/calendario";
 import { montosFacturaItemParaInsert, tasaIvaDesdeIvaTipo } from "@/lib/facturacion/factura-item-montos";
+import { insertarFacturaItems } from "@/lib/facturacion/insertar-factura-items";
 import { descripcionLineaFacturaPorDefecto, parseFacturaPostTipo } from "@/lib/facturacion/factura-post-tipo";
 import { obtenerSiguienteNumeroFacturaEmpresa } from "@/lib/facturacion/factura-suscripcion-servidor";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
@@ -183,22 +184,26 @@ export async function POST(request: NextRequest) {
       precioUnitario: Number(monto),
       tasaIva: tasaIvaItem,
     });
-    const { error: errItem } = await supabase.from("factura_items").insert({
-      factura_id: data.id,
-      empresa_id: auth.empresa_id,
-      descripcion: descripcionItem,
-      cantidad: 1,
-      precio_unitario: lineaUi.precio_unitario,
-      subtotal: lineaUi.subtotal,
-      iva: lineaUi.iva,
-      total: lineaUi.total,
-    });
+    const { error: errItem } = await insertarFacturaItems(
+      supabase,
+      [{
+        factura_id: data.id,
+        empresa_id: auth.empresa_id,
+        descripcion: descripcionItem,
+        cantidad: 1,
+        precio_unitario: lineaUi.precio_unitario,
+        subtotal: lineaUi.subtotal,
+        iva: lineaUi.iva,
+        total: lineaUi.total,
+      }],
+      tasaIvaItem
+    );
     if (errItem) {
-      console.error("[api/facturas POST] factura_items:", errItem.message);
+      console.error("[api/facturas POST] factura_items:", errItem);
       await supabase.from("facturas").delete().eq("id", data.id).eq("empresa_id", auth.empresa_id);
       return NextResponse.json(
         errorResponse(
-          `No se pudo registrar el detalle de la factura: ${errItem.message}. La operación fue cancelada.`
+          `No se pudo registrar el detalle de la factura: ${errItem}. La operación fue cancelada.`
         ),
         { status: 400 }
       );

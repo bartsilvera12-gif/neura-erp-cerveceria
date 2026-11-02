@@ -8,6 +8,9 @@ type PedidoPendiente = {
   id: string;
   titulo: string;
   cliente_nombre: string | null;
+  /** Mesa o nombre del pedido para llevar, cuando el pedido viene del salón. */
+  mesa?: string | null;
+  modalidad?: string | null;
   total_estimado: number;
   origen: string;
   fecha: string | null;
@@ -18,7 +21,21 @@ const ORIGEN_LABEL: Record<string, string> = {
   presupuesto: "Presupuesto",
   venta: "Venta",
   manual: "Manual",
+  mesa: "Salón",
 };
+
+/**
+ * Quién es el pedido. Un pedido del salón no tiene cliente —a nadie se le pide
+ * el nombre para tomar un chop—, y la columna quedaba en "—" sin decir qué
+ * mesa era. Lo que identifica a esa cuenta es la mesa, o el nombre con el que
+ * se anotó el pedido para llevar.
+ */
+function quienEs(p: PedidoPendiente): string {
+  if (p.cliente_nombre) return p.cliente_nombre;
+  const nombre = (p.mesa ?? "").trim();
+  if (!nombre) return "—";
+  return (p.modalidad ?? "local") === "local" ? `Mesa ${nombre}` : `Para llevar · ${nombre}`;
+}
 
 function fmtGs(n: number) {
   return "Gs. " + Math.round(n || 0).toLocaleString("es-PY");
@@ -107,7 +124,7 @@ export default function PedidosPendientesCaja() {
             <thead className="text-xs uppercase text-amber-700/80">
               <tr>
                 <th className="py-2 pr-4 font-medium">Pedido</th>
-                <th className="py-2 pr-4 font-medium">Cliente</th>
+                <th className="py-2 pr-4 font-medium">Cliente / Mesa</th>
                 <th className="py-2 pr-4 font-medium">Items</th>
                 <th className="py-2 pr-4 font-medium text-right">Total estimado</th>
                 <th className="py-2 pr-4 font-medium">Origen</th>
@@ -119,7 +136,7 @@ export default function PedidosPendientesCaja() {
               {pedidos.map((p) => (
                 <tr key={p.id} className="align-middle">
                   <td className="py-2.5 pr-4 font-medium text-slate-800">{p.titulo || "Pedido"}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{p.cliente_nombre ?? "—"}</td>
+                  <td className="py-2.5 pr-4 text-slate-600">{quienEs(p)}</td>
                   <td className="py-2.5 pr-4 text-slate-600">
                     {p.items.length === 0
                       ? "—"

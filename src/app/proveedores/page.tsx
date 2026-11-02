@@ -6,10 +6,12 @@ import { getProveedores } from "@/lib/proveedores/storage";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { useDialogos } from "@/components/ui/Dialogos";
 import type { Proveedor } from "@/lib/proveedores/types";
 
 export default function ProveedoresPage() {
   const { isAdmin } = useIsAdmin();
+  const { avisar, confirmar } = useDialogos();
   const [lista, setLista] = useState<Proveedor[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(true);
@@ -42,6 +44,34 @@ export default function ProveedoresPage() {
       );
     });
   }, [lista, busqueda]);
+
+  /**
+   * Borrar un proveedor cargado por error.
+   *
+   * El servidor lo deja borrar sólo si no tiene historia: sin compras, sin
+   * deuda, sin órdenes y sin productos que lo tengan de proveedor principal.
+   * Si la tiene, contesta qué lo retiene — su nombre está en esas facturas.
+   */
+  async function borrar(p: Proveedor) {
+    const seguir = await confirmar({
+      titulo: `Borrar "${p.nombre}"`,
+      mensaje: "Sólo se puede borrar un proveedor sin compras, deuda ni órdenes. Si tiene historial, ponelo inactivo.",
+      confirmar: "Borrar",
+      tono: "peligro",
+    });
+    if (!seguir) return;
+    try {
+      const r = await fetch(`/api/proveedores/${p.id}`, { method: "DELETE", credentials: "include" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        await avisar({ mensaje: j?.error ?? "No se pudo borrar el proveedor.", tono: "peligro" });
+        return;
+      }
+      setLista((prev) => prev.filter((x) => x.id !== p.id));
+    } catch {
+      await avisar({ mensaje: "Error de red al borrar el proveedor.", tono: "peligro" });
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -159,12 +189,21 @@ export default function ProveedoresPage() {
                       </span>
                     </td>
                     <td className="py-3">
-                      <Link
-                        href={`/proveedores/${p.id}/editar`}
-                        className="text-sm font-medium text-sky-600 hover:underline"
-                      >
-                        Editar
-                      </Link>
+                      <div className="inline-flex items-center gap-3">
+                        <Link
+                          href={`/proveedores/${p.id}/editar`}
+                          className="text-sm font-medium text-sky-600 hover:underline"
+                        >
+                          Editar
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => borrar(p)}
+                          className="text-sm font-medium text-red-600 hover:underline"
+                        >
+                          Borrar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

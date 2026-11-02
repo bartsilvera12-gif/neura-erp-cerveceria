@@ -128,14 +128,17 @@ export default function InventarioPage() {
   // useMemo solo recalcula cuando cambian las dependencias relevantes.
   const productos = useMemo(() => todos.filter((p) => {
     // Nombre — fold accents/diacritics ("atun" matchea "ATÚN"). También matchea
-    // por codigo_barras para poder buscar escaneando o pegando el número.
+    // por SKU y por código de barras: quien tiene el código a mano lo escribe
+    // en el primer campo que ve, y tener que acertar la casilla correcta para
+    // encontrar un producto que existe es una trampa.
     if (filtroPorNombre.trim() !== "") {
       const q = foldText(filtroPorNombre.trim());
       const nombreMatch = foldText(p.nombre).includes(q);
+      const skuMatch = foldText(p.sku).includes(q);
       const barrasMatch =
         typeof p.codigo_barras === "string" && p.codigo_barras.length > 0 &&
         foldText(p.codigo_barras).includes(q);
-      if (!nombreMatch && !barrasMatch) return false;
+      if (!nombreMatch && !skuMatch && !barrasMatch) return false;
     }
 
     // SKU
@@ -327,7 +330,7 @@ export default function InventarioPage() {
             </Link>
             <input
               type="text"
-              placeholder="Buscar por nombre o código de barras…"
+              placeholder="Buscar por nombre, SKU o código de barras…"
               value={filtroPorNombre}
               onChange={(e) => setFiltroPorNombre(e.target.value)}
               className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none sm:w-64 sm:flex-none"

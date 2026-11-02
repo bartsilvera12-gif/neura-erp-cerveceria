@@ -89,7 +89,26 @@ export default function NuevaOrdenCompraPage() {
   const tc = cab.moneda === "USD" ? Number(cab.tipo_cambio) || 0 : 1;
   const excluidos = useMemo(() => new Set(lineas.map((l) => l.producto_id)), [lineas]);
   const resultados = useMemo(() => hits.filter((p) => !excluidos.has(p.id)), [hits, excluidos]);
-  const totalOc = useMemo(() => lineas.reduce((s, l) => s + l.costo_input * tc * l.cantidad, 0), [lineas, tc]);
+  /**
+   * El costo cargado INCLUYE el IVA, igual que en Compras. Antes el IVA elegido
+   * no cambiaba ningún número de la pantalla: se podía tocar Ex / 5% / 10% y
+   * los totales quedaban iguales, así que no había forma de saber si el precio
+   * que te pasó el proveedor era con o sin IVA.
+   */
+  const ivaDeLinea = (total: number, tipo: IvaTipo) =>
+    tipo === "exenta" ? 0 : tipo === "5" ? total - total / 1.05 : total - total / 1.1;
+
+  const totalesOc = useMemo(() => {
+    return lineas.reduce(
+      (acc, l) => {
+        const total = l.costo_input * tc * l.cantidad;
+        const iva = ivaDeLinea(total, l.iva_tipo);
+        return { total: acc.total + total, iva: acc.iva + iva, subtotal: acc.subtotal + (total - iva) };
+      },
+      { subtotal: 0, iva: 0, total: 0 }
+    );
+  }, [lineas, tc]);
+  const totalOc = totalesOc.total;
 
   function addProducto(p: ComboHit) {
     setLineas((prev) => {
@@ -282,7 +301,7 @@ export default function NuevaOrdenCompraPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">Producto</th>
                     <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">Cant.</th>
-                    <th className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">Costo unit. ({cab.moneda})</th>
+                    <th className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">Costo unit. con IVA ({cab.moneda})</th>
                     <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">IVA</th>
                     <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">Total (Gs.)</th>
                     <th className="w-10 px-2 py-3" />
@@ -327,6 +346,11 @@ export default function NuevaOrdenCompraPage() {
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold tabular-nums text-slate-900">
                         {fmtGs(l.costo_input * tc * l.cantidad)}
+                        <span className="block text-[11px] font-normal text-slate-400">
+                          {l.iva_tipo === "exenta"
+                            ? "exenta"
+                            : `IVA incl. ${fmtGs(ivaDeLinea(l.costo_input * tc * l.cantidad, l.iva_tipo))}`}
+                        </span>
                       </td>
                       <td className="px-2 py-3 text-center">
                         <button type="button" onClick={() => removeLinea(l.producto_id)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Quitar">
@@ -347,6 +371,9 @@ export default function NuevaOrdenCompraPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total estimado</p>
             <p className="text-2xl font-bold tabular-nums text-slate-900">{fmtGs(totalOc)}</p>
+            <p className="mt-0.5 text-xs text-slate-500 tabular-nums">
+              Gravado {fmtGs(totalesOc.subtotal)} · IVA incluido {fmtGs(totalesOc.iva)}
+            </p>
           </div>
           <button type="submit" disabled={enviando}
             className="inline-flex items-center gap-2 rounded-xl bg-[#4FAEB2] px-6 py-3 text-sm font-bold text-white shadow-md shadow-[#4FAEB2]/30 hover:bg-[#3F8E91] disabled:opacity-50">

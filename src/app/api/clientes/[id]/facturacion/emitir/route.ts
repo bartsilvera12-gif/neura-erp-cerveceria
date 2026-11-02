@@ -5,6 +5,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { emitEvent, EVENT_TYPES } from "@/lib/integrations/events";
 import { montosFacturaItemParaInsert } from "@/lib/facturacion/factura-item-montos";
+import { insertarFacturaItems } from "@/lib/facturacion/insertar-factura-items";
 import { obtenerSiguienteNumeroFacturaEmpresa } from "@/lib/facturacion/factura-suscripcion-servidor";
 import { aplicarPlanPendienteSiVencido } from "@/lib/facturacion/suscripcion-plan-pendiente";
 import { fechaVencimientoSuscripcion } from "@/lib/fechas/calendario";
@@ -148,23 +149,27 @@ export async function POST(
       cantidad: 1,
       precioUnitario: monto,
     });
-    const { error: errItem } = await supabase.from("factura_items").insert({
-      factura_id: factura.id,
-      empresa_id: auth.empresa_id,
-      descripcion: planNombre,
-      cantidad: 1,
-      precio_unitario: linea.precio_unitario,
-      subtotal: linea.subtotal,
-      iva: linea.iva,
-      total: linea.total,
-    });
+    const { error: errItem } = await insertarFacturaItems(
+      supabase,
+      [{
+        factura_id: factura.id,
+        empresa_id: auth.empresa_id,
+        descripcion: planNombre,
+        cantidad: 1,
+        precio_unitario: linea.precio_unitario,
+        subtotal: linea.subtotal,
+        iva: linea.iva,
+        total: linea.total,
+      }],
+      10
+    );
 
     if (errItem) {
-      console.error("[facturacion] factura_items:", errItem.message);
+      console.error("[facturacion] factura_items:", errItem);
       await supabase.from("facturas").delete().eq("id", factura.id).eq("empresa_id", auth.empresa_id);
       return NextResponse.json(
         errorResponse(
-          `No se pudo registrar el detalle de la factura: ${errItem.message}. La operación fue cancelada.`
+          `No se pudo registrar el detalle de la factura: ${errItem}. La operación fue cancelada.`
         ),
         { status: 400 }
       );
