@@ -37,13 +37,15 @@ export type DetalleResp = {
   sla: Record<string, unknown>;
   tareas: Record<string, unknown>[];
   comentarios: Record<string, unknown>[];
-  archivos: Record<string, unknown>[];
   avance_pct: number | null;
 };
 
 type UsuarioActivo = { id: string; nombre?: string | null; email?: string | null };
 
-const TAB_IDS = ["resumen", "datos", "tareas", "comentarios", "archivos", "historial"] as const;
+// Sin "archivos": no se pueden subir (falta conectar el almacenamiento), así
+// que la pestaña sólo prometía algo que no existe. Vuelve cuando haya dónde
+// guardar los archivos de verdad.
+const TAB_IDS = ["resumen", "datos", "tareas", "comentarios", "historial"] as const;
 export type TabId = (typeof TAB_IDS)[number];
 
 const TAB_LABELS: Record<TabId, string> = {
@@ -51,7 +53,6 @@ const TAB_LABELS: Record<TabId, string> = {
   datos: "Datos",
   tareas: "Tareas",
   comentarios: "Comentarios",
-  archivos: "Archivos",
   historial: "Historial",
 };
 
@@ -1063,28 +1064,6 @@ export default function ProyectoDetalleInner({
                   </li>
                 );
               })}
-            </ul>
-          </div>
-        ) : null}
-
-        {tab === "archivos" ? (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-            <p className="font-medium text-slate-700">Archivos del proyecto</p>
-            <p className="mt-2 text-xs">
-              Todavía no se pueden subir archivos desde acá: falta conectar el almacenamiento. Por
-              eso tampoco hay botones para editar o borrar — no habría qué borrar.
-            </p>
-            <ul className="mt-4 space-y-2">
-              {(data.archivos ?? []).length === 0 ? (
-                <li className="text-slate-500">Sin archivos registrados.</li>
-              ) : (
-                (data.archivos ?? []).map((a) => (
-                  <li key={String(a.id)} className="text-slate-600">
-                    {String(a.nombre ?? "")}{" "}
-                    <span className="text-xs text-slate-500">{formatFechaPyFull(String(a.created_at ?? ""))}</span>
-                  </li>
-                ))
-              )}
             </ul>
           </div>
         ) : null}
