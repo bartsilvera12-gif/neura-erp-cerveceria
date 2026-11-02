@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, ChefHat, Clock, Loader2, Printer, Receipt, RotateCcw } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { usePuedeCobrar } from "@/lib/modulos/use-puede-cobrar";
 import {
   ESTADO_LABEL,
   minutosDesde,
@@ -32,6 +33,9 @@ const MINUTOS_ALERTA = 15;
 type Filtro = "activas" | "todas";
 
 export default function ComandasPage() {
+  // En la barra puede haber una tablet con el usuario del mozo: el atajo a la
+  // cuenta para cobrarla sólo tiene sentido para quien cobra.
+  const { puedeCobrar } = usePuedeCobrar();
   const [comandas, setComandas] = useState<Comanda[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -247,7 +251,7 @@ export default function ComandasPage() {
                       </button>
                     </>
                   )}
-                  {!c.de_venta && (
+                  {!c.de_venta && puedeCobrar && (
                     <Link
                       href={`/ventas/mesas/${c.pedido_id}`}
                       title="Abrir la cuenta de la mesa para cobrarla"
@@ -279,11 +283,16 @@ export default function ComandasPage() {
         <Link href="/ventas/mesas" className="text-[#4FAEB2] hover:underline">
           Mesas
         </Link>
-        . Para cobrar,{" "}
-        <Link href="/ventas/por-cobrar" className="text-[#4FAEB2] hover:underline">
-          Por cobrar
-        </Link>
-        .
+        .{" "}
+        {puedeCobrar && (
+          <>
+            Para cobrar,{" "}
+            <Link href="/ventas/por-cobrar" className="text-[#4FAEB2] hover:underline">
+              Por cobrar
+            </Link>
+            .
+          </>
+        )}
       </p>
     </div>
   );

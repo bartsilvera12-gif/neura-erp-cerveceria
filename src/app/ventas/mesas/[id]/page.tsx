@@ -7,6 +7,7 @@ import { Loader2, Printer, Search, Trash2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useDialogos } from "@/components/ui/Dialogos";
 import PickerProductos, { type ProductoMesa } from "@/components/mesas/PickerProductos";
+import { usePuedeCobrar } from "@/lib/modulos/use-puede-cobrar";
 
 /**
  * La cuenta de una mesa: lo pedido por ronda, agregar una ronda nueva,
@@ -15,6 +16,10 @@ import PickerProductos, { type ProductoMesa } from "@/components/mesas/PickerPro
  * El stock baja al mandar cada ronda a la cocina. Cerrar NO cobra: manda el
  * pedido a Caja y lleva al cajero a la pantalla de venta con todo precargado,
  * que cobra y factura sin volver a tocar el stock.
+ *
+ * MOZO Y CAJERO NO SON LA MISMA PERSONA. Quien no tiene el módulo de Caja
+ * cierra la mesa y vuelve al salón: la mesa le aparece al cajero en su propia
+ * pantalla. Mandarlo a la pantalla de cobro sería mandarlo a una puerta cerrada.
  */
 
 type ItemMesa = {
@@ -41,6 +46,7 @@ export default function MesaDetallePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = String(params?.id ?? "");
+  const { puedeCobrar } = usePuedeCobrar();
   const { avisar, confirmar } = useDialogos();
 
   const [mesa, setMesa] = useState<Mesa | null>(null);
@@ -156,7 +162,7 @@ export default function MesaDetallePage() {
     const seguir = await confirmar({
       titulo: `Cerrar la mesa ${mesa.mesa}`,
       mensaje: `Total ${fmtGs(mesa.total)}. Va a Caja para cobrarse; después no se le puede agregar nada más.`,
-      confirmar: "Cerrar y cobrar",
+      confirmar: puedeCobrar ? "Cerrar y cobrar" : "Cerrar y mandar a Caja",
     });
     if (!seguir) return;
     setGuardando(true);
@@ -169,6 +175,13 @@ export default function MesaDetallePage() {
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j?.success) {
         await avisar({ mensaje: j?.error ?? "No se pudo cerrar la mesa.", tono: "peligro" });
+        return;
+      }
+      if (!puedeCobrar) {
+        await avisar({
+          mensaje: `La mesa ${mesa.mesa} quedó en Caja esperando cobro.`,
+        });
+        router.push("/ventas/mesas");
         return;
       }
       router.push(`/ventas/nueva?pedido_id=${encodeURIComponent(id)}`);
@@ -214,10 +227,16 @@ export default function MesaDetallePage() {
         <button
           type="button"
           onClick={cerrar}
-          disabled={guardando || mesa.items.length === 0}
+          disabled={guardando || mesa.items.length === 0 || (enCaja && !puedeCobrar)}
           className="shrink-0 rounded-lg bg-[#4FAEB2] px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#3F8E91] disabled:opacity-50"
         >
-          {enCaja ? "Ir a cobrar" : "Cerrar y cobrar"}
+          {enCaja
+            ? puedeCobrar
+              ? "Ir a cobrar"
+              : "Esperando a la Caja"
+            : puedeCobrar
+              ? "Cerrar y cobrar"
+              : "Cerrar y mandar a Caja"}
         </button>
       </div>
 

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus, UtensilsCrossed } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useDialogos } from "@/components/ui/Dialogos";
+import { usePuedeCobrar } from "@/lib/modulos/use-puede-cobrar";
 
 /**
  * El salón: las mesas con cuenta abierta.
@@ -41,6 +42,7 @@ function desdeHace(iso: string): string {
 export default function MesasPage() {
   const router = useRouter();
   const { avisar, pedirTexto } = useDialogos();
+  const { puedeCobrar } = usePuedeCobrar();
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,12 +119,14 @@ export default function MesasPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Link
-            href="/ventas/por-cobrar"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            Por cobrar
-          </Link>
+          {puedeCobrar && (
+            <Link
+              href="/ventas/por-cobrar"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Por cobrar
+            </Link>
+          )}
           <button
             type="button"
             onClick={abrirMesa}

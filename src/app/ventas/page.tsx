@@ -11,6 +11,7 @@ import MobileFab from "@/components/ui/MobileFab";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getVentas } from "@/lib/ventas/storage";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
+import MesasPorCobrarCaja from "./MesasPorCobrarCaja";
 import AnularVentaModal from "./AnularVentaModal";
 import { esMismoDiaAsuncion } from "@/lib/fecha/asuncion";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
@@ -298,6 +299,9 @@ export default function VentasPage() {
           )}
         </div>
       )}
+
+      {/* Lo que el mozo cerró y está esperando que la Caja cobre. */}
+      <MesasPorCobrarCaja />
 
       <PedidosPendientesCaja />
 

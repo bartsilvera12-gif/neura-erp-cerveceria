@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, ArrowLeftRight, Banknote, BarChart3, Building2, ChefHat, ChevronDown, ChevronRight, Factory, FileText, History, LayoutDashboard, ListChecks, Megaphone, MessageCircle, Package, PanelLeft, PanelLeftClose, Percent, Receipt, ScrollText, Search, SendHorizontal, Settings, ShoppingCart, Sparkles, Star, Ticket, UserCog, Users, Utensils, Wallet } from "lucide-react";
+import { Activity, ArrowLeftRight, Banknote, BarChart3, Building2, ChefHat, ChevronDown, ChevronRight, Factory, FileText, History, LayoutDashboard, ListChecks, Megaphone, MessageCircle, Package, PanelLeft, PanelLeftClose, Percent, Receipt, ScrollText, Search, SendHorizontal, Settings, ShoppingCart, Sparkles, Star, Ticket, UserCog, Users, Utensils, UtensilsCrossed, Wallet } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getCurrentUser } from "@/lib/auth";
@@ -95,13 +95,15 @@ const MENU_STRUCTURE: MenuItem[] = [
     href: "/dashboard/monitoreo",
     icon: Activity,
   },
+  // El salón es su propio módulo: el mozo abre mesas y manda comandas, y eso no
+  // lo convierte en cajero. Cobrar vive abajo, en Caja.
+  { key: "mesas", slug: "mesas", label: "Salón", href: "/ventas/mesas", icon: UtensilsCrossed, children: [
+    { label: "Mesas", href: "/ventas/mesas" },
+    // La pantalla de la barra y la cocina.
+    { label: "Comandas", href: "/ventas/comandas" },
+  ]},
   { key: "ventas", slug: "ventas", label: "Caja", href: "/ventas", icon: ShoppingCart, children: [
     { label: "Caja", href: "/ventas" },
-    // Salón: cuentas abiertas por mesa. Van bajo Caja porque es la que las cobra.
-    { label: "Mesas", href: "/ventas/mesas" },
-    // La pantalla de la barra y la cocina. Vive bajo /ventas para heredar el
-    // permiso del módulo, que es el mismo que usa el salón.
-    { label: "Comandas", href: "/ventas/comandas" },
     // Lo que el cajero tiene que cobrar: mesas cerradas esperando y abiertas con consumo.
     { label: "Por cobrar", href: "/ventas/por-cobrar" },
   ]},
@@ -194,7 +196,7 @@ const MENU_STRUCTURE: MenuItem[] = [
  */
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
-  { id: "comercial", titulo: "Comercial", keys: ["clientes", "crm", "gestion-clientes", "ventas", "presupuestos", "proyectos", "comisiones", "planes"] },
+  { id: "comercial", titulo: "Comercial", keys: ["clientes", "crm", "gestion-clientes", "mesas", "ventas", "presupuestos", "proyectos", "comisiones", "planes"] },
   { id: "finanzas", titulo: "Finanzas", keys: ["pagos", "gastos", "cuentas_por_pagar", "notas_credito", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "reposicion", "compras", "recetas", "produccion"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones", "conversaciones-finalizadas", "historial-omnicanal", "monitoreo", "campanas"] },

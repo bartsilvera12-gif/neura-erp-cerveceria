@@ -10,6 +10,7 @@ const SIDEBAR_SLUG_HREF_ORDER: { slug: string; href: string }[] = [
   { slug: "historial-omnicanal", href: "/dashboard/historial-omnicanal" },
   { slug: "conversaciones-finalizadas", href: "/dashboard/conversaciones-finalizadas" },
   { slug: "monitoreo", href: "/dashboard/monitoreo" },
+  { slug: "mesas", href: "/ventas/mesas" },
   { slug: "ventas", href: "/ventas" },
   { slug: "presupuestos", href: "/presupuestos" },
   { slug: "proyectos", href: "/dashboard/proyectos" },
@@ -77,6 +78,9 @@ export function isModuleSlugGranted(
   }
   if (routeSlug === "gestion-clientes" && grantedSlugs.has("clientes")) return true;
   if (routeSlug === "notas_credito" && grantedSlugs.has("ventas")) return true;
+  // El salón: quien cobra también puede mirar y abrir mesas. Al revés no: el
+  // mozo tiene "mesas" y eso no lo deja entrar a la Caja.
+  if (routeSlug === "mesas" && grantedSlugs.has("ventas")) return true;
   return false;
 }
 
@@ -138,6 +142,10 @@ export function pathRequiresModuleSlug(pathname: string): string | null {
     return "conversaciones";
   }
   if (p.startsWith("/notas-credito")) return "notas_credito";
+  // Más específico primero: el salón es su propio módulo. El mozo abre mesas y
+  // manda comandas sin entrar a la Caja, que es donde se cobra.
+  if (p.startsWith("/ventas/mesas")) return "mesas";
+  if (p.startsWith("/ventas/comandas")) return "mesas";
   if (p.startsWith("/ventas")) return "ventas";
   if (p.startsWith("/caja")) return "caja";
   // NC de proveedor es una pestaña de Compras: hereda el gate 'compras'.
