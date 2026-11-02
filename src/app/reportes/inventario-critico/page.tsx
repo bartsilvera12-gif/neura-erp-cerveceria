@@ -111,9 +111,26 @@ export default function InventarioCriticoPage() {
           </div>
         ) : filtrados.length === 0 ? (
           <div className="px-4 py-16 text-center text-sm text-slate-400">
-            {criticos.length === 0
-              ? "No hay productos sin stock ni por debajo del mínimo."
-              : "Ningún producto coincide con la búsqueda."}
+            {criticos.length > 0 ? (
+              "Ningún producto coincide con la búsqueda."
+            ) : filas.length === 0 ? (
+              /*
+               * Vacío y vacío no son lo mismo, y la pantalla tiene que decir
+               * cuál es: sin esto, "0 productos críticos" puede significar que
+               * todo está bien o que el informe no está mirando nada.
+               */
+              <>
+                Esta sucursal no tiene productos con control de stock.
+                <br />
+                Lo que se prepara al momento (un chop, un plato) no lleva
+                inventario propio: descuenta sus insumos, así que no aparece acá.
+              </>
+            ) : (
+              <>
+                Ninguno de los {filas.length} productos con control de stock de esta sucursal está
+                sin stock ni por debajo del mínimo.
+              </>
+            )}
           </div>
         ) : (
           <>
