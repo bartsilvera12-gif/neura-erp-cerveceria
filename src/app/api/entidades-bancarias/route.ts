@@ -7,6 +7,7 @@ import {
   listEntidadesBancarias,
   insertEntidadBancaria,
   updateEntidadBancaria,
+  deleteEntidadBancaria,
   type TipoEntidad,
 } from "@/lib/ventas/server/pago-detalle-pg";
 
@@ -95,5 +96,33 @@ export async function PATCH(request: NextRequest) {
   } catch (err) {
     console.error("[/api/entidades-bancarias PATCH]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo actualizar la entidad."), { status: 500 });
+  }
+}
+
+/** DELETE /api/entidades-bancarias?id=… — borra una entidad que nunca se usó en un cobro. */
+export async function DELETE(request: NextRequest) {
+  try {
+    const ctx = await getTenantSupabaseFromAuth(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
+    const id = request.nextUrl.searchParams.get("id")?.trim() ?? "";
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      return NextResponse.json(errorResponse("Falta el id de la entidad."), { status: 400 });
+    }
+    const r = await deleteEntidadBancaria(schema, ctx.auth.empresa_id, id);
+    if (r.enUso > 0) {
+      return NextResponse.json(
+        errorResponse(
+          `No se puede eliminar: ya se usó en ${r.enUso} cobro${r.enUso === 1 ? "" : "s"}. ` +
+            `Desactivala (columna Activo) para que no aparezca más al cobrar.`
+        ),
+        { status: 409 }
+      );
+    }
+    if (!r.borrada) return NextResponse.json(errorResponse("Entidad no encontrada."), { status: 404 });
+    return NextResponse.json(successResponse({ id }));
+  } catch (err) {
+    console.error("[/api/entidades-bancarias DELETE]", err instanceof Error ? err.message : err);
+    return NextResponse.json(errorResponse("No se pudo eliminar la entidad."), { status: 500 });
   }
 }
