@@ -91,12 +91,21 @@ export type RecetaCosteo = {
   error?: string;
 };
 
-export async function listRecetas(sb: AppSupabaseClient, empresaId: string, sucursalId: string) {
+/**
+ * Las recetas. `sucursales` es una lista para que la vista consolidada pueda
+ * verlas todas; en el uso normal viene con una sola.
+ */
+export async function listRecetas(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  sucursales: readonly string[]
+) {
+  if (sucursales.length === 0) return [];
   const { data, error } = await sb
     .from("recetas")
     .select("id, producto_id, nombre, rendimiento_cantidad, rendimiento_unidad, activa, updated_at, productos(nombre, sku)")
     .eq("empresa_id", empresaId)
-    .eq("sucursal_id", sucursalId)
+    .in("sucursal_id", [...sucursales])
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message);
   // Aplanar nombre y SKU del producto para búsqueda y fallback de nombre.

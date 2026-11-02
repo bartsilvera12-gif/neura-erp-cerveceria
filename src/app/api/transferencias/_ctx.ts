@@ -46,13 +46,20 @@ export async function resolverCtx(
   }
   const sucursalId = auth.auth.sucursal_id ?? null;
   if (!sucursalId) {
-    // 409: dato faltante que un admin corrige (mismo criterio que el resto del ERP).
+    /**
+     * Sin sucursal hay dos casos distintos y el mensaje tiene que decir cuál.
+     *
+     * Una reposición va DE una sucursal A otra: parado en "Consolidado" no hay
+     * un "de dónde", así que la pantalla no puede trabajar. Eso no es un error
+     * de configuración, es elegir una sucursal; decirle al usuario que le pida
+     * una a su administrador lo manda a buscar un problema que no existe.
+     */
+    const mensaje = auth.auth.sucursal_consolidada
+      ? "Una reposición va de una sucursal a otra. Elegí en cuál estás parado en el menú de arriba (ahora estás en Consolidado)."
+      : "Tu usuario no tiene una sucursal asignada. Pedile a un administrador que te asigne una.";
     return {
       ok: false,
-      response: NextResponse.json(
-        errorResponse("Tu usuario no tiene una sucursal asignada. Pedile a un administrador que te asigne una."),
-        { status: 409 }
-      ),
+      response: NextResponse.json(errorResponse(mensaje), { status: 409 }),
     };
   }
   const schema = await fetchDataSchemaForEmpresaId(auth.auth.empresa_id);

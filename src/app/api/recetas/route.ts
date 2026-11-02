@@ -1,4 +1,4 @@
-import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { exigirSucursal, exigirSucursales, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
-    const rows = await listRecetas(ctx.supabase, ctx.auth.empresa_id, exigirSucursal(ctx.auth));
+    const rows = await listRecetas(ctx.supabase, ctx.auth.empresa_id, exigirSucursales(ctx.auth));
     return NextResponse.json(successResponse({ recetas: rows }));
   } catch (err) {
     console.error("[/api/recetas GET]", err instanceof Error ? err.message : err);

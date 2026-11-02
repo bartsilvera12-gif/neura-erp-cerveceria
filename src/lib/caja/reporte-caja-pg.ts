@@ -65,7 +65,8 @@ function totalesVacios(): CierresCajaTotales {
 export async function getReporteCierresCaja(
   schemaRaw: string,
   empresaId: string,
-  sucursalId: string,
+  /** Una sucursal, o varias en la vista consolidada. */
+  sucursales: readonly string[],
   rango: { start: string; end: string; desde: string; hasta: string },
   manejaCaja: boolean
 ): Promise<CierresCajaReporte> {
@@ -81,10 +82,10 @@ export async function getReporteCierresCaja(
             efectivo_esperado, efectivo_contado, diferencia, observacion_cierre,
             arqueo_apertura_json, arqueo_cierre_json
        FROM ${tC}
-      WHERE empresa_id=$1::uuid AND sucursal_id=$2::uuid
+      WHERE empresa_id=$1::uuid AND sucursal_id = ANY($2::uuid[])
         AND abierta_at >= $3::timestamptz AND abierta_at <= $4::timestamptz
       ORDER BY abierta_at DESC`,
-    [empresaId, sucursalId, rango.start, rango.end]
+    [empresaId, sucursales, rango.start, rango.end]
   );
   if (cajasQ.rows.length === 0) {
     return { desde: rango.desde, hasta: rango.hasta, maneja_caja: manejaCaja, totales: totalesVacios(), cajas: [] };

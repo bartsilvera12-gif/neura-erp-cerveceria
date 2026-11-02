@@ -63,12 +63,19 @@ function clasificar(stock: number, promedio: number): { estado: EstadoProyeccion
 /**
  * @param hoyISO fecha "hoy" en America/Asuncion (YYYY-MM-DD), calculada por el caller.
  */
+/**
+ * Proyección de quiebre.
+ *
+ * `sucursales` es una lista para que la vista consolidada pueda sumar las dos;
+ * en el uso normal viene con una sola.
+ */
 export async function getProyeccionInventario(
   schemaRaw: string,
   empresaId: string,
-  sucursalId: string,
+  sucursales: readonly string[],
   hoyISO: string
 ): Promise<FilaProyeccion[]> {
+  if (sucursales.length === 0) return [];
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const tP = quoteSchemaTable(schema, "productos");
   const tV = quoteSchemaTable(schema, "ventas");
@@ -86,7 +93,7 @@ export async function getProyeccionInventario(
        SELECT vi.producto_id, SUM(vi.cantidad)::numeric AS unidades
          FROM ${tVI} vi
          JOIN ${tV} v ON v.id = vi.venta_id
-        WHERE v.empresa_id = $1::uuid AND v.sucursal_id = $2::uuid
+        WHERE v.empresa_id = $1::uuid AND v.sucursal_id = ANY($2::uuid[])
           AND v.estado = 'completada'
           AND (v.fecha AT TIME ZONE 'America/Asuncion')::date
               > ($3::date - INTERVAL '30 days')
@@ -97,9 +104,13 @@ export async function getProyeccionInventario(
             COALESCE(v.unidades, 0) AS unidades_30
        FROM ${tP} p
        LEFT JOIN ventas30 v ON v.producto_id = p.id
-      WHERE p.empresa_id = $1::uuid AND p.sucursal_id = $2::uuid
-        AND p.activo = true AND p.controla_stock = true`,
-    [empresaId, sucursalId, hoyISO]
+      WHERE p.empresa_id = $1::uuid AND p.sucursal_id = ANY($2::uuid[])
+        AND p.activo = true
+        -- controla_stock nulo es "sí controla": los productos viejos lo tienen
+        -- en null y quedaban FUERA del informe, así que la pantalla salía en
+        -- blanco aunque hubiera productos sin stock.
+        AND coalesce(p.controla_stock, true)`,
+    [empresaId, sucursales, hoyISO]
   );
 
   const hoy = new Date(hoyISO + "T00:00:00");

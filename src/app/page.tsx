@@ -1101,17 +1101,25 @@ function FinTablaPorTipo({
         <p className="mt-6 text-sm text-slate-500">{vacio}</p>
       ) : (
         <div className="mt-5 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-200">
-          <table className="w-full table-fixed text-sm">
+          {/*
+            La columna del % medía 4rem con 1rem de padding a cada lado: le
+            quedaban 2rem de contenido para escribir "100.0%", así que el
+            número salía cortado. Ahora cada columna tiene el ancho que su
+            contenido necesita, y la tabla puede desplazarse si la tarjeta
+            queda angosta en vez de aplastar las celdas.
+          */}
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[22rem] table-fixed text-sm">
             <colgroup>
               <col />
-              <col className="w-[9.5rem]" />
-              <col className="w-16" />
+              <col className="w-[10.5rem]" />
+              <col className="w-[5.25rem]" />
             </colgroup>
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Tipo de cliente</th>
-                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Monto</th>
-                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">%</th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Monto</th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">%</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1131,10 +1139,10 @@ function FinTablaPorTipo({
                         />
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right align-middle font-semibold tabular-nums text-slate-900">
+                    <td className="whitespace-nowrap px-3 py-3 text-right align-middle font-semibold tabular-nums text-slate-900">
                       Gs. {formatGs(row.value)}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right align-middle tabular-nums text-slate-500">
+                    <td className="whitespace-nowrap px-3 py-3 text-right align-middle tabular-nums text-slate-500">
                       {pct.toFixed(1)}%
                     </td>
                   </tr>
@@ -1144,11 +1152,12 @@ function FinTablaPorTipo({
             <tfoot className="border-t border-slate-200 bg-slate-50">
               <tr>
                 <td className="px-4 py-3 font-semibold text-slate-600">{totalLabel}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums text-slate-900">Gs. {formatGs(total)}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-slate-500">100%</td>
+                <td className="whitespace-nowrap px-3 py-3 text-right font-bold tabular-nums text-slate-900">Gs. {formatGs(total)}</td>
+                <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-500">100%</td>
               </tr>
             </tfoot>
           </table>
+          </div>
         </div>
       )}
     </div>

@@ -173,12 +173,17 @@ export type CxpRow = {
 };
 
 /** Lista las CxP de la sucursal. `hoyISO` para derivar vencida/días. */
+/**
+ * La deuda con proveedores. `sucursales` es una lista para que la vista
+ * consolidada sume las dos; en el uso normal viene con una sola.
+ */
 export async function listCuentasPorPagar(
   schemaRaw: string,
   empresaId: string,
-  sucursalId: string,
+  sucursales: readonly string[],
   hoyISO: string
 ): Promise<CxpRow[]> {
+  if (sucursales.length === 0) return [];
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const tCxp = quoteSchemaTable(schema, "cuentas_por_pagar");
   const { rows } = await pool().query(
@@ -190,11 +195,11 @@ export async function listCuentasPorPagar(
             CASE WHEN fecha_vencimiento IS NULL THEN NULL
                  ELSE (fecha_vencimiento - $3::date) END AS dias_para_vencer
        FROM ${tCxp}
-      WHERE empresa_id = $1::uuid AND sucursal_id = $2::uuid
+      WHERE empresa_id = $1::uuid AND sucursal_id = ANY($2::uuid[])
       ORDER BY (estado <> 'anulada' AND saldo > 0) DESC,
                fecha_vencimiento ASC NULLS LAST, created_at DESC
       LIMIT 1000`,
-    [empresaId, sucursalId, hoyISO]
+    [empresaId, sucursales, hoyISO]
   );
   return rows.map((r) => ({
     id: r.id,

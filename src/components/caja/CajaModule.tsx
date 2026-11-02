@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import {
   Banknote, X, Loader2, Lock, Unlock, Plus, ArrowDownCircle, ArrowUpCircle,
@@ -92,6 +93,14 @@ export default function CajaModule({ compact = false }: { compact?: boolean }) {
     <div className={`w-full ${compact ? "space-y-4" : "space-y-6"}`}>
       {!compact && (
         <div>
+          {/* Se entra desde Reportes: sin esto no hay forma de volver salvo el
+              botón del navegador. */}
+          <Link
+            href="/reportes"
+            className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition-colors hover:text-[#3F8E91]"
+          >
+            <span aria-hidden>←</span> Reportes
+          </Link>
           <h1 className="flex items-center gap-2.5 text-2xl font-bold text-slate-900">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: `${TEAL}1a`, color: TEAL_D }}><Banknote className="h-5 w-5" /></span>
             Caja y arqueo
