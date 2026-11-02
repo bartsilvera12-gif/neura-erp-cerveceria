@@ -15,6 +15,8 @@ export default function LibroIvaVentasPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        backHref="/reportes"
+        backLabel="Reportes"
         eyebrow="Zentra · Análisis"
         title="Libro de Ventas IVA"
         description="Genera el detalle de facturas del período para la liquidación mensual del IVA, listo para descargar en Excel."

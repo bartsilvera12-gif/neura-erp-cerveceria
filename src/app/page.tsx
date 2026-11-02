@@ -52,7 +52,7 @@ import {
   isDashboardTabSlug,
   type DashboardTabSlug,
 } from "@/lib/dashboard/resolve-effective-dashboard-views";
-import { AlertTriangle, BarChart3, CalendarDays, CalendarRange, CheckCircle2, Coins, Gem, Hash, Lock, MessageSquare, Package, ShoppingCart, Target, Ticket, TrendingUp } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarDays, CalendarRange, CheckCircle2, Coins, Gem, Hash, MessageSquare, Package, ShoppingCart, Target, Ticket, TrendingUp } from "lucide-react";
 
 // recharts (~90 KB gzipped) extraido a archivo aparte y dynamic-importado.
 // Razones:
@@ -2134,14 +2134,8 @@ export default function DashboardPage() {
       });
   }, []);
 
-  function handleUsuarioChange(id: number) {
-    setUsuarioId(id);
-    localStorage.setItem("neura_dash_usuario", String(id));
-  }
-
   const usuarioActivo = usuarios.find(u => u.id === usuarioId) ?? null;
   const mapNombreTipoServicio = useMapNombreTipoServicioCatalogo(clientes);
-  const nivel = usuarioActivo?.nivel ?? "administrador";
 
   // Rol ERP del usuario actual — determina si ve el tab Financiero y si puede
   // quedarse en el dashboard, o si tiene que redirigir a la landing operativa.
@@ -2192,24 +2186,13 @@ export default function DashboardPage() {
     );
   }
 
-  // Control de acceso
-  if (nivel === "usuario") {
+  if (!config) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <Lock className="h-10 w-10 text-slate-400" aria-hidden />
-        <h2 className="text-lg font-bold text-gray-800">Acceso restringido</h2>
-        <p className="text-sm text-gray-500 text-center max-w-sm">
-          El dashboard solo está disponible para usuarios con nivel <strong>Supervisor</strong> o <strong>Administrador</strong>.
-        </p>
-        <div className="flex items-center gap-2 text-sm text-gray-500 mt-2">
-          Cambiar a:
-          {usuarios.filter(u => u.nivel !== "usuario").map(u => (
-            <button key={u.id} onClick={() => handleUsuarioChange(u.id)}
-              className="px-3 py-1.5 rounded-lg bg-[#0EA5E9] hover:bg-[#0284C7] text-white text-xs font-medium transition-colors">
-              {u.nombre}
-            </button>
-          ))}
-        </div>
+      <div
+        className="zentra-dashboard-shell flex min-h-[40vh] items-center justify-center rounded-2xl py-24 text-sm"
+        style={{ color: Z.muted }}
+      >
+        Cargando…
       </div>
     );
   }
@@ -2287,31 +2270,12 @@ export default function DashboardPage() {
               Dashboard
             </h1>
             <p className="mt-1 max-w-md text-sm leading-relaxed" style={{ color: Z.muted }}>
-              Neura ERP · Vista {nivel === "supervisor" ? "de tu área" : "global"} · período alineado al filtro
+              Neura ERP · período alineado al filtro
             </p>
           </div>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          {usuarios.length > 0 && (
-            <div className="flex flex-col gap-1.5 sm:items-end">
-              <span className="text-[10px] uppercase tracking-wide" style={{ color: Z.muted }}>
-                Viendo como
-              </span>
-              <select
-                value={usuarioId ?? ""}
-                onChange={(e) => handleUsuarioChange(parseInt(e.target.value, 10))}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-offset-0"
-                style={{ backgroundColor: Z.surface, color: Z.text, borderColor: "rgba(255,255,255,0.12)" }}
-              >
-                {usuarios.map((u) => (
-                  <option key={u.id} value={u.id} style={{ backgroundColor: Z.surface }}>
-                    {u.nombre} ({u.nivel})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
           <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 p-1" style={{ backgroundColor: Z.surface }}>
             {PERIODO_OPTS.map((p) => (
               <button

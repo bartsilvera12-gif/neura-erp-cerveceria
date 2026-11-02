@@ -86,6 +86,8 @@ export default function R90VentasPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        backHref="/reportes"
+        backLabel="Reportes"
         eyebrow="Zentra · Análisis"
         title="R90 – Registro de Comprobantes de Ventas"
         description="Genera el archivo CSV para Marangatú (RG 90/2021) con los comprobantes NO electrónicos del período."
