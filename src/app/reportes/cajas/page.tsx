@@ -6,7 +6,6 @@ import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
-import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { CierresCajaReporte } from "@/lib/caja/reporte-caja-pg";
 
 function formatGs(v: number) {
@@ -24,11 +23,19 @@ function formatFechaHora(iso: string | null) {
   }
 }
 const hoyAsuncion = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Asuncion" });
+/** Treinta días atrás, para que el informe abra mostrando lo último que pasó. */
+const hace30DiasAsuncion = () => {
+  const d = new Date(hoyAsuncion() + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() - 30);
+  return d.toISOString().slice(0, 10);
+};
 const dateInputCls =
   "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4FAEB2]/30";
 
 export default function CierresCajaReportePage() {
-  const [desde, setDesde] = useState(`${mesActualAsuncion()}-01`);
+  // Últimos 30 días, no "desde el 1° del mes": un 2 de noviembre eso mira dos
+  // días y el informe parece vacío aunque haya turnos cerrados en octubre.
+  const [desde, setDesde] = useState(hace30DiasAsuncion());
   const [hasta, setHasta] = useState(hoyAsuncion());
   const [data, setData] = useState<CierresCajaReporte | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -107,7 +114,10 @@ export default function CierresCajaReportePage() {
               Detalle de turnos
             </h2>
             {data.cajas.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-400">No hay turnos de caja en el período seleccionado.</p>
+              <p className="py-6 text-center text-sm text-slate-400">
+                No hay turnos de caja entre el {desde} y el {hasta}. Si cerraste una caja antes de
+                esa fecha, ampliá el rango de arriba.
+              </p>
             ) : (
               <EdgeScrollArea className="rounded-xl border border-slate-200">
                 <table className="w-full min-w-[1100px] text-sm">
