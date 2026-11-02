@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, UtensilsCrossed } from "lucide-react";
+import { Loader2, Plus, ShoppingBag, UtensilsCrossed } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useDialogos } from "@/components/ui/Dialogos";
 import { usePuedeCobrar } from "@/lib/modulos/use-puede-cobrar";
+import { etiquetaNombreCuenta, type ModalidadMesa } from "@/lib/mesas/mesas-domain";
 
 /**
  * El salón: las mesas con cuenta abierta.
@@ -18,6 +19,7 @@ import { usePuedeCobrar } from "@/lib/modulos/use-puede-cobrar";
 type Mesa = {
   id: string;
   mesa: string;
+  modalidad: string;
   abierta_at: string;
   rondas: number[];
   total: number;
@@ -73,11 +75,16 @@ export default function MesasPage() {
     return () => clearInterval(t);
   }, [cargar]);
 
-  async function abrirMesa() {
+  /**
+   * Abrir una cuenta. Para llevar NO es una mesa: la cocina lo arma en bolsa y
+   * necesita verlo en la comanda, así que la modalidad se elige acá, al abrir,
+   * y viaja con el pedido hasta la barra.
+   */
+  async function abrirMesa(modalidad: ModalidadMesa = "local") {
     const nombre = await pedirTexto({
-      titulo: "Abrir mesa",
-      mensaje: "¿Qué mesa?",
-      placeholder: "Ej: 5, Barra, Terraza 2",
+      titulo: modalidad === "local" ? "Abrir mesa" : "Pedido para llevar",
+      mensaje: etiquetaNombreCuenta(modalidad),
+      placeholder: modalidad === "local" ? "Ej: 5, Barra, Terraza 2" : "Ej: Juan, Pedido 3",
       confirmar: "Abrir",
     });
     if (nombre == null || nombre.trim() === "") return;
@@ -86,7 +93,7 @@ export default function MesasPage() {
       const res = await fetchWithSupabaseSession("/api/mesas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mesa: nombre }),
+        body: JSON.stringify({ mesa: nombre, modalidad }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j?.success) {
@@ -129,7 +136,16 @@ export default function MesasPage() {
           )}
           <button
             type="button"
-            onClick={abrirMesa}
+            onClick={() => abrirMesa("carry_out")}
+            disabled={abriendo}
+            className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-50 active:scale-95 disabled:opacity-50"
+          >
+            <ShoppingBag className="h-3.5 w-3.5" aria-hidden />
+            Para llevar
+          </button>
+          <button
+            type="button"
+            onClick={() => abrirMesa("local")}
             disabled={abriendo}
             className="flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95 disabled:opacity-50"
           >
@@ -153,7 +169,7 @@ export default function MesasPage() {
           <p className="mt-2 text-sm text-slate-500">No hay mesas abiertas.</p>
           <button
             type="button"
-            onClick={abrirMesa}
+            onClick={() => abrirMesa("local")}
             className="mt-3 text-xs font-semibold text-[#4FAEB2] hover:underline"
           >
             Abrir la primera
@@ -175,10 +191,17 @@ export default function MesasPage() {
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-base font-bold text-slate-900">{m.mesa}</span>
+                  <span className="text-base font-bold text-slate-900">
+                    {m.modalidad === "local" ? m.mesa : m.mesa || "Para llevar"}
+                  </span>
                   {enCaja && (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                       En caja
+                    </span>
+                  )}
+                  {m.modalidad !== "local" && !enCaja && (
+                    <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                      <ShoppingBag className="h-3 w-3" aria-hidden /> Llevar
                     </span>
                   )}
                 </div>

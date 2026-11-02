@@ -4,7 +4,13 @@ import { errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 import { leerMesa } from "@/lib/mesas/server/mesas-pg";
-import { itemsDeRonda, siguienteRonda } from "@/lib/mesas/mesas-domain";
+import {
+  itemsDeRonda,
+  MODALIDAD_MESA_LABEL,
+  normalizarModalidad,
+  siguienteRonda,
+  tituloCuenta,
+} from "@/lib/mesas/mesas-domain";
 import { fechaHoraPy } from "@/lib/fecha/paraguay";
 
 /**
@@ -30,6 +36,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const pedida = Number(url.searchParams.get("ronda"));
     const ronda = Number.isInteger(pedida) && pedida > 0 ? pedida : siguienteRonda(r.mesa.items) - 1;
     const items = itemsDeRonda(r.mesa.items, ronda);
+    /**
+     * Para llevar NO es una mesa, y la cocina tiene que saberlo antes de
+     * empezar: lo que se lleva se arma en bolsa. Antes la comanda decía
+     * "MESA" siempre, así que el pedido salía en plato y se descubría cuando
+     * el cliente ya estaba esperando en la barra.
+     */
+    const modalidad = normalizarModalidad(r.mesa.modalidad);
+    const paraLlevar = modalidad !== "local";
+
     const ancho = url.searchParams.get("w") === "58" ? 58 : 80;
     const auto = url.searchParams.get("auto") === "1";
     const fontPx = ancho === 58 ? 11 : 12;
@@ -51,7 +66,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const html = `<!doctype html>
 <html lang="es"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Comanda · Mesa ${escapeHtml(r.mesa.mesa)} · Ronda ${ronda}</title>
+<title>Comanda · ${escapeHtml(tituloCuenta(modalidad, r.mesa.mesa))} · Ronda ${ronda}</title>
 <style>
   @page { size: ${ancho}mm auto; margin: 3mm; }
   * { box-sizing: border-box; }
@@ -78,8 +93,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     <a href="?ronda=${ronda}&w=${ancho === 80 ? 58 : 80}">Cambiar a ${ancho === 80 ? 58 : 80}mm</a>
   </div>
   <section class="paper">
-    <div class="banner">COMANDA</div>
-    <div class="mesa">MESA ${escapeHtml(r.mesa.mesa)}</div>
+    <div class="banner">${paraLlevar ? escapeHtml(MODALIDAD_MESA_LABEL[modalidad].toUpperCase()) : "COMANDA"}</div>
+    <div class="mesa">${
+      paraLlevar
+        ? escapeHtml(r.mesa.mesa || "SIN NOMBRE")
+        : `MESA ${escapeHtml(r.mesa.mesa)}`
+    }</div>
     <div class="sub">Ronda ${ronda} · ${escapeHtml(fechaHoraPy(new Date()))}</div>
     <hr>
     <table><tbody>${filas}</tbody></table>

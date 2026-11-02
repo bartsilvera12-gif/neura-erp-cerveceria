@@ -76,7 +76,8 @@
     "test:comprobante": "tsx scripts/test-validacion-comprobante.ts",
     "test:por-cobrar": "tsx scripts/test-por-cobrar.ts",
     "test:firma-usuario": "tsx scripts/test-firma-usuario.ts",
-    "test:acceso-salon": "tsx scripts/test-acceso-salon.ts"
+    "test:acceso-salon": "tsx scripts/test-acceso-salon.ts",
+    "test:devolucion": "tsx scripts/test-devolucion-venta.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

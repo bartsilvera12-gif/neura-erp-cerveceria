@@ -169,3 +169,46 @@ export function errorMesa(mesa: string): string | null {
   if (mesa.length > 40) return "El nombre de la mesa es demasiado largo.";
   return null;
 }
+
+/**
+ * Modalidad de una cuenta del salón.
+ *
+ * No es lo mismo una mesa que un pedido para llevar, y la cocina necesita
+ * saberlo ANTES de preparar: lo que se lleva va en bolsa, lo de mesa en plato.
+ * Si la comanda no lo dice, se arma mal y se descubre cuando el cliente ya está
+ * esperando en la barra.
+ */
+export const MODALIDADES_MESA = ["local", "carry_out", "delivery"] as const;
+export type ModalidadMesa = (typeof MODALIDADES_MESA)[number];
+
+export const MODALIDAD_MESA_LABEL: Record<ModalidadMesa, string> = {
+  local: "Mesa",
+  carry_out: "Para llevar",
+  delivery: "Delivery",
+};
+
+export function esModalidadMesa(v: unknown): v is ModalidadMesa {
+  return typeof v === "string" && (MODALIDADES_MESA as readonly string[]).includes(v);
+}
+
+export function normalizarModalidad(raw: unknown): ModalidadMesa {
+  return esModalidadMesa(raw) ? raw : "local";
+}
+
+/**
+ * Cómo se llama la cuenta en las pantallas y en la comanda.
+ *
+ * Una mesa es "Mesa 7". Lo que se lleva es "Para llevar · JUAN", porque el
+ * nombre es lo único que distingue dos pedidos que esperan juntos en la barra.
+ */
+export function tituloCuenta(modalidad: unknown, mesa: string | null): string {
+  const m = normalizarModalidad(modalidad);
+  const nombre = (mesa ?? "").trim();
+  if (m === "local") return nombre ? `Mesa ${nombre}` : "Mesa";
+  return nombre ? `${MODALIDAD_MESA_LABEL[m]} · ${nombre}` : MODALIDAD_MESA_LABEL[m];
+}
+
+/** El rótulo que pide cada modalidad al abrir la cuenta. */
+export function etiquetaNombreCuenta(modalidad: unknown): string {
+  return normalizarModalidad(modalidad) === "local" ? "¿Qué mesa?" : "¿A nombre de quién?";
+}

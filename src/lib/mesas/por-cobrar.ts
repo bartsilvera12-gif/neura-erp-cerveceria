@@ -17,6 +17,7 @@
  */
 
 import { estadoDeRonda } from "@/lib/comandas/comandas-domain";
+import { tituloCuenta } from "@/lib/mesas/mesas-domain";
 
 export type EstadoCobro = "esperando_cobro" | "abierta";
 
@@ -39,6 +40,8 @@ export type MesaCobro = {
   sin_entregar: number;
   /** "2× Chop rubia, 1× Hamburguesa +3" — para no tener que abrir la cuenta. */
   resumen: string;
+  /** "Mesa 7" o "Para llevar · JUAN": cómo se llama esta cuenta. */
+  titulo: string;
 };
 
 function num(v: unknown): number {
@@ -95,6 +98,7 @@ export function aMesaCobro(entrada: {
     abierta_at: entrada.abierta_at,
     cerrada_at: esperando ? cerradaAt : null,
     espera_desde: (esperando && cerradaAt) || entrada.abierta_at,
+    titulo: tituloCuenta(entrada.modalidad, entrada.mesa),
     sin_entregar: rondasSinEntregar(entrada.rondas, entrada.metadata.rondas_estado),
     resumen: resumenItems(entrada.items),
   };

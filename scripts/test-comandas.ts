@@ -138,5 +138,27 @@ console.log("\nAntigüedad");
   ok("fecha basura", minutosDesde("x", ahora) === 0);
 }
 
+console.log("\nPara llevar");
+{
+  // La cocina arma distinto lo que se lleva: la comanda tiene que decirlo.
+  const c = comandasDePedido({
+    id: "v9",
+    fechaPedido: "2026-10-30T20:00:00.000Z",
+    brief: { modalidad: "carry_out", mesa: "JUAN", items: [{ producto_id: "p1", producto_nombre: "Papas", cantidad: 1 }] },
+    metadata: { source: "mesa" },
+  });
+  ok("el titulo dice para llevar y a nombre de quien", c[0].titulo === "Para llevar · JUAN", c[0].titulo);
+  ok("queda marcada para llevar", c[0].para_llevar === true);
+
+  const mesa = comandasDePedido({
+    id: "m9",
+    fechaPedido: "2026-10-30T20:00:00.000Z",
+    brief: { modalidad: "local", mesa: "7", items: [{ producto_id: "p1", producto_nombre: "Papas", cantidad: 1 }] },
+    metadata: { source: "mesa" },
+  });
+  ok("una mesa no esta marcada", mesa[0].para_llevar === false);
+  ok("y se llama como siempre", mesa[0].titulo === "Mesa 7");
+}
+
 console.log(`\n${corridas - fallos}/${corridas} comprobaciones pasaron.`);
 if (fallos > 0) process.exit(1);

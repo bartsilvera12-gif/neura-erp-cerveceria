@@ -8,6 +8,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { useDialogos } from "@/components/ui/Dialogos";
 import PickerProductos, { type ProductoMesa } from "@/components/mesas/PickerProductos";
 import { usePuedeCobrar } from "@/lib/modulos/use-puede-cobrar";
+import { tituloCuenta } from "@/lib/mesas/mesas-domain";
 
 /**
  * La cuenta de una mesa: lo pedido por ronda, agregar una ronda nueva,
@@ -34,6 +35,7 @@ type ItemMesa = {
 type Mesa = {
   id: string;
   mesa: string;
+  modalidad: string;
   rondas: number[];
   total: number;
   items: ItemMesa[];
@@ -160,7 +162,7 @@ export default function MesaDetallePage() {
   async function cerrar() {
     if (!mesa) return;
     const seguir = await confirmar({
-      titulo: `Cerrar la mesa ${mesa.mesa}`,
+      titulo: `Cerrar ${tituloCuenta(mesa.modalidad, mesa.mesa)}`,
       mensaje: `Total ${fmtGs(mesa.total)}. Va a Caja para cobrarse; después no se le puede agregar nada más.`,
       confirmar: puedeCobrar ? "Cerrar y cobrar" : "Cerrar y mandar a Caja",
     });
@@ -179,7 +181,7 @@ export default function MesaDetallePage() {
       }
       if (!puedeCobrar) {
         await avisar({
-          mensaje: `La mesa ${mesa.mesa} quedó en Caja esperando cobro.`,
+          mensaje: `${tituloCuenta(mesa.modalidad, mesa.mesa)} quedó en Caja esperando cobro.`,
         });
         router.push("/ventas/mesas");
         return;
@@ -218,7 +220,15 @@ export default function MesaDetallePage() {
           <Link href="/ventas/mesas" className="text-xs text-slate-400 hover:text-slate-600">
             ← Salón
           </Link>
-          <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Mesa {mesa.mesa}</h1>
+          <h1 className="mt-1 flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
+            {tituloCuenta(mesa.modalidad, mesa.mesa)}
+            {mesa.modalidad !== "local" && (
+              // El mozo tiene que ver de un vistazo que esta cuenta se lleva.
+              <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-900">
+                Para llevar
+              </span>
+            )}
+          </h1>
           <p className="mt-0.5 text-xs text-slate-500">
             {mesa.rondas.length} {mesa.rondas.length === 1 ? "ronda" : "rondas"} ·{" "}
             <span className="font-semibold text-slate-700">{fmtGs(mesa.total)}</span>

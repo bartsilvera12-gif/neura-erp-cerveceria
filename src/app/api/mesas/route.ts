@@ -5,7 +5,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import { exigirSucursal, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
 import { resolverDestinoPedido } from "@/lib/proyectos/server/destino-pedido";
 import { listarMesas, filaAMesa } from "@/lib/mesas/server/mesas-pg";
-import { errorMesa, normalizarMesa } from "@/lib/mesas/mesas-domain";
+import { errorMesa, normalizarMesa, normalizarModalidad, tituloCuenta } from "@/lib/mesas/mesas-domain";
 import { isoLocalPy } from "@/lib/fecha/paraguay";
 
 /**
@@ -53,6 +53,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Mesa, para llevar o delivery. La cocina lo necesita en la comanda: lo que
+    // se lleva se arma en bolsa, lo de mesa en plato.
+    const modalidad = normalizarModalidad(body?.modalidad);
+
     const { tipoId, estadoId } = await resolverDestinoPedido(sb, auth.empresa_id);
     const ahora = isoLocalPy(new Date());
     const observacion =
@@ -67,11 +71,11 @@ export async function POST(request: NextRequest) {
         sucursal_id: sucursalId,
         tipo_id: tipoId,
         estado_id: estadoId,
-        titulo: `Mesa ${mesa}`.slice(0, 200),
+        titulo: tituloCuenta(modalidad, mesa).slice(0, 200),
         prioridad: "normal",
         monto_vendido: 0,
         fecha_ingreso: ahora,
-        brief_data: { modalidad: "local", mesa, observacion, items: [] },
+        brief_data: { modalidad, mesa, observacion, items: [] },
         metadata: { source: "mesa", mesa_abierta: true, mesa_abierta_at: ahora },
       })
       .select("id, titulo, brief_data, metadata, fecha_ingreso, created_at")

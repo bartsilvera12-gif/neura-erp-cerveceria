@@ -17,6 +17,7 @@ const origenLabel: Record<OrigenMovimiento, string> = {
   ajuste_manual: "Ajuste manual",
   inventario_inicial: "Inventario inicial",
   anulacion_venta: "Anulación de venta",
+  devolucion_venta: "Devolución de venta",
   anulacion_compra: "Anulación de compra",
   produccion: "Producción",
 };
@@ -27,6 +28,7 @@ const origenBadge: Record<OrigenMovimiento, string> = {
   ajuste_manual: "bg-gray-100 text-gray-600",
   inventario_inicial: "bg-orange-50 text-orange-600",
   anulacion_venta: "bg-pink-50 text-pink-600",
+  devolucion_venta: "bg-amber-50 text-amber-700",
   anulacion_compra: "bg-rose-50 text-rose-700",
   produccion: "bg-emerald-50 text-emerald-700",
 };
@@ -146,6 +148,7 @@ export default function MovimientosPage() {
             <option value="venta">Venta</option>
             <option value="produccion">Producción</option>
             <option value="anulacion_venta">Anulación de venta</option>
+            <option value="devolucion_venta">Devolución de venta</option>
             <option value="anulacion_compra">Anulación de compra</option>
             <option value="ajuste_manual">Ajuste manual</option>
           </select>

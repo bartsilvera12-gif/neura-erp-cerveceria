@@ -14,6 +14,8 @@
  * aparecer en la pantalla de la cocina sin que nadie lo prepare antes.
  */
 
+import { tituloCuenta } from "@/lib/mesas/mesas-domain";
+
 export const ESTADOS_COMANDA = ["pendiente", "preparando", "listo"] as const;
 export type EstadoComanda = (typeof ESTADOS_COMANDA)[number];
 
@@ -45,6 +47,8 @@ export type Comanda = {
   observacion: string | null;
   /** Viene de una venta ya cobrada (mostrador) y no de una mesa abierta. */
   de_venta: boolean;
+  /** `true` cuando NO es una mesa del salón: se lleva o va a delivery. */
+  para_llevar: boolean;
 };
 
 function num(v: unknown): number {
@@ -147,7 +151,7 @@ export function comandasDePedido(p: {
         id: `${p.id}:${ronda}`,
         pedido_id: p.id,
         ronda,
-        titulo: mesa ? `Mesa ${mesa}` : modalidadLabel(modalidad),
+        titulo: tituloCuenta(modalidad, mesa),
         mesa,
         modalidad,
         fecha: typeof fechaRonda === "string" && fechaRonda ? fechaRonda : p.fechaPedido,
@@ -155,6 +159,7 @@ export function comandasDePedido(p: {
         items,
         observacion,
         de_venta: deVenta,
+        para_llevar: modalidad !== "local",
       };
     });
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ChefHat, Clock, Loader2, Printer, Receipt, RotateCcw } from "lucide-react";
+import { CheckCircle2, ChefHat, Clock, Loader2, Printer, Receipt, RotateCcw, ShoppingBag } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { usePuedeCobrar } from "@/lib/modulos/use-puede-cobrar";
 import {
@@ -184,6 +184,13 @@ export default function ComandasPage() {
                       Ronda {c.ronda}
                       {c.de_venta && " · mostrador"}
                     </p>
+                    {c.para_llevar && (
+                      // La cocina arma distinto lo que se lleva: tiene que
+                      // verse sin leer el resto de la tarjeta.
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-900">
+                        <ShoppingBag className="h-3 w-3" aria-hidden /> Para llevar
+                      </span>
+                    )}
                   </div>
                   <span
                     className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold ${

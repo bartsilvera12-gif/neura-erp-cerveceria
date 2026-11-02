@@ -13,6 +13,7 @@ import { getVentas } from "@/lib/ventas/storage";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import MesasPorCobrarCaja from "./MesasPorCobrarCaja";
 import AnularVentaModal from "./AnularVentaModal";
+import DevolucionVentaModal from "./DevolucionVentaModal";
 import { esMismoDiaAsuncion } from "@/lib/fecha/asuncion";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
 
@@ -179,6 +180,8 @@ export default function VentasPage() {
   const [porPagina,  setPorPagina]  = useState<number | "todas">(25);
   const [pagina,     setPagina]     = useState(1);
   const [ventaAnular, setVentaAnular] = useState<{ id: string; numero: string } | null>(null);
+  /** Devolver parte de una venta: la venta queda, el stock vuelve. */
+  const [ventaDevolver, setVentaDevolver] = useState<{ id: string; numero: string } | null>(null);
   const [ventaRegenerar, setVentaRegenerar] = useState<{ id: string; numero: string; eraFactura: boolean } | null>(null);
   const [regenerandoId, setRegenerandoId] = useState<string | null>(null);
   const [errorRegenerar, setErrorRegenerar] = useState<string | null>(null);
@@ -648,6 +651,16 @@ export default function VentasPage() {
                               Ticket
                             </a>
                           )}
+                          {!anulada && (
+                            <button
+                              type="button"
+                              onClick={() => setVentaDevolver({ id: v.id, numero: v.numero_control })}
+                              className="inline-flex items-center justify-center rounded-md border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50 transition-colors"
+                              title="El cliente trajo parte de vuelta: devuelve ese stock y esa plata, sin anular la venta"
+                            >
+                              Devolver
+                            </button>
+                          )}
                           {!anulada && (() => {
                             const est = v.factura_estado_sifen;
                             const facturaBloqueaAnular =
@@ -798,6 +811,18 @@ export default function VentasPage() {
 
       {/* FAB mobile: acceso 1-tap a "+ Nueva venta" desde cualquier scroll position */}
       <MobileFab href="/ventas/nueva" label="Nueva venta" />
+
+      {ventaDevolver && (
+        <DevolucionVentaModal
+          ventaId={ventaDevolver.id}
+          numeroControl={ventaDevolver.numero}
+          onClose={() => setVentaDevolver(null)}
+          onDevuelta={() => {
+            setVentaDevolver(null);
+            void recargar();
+          }}
+        />
+      )}
 
       {ventaAnular && (
         <AnularVentaModal

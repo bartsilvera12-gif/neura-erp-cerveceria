@@ -213,7 +213,7 @@ export default function PorCobrarPage() {
               >
                 <header className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
                   <div>
-                    <h2 className="text-xl font-bold text-slate-900">Mesa {m.mesa}</h2>
+                    <h2 className="text-xl font-bold text-slate-900">{m.titulo}</h2>
                     <p className="text-[11px] text-slate-500">
                       {m.rondas} {m.rondas === 1 ? "ronda" : "rondas"} · {m.unidades}{" "}
                       {m.unidades === 1 ? "ítem" : "ítems"}
