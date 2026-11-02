@@ -249,7 +249,13 @@ export default function MovimientosPage() {
                         </span>
                       </td>
                       <td className="py-4 pr-4 text-gray-600 text-xs hidden lg:table-cell">
-                        {m.usuario_nombre ?? <span className="text-gray-300">—</span>}
+                        {/* El servidor ya resuelve esto a un nombre; "Sistema" es
+                            lo que hizo una carga inicial o un proceso automático. */}
+                        {m.usuario_nombre === "Sistema" ? (
+                          <span className="text-gray-400">Sistema</span>
+                        ) : (
+                          m.usuario_nombre ?? <span className="text-gray-300">—</span>
+                        )}
                       </td>
                       <td className="py-4 text-gray-500 text-xs tabular-nums">
                         {formatFecha(m.fecha)}
