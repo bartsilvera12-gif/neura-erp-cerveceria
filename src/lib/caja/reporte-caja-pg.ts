@@ -83,7 +83,15 @@ export async function getReporteCierresCaja(
             arqueo_apertura_json, arqueo_cierre_json
        FROM ${tC}
       WHERE empresa_id=$1::uuid AND sucursal_id = ANY($2::uuid[])
-        AND abierta_at >= $3::timestamptz AND abierta_at <= $4::timestamptz
+        -- Entra el turno que ABRIO o que CERRO dentro del rango. Un turno que
+        -- abre el 31 de octubre y cierra el 2 de noviembre pertenece a los dos
+        -- meses: filtrando solo por la apertura, no aparecia al pedir
+        -- noviembre, aunque el arqueo se hizo en noviembre.
+        AND (
+          (abierta_at >= $3::timestamptz AND abierta_at <= $4::timestamptz)
+          OR (cerrada_at IS NOT NULL
+              AND cerrada_at >= $3::timestamptz AND cerrada_at <= $4::timestamptz)
+        )
       ORDER BY abierta_at DESC`,
     [empresaId, sucursales, rango.start, rango.end]
   );
