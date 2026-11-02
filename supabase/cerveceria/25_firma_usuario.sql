@@ -72,6 +72,9 @@ BEGIN
 
     -- 2.b Lo que quedó sin firmar se completa con quien creó la fila.
     --     `created_by` en casi todas; `usuario_id` en recibos y cobros.
+    --     La comparación va por texto: no todas las tablas guardan ese id como
+    --     uuid (`imports_audit` lo tiene como texto), y comparar uuid con texto
+    --     corta el script entero.
     SELECT c.column_name INTO col_usuario
       FROM information_schema.columns c
      WHERE c.table_schema = 'cerveceriaerp'
@@ -85,7 +88,7 @@ BEGIN
         'UPDATE cerveceriaerp.%I r
             SET usuario_nombre = coalesce(nullif(btrim(u.nombre), ''''), btrim(u.email))
            FROM cerveceriaerp.usuarios u
-          WHERE r.%I = u.id
+          WHERE r.%I::text = u.id::text
             AND coalesce(btrim(r.usuario_nombre), '''') = ''''
             AND coalesce(nullif(btrim(u.nombre), ''''), btrim(u.email)) IS NOT NULL',
         t.table_name, col_usuario);
