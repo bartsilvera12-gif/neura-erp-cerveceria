@@ -7,7 +7,6 @@ import { Loader2, Printer, Search, Trash2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useDialogos } from "@/components/ui/Dialogos";
 import PickerProductos, { type ProductoMesa } from "@/components/mesas/PickerProductos";
-import { usePuedeCobrar } from "@/lib/modulos/use-puede-cobrar";
 import { tituloCuenta } from "@/lib/mesas/mesas-domain";
 
 /**
@@ -18,9 +17,10 @@ import { tituloCuenta } from "@/lib/mesas/mesas-domain";
  * pedido a Caja y lleva al cajero a la pantalla de venta con todo precargado,
  * que cobra y factura sin volver a tocar el stock.
  *
- * MOZO Y CAJERO NO SON LA MISMA PERSONA. Quien no tiene el módulo de Caja
- * cierra la mesa y vuelve al salón: la mesa le aparece al cajero en su propia
- * pantalla. Mandarlo a la pantalla de cobro sería mandarlo a una puerta cerrada.
+ * EL SALON NO COBRA. Cerrar la cuenta la manda a Caja y devuelve al salón: la
+ * mesa le aparece al cajero en su propia pantalla (Caja → Por cobrar). Antes,
+ * quien tenía permiso de Caja salía disparado a la pantalla de cobro, y eso
+ * sacaba del salón en medio del servicio a quien sólo quería cerrar una mesa.
  */
 
 type ItemMesa = {
@@ -48,7 +48,6 @@ export default function MesaDetallePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = String(params?.id ?? "");
-  const { puedeCobrar } = usePuedeCobrar();
   const { avisar, confirmar } = useDialogos();
 
   const [mesa, setMesa] = useState<Mesa | null>(null);
@@ -164,7 +163,7 @@ export default function MesaDetallePage() {
     const seguir = await confirmar({
       titulo: `Cerrar ${tituloCuenta(mesa.modalidad, mesa.mesa)}`,
       mensaje: `Total ${fmtGs(mesa.total)}. Va a Caja para cobrarse; después no se le puede agregar nada más.`,
-      confirmar: puedeCobrar ? "Cerrar y cobrar" : "Cerrar y mandar a Caja",
+      confirmar: "Cerrar y mandar a Caja",
     });
     if (!seguir) return;
     setGuardando(true);
@@ -179,14 +178,13 @@ export default function MesaDetallePage() {
         await avisar({ mensaje: j?.error ?? "No se pudo cerrar la mesa.", tono: "peligro" });
         return;
       }
-      if (!puedeCobrar) {
-        await avisar({
-          mensaje: `${tituloCuenta(mesa.modalidad, mesa.mesa)} quedó en Caja esperando cobro.`,
-        });
-        router.push("/ventas/mesas");
-        return;
-      }
-      router.push(`/ventas/nueva?pedido_id=${encodeURIComponent(id)}`);
+      // Cerrar la mesa NO es cobrarla, y el salón no es la caja: el que atiende
+      // se queda en el salón y la mesa le aparece al cajero en su pantalla. Ir
+      // a cobrar desde acá sacaba al mozo del salón en medio del servicio.
+      await avisar({
+        mensaje: `${tituloCuenta(mesa.modalidad, mesa.mesa)} quedó en Caja esperando cobro.`,
+      });
+      router.push("/ventas/mesas");
     } finally {
       setGuardando(false);
     }
@@ -237,22 +235,17 @@ export default function MesaDetallePage() {
         <button
           type="button"
           onClick={cerrar}
-          disabled={guardando || mesa.items.length === 0 || (enCaja && !puedeCobrar)}
+          disabled={guardando || mesa.items.length === 0 || enCaja}
           className="shrink-0 rounded-lg bg-[#4FAEB2] px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#3F8E91] disabled:opacity-50"
         >
-          {enCaja
-            ? puedeCobrar
-              ? "Ir a cobrar"
-              : "Esperando a la Caja"
-            : puedeCobrar
-              ? "Cerrar y cobrar"
-              : "Cerrar y mandar a Caja"}
+          {enCaja ? "Esperando a la Caja" : "Cerrar y mandar a Caja"}
         </button>
       </div>
 
       {enCaja && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          La mesa ya está cerrada y esperando cobro en Caja. No se le puede agregar nada más.
+          La cuenta ya está cerrada y esperando cobro en Caja → Por cobrar. No se le puede agregar
+          nada más.
         </p>
       )}
 
