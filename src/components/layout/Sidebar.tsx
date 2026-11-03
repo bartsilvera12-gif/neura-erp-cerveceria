@@ -106,6 +106,8 @@ const MENU_STRUCTURE: MenuItem[] = [
     { label: "Caja", href: "/ventas" },
     // Lo que el cajero tiene que cobrar: mesas cerradas esperando y abiertas con consumo.
     { label: "Por cobrar", href: "/ventas/por-cobrar" },
+    // Lo que los clientes trajeron de vuelta.
+    { label: "Devoluciones", href: "/ventas/devoluciones" },
     // Bancos, tarjetas/POS y billeteras con los que se cobra (antes en Configuración).
     { label: "Entidades bancarias", href: "/ventas/entidades-bancarias" },
   ]},
