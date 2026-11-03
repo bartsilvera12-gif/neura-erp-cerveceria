@@ -1026,7 +1026,30 @@ export default function NuevaVentaPage() {
    * post-venta: el carrito no se vacía al registrar, así que quedarse acá con
    * los mismos ítems cargados habilita vender dos veces lo mismo.
    */
+  /**
+   * Dejar la pantalla lista para la venta SIGUIENTE.
+   *
+   * Lo importante es soltar el pedido: si se cobró una mesa y se sigue
+   * cargando otra venta desde la misma pantalla, el `?pedido_id=` quedaba
+   * pegado y la venta nueva intentaba facturar el pedido que ya se cobró. El
+   * servidor la rechazaba con "Este pedido ya fue facturado" y nadie entendía
+   * por qué: la venta nueva no tenía nada que ver con esa mesa.
+   */
   function reiniciarVenta() {
+    if (pedidoId) {
+      setPedidoId(null);
+      setPedidoNumero(null);
+      setPedidoFacturado(null);
+      setClienteId("");
+      // Sacar el pedido de la dirección: si no, recargar la página lo revive.
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("pedido_id");
+        window.history.replaceState(null, "", url.pathname + url.search);
+      } catch {
+        /* Sin History API la pantalla igual queda limpia en memoria. */
+      }
+    }
     setPostVenta(null);
     setItems([]);
     setErrorVenta(null);
