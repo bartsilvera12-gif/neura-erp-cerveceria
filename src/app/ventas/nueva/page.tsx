@@ -318,6 +318,16 @@ export default function NuevaVentaPage() {
   // Facturación de un pedido enviado a Caja (?pedido_id=...). Precarga items + cliente.
   const [pedidoId, setPedidoId] = useState<string | null>(null);
   const [pedidoNumero, setPedidoNumero] = useState<string | null>(null);
+  /**
+   * El pedido ya tiene venta.
+   *
+   * Pasa al volver atrás después de cobrar, al abrir un link viejo o al tener
+   * la pantalla abierta mientras otro cobra la misma mesa. Antes esto se
+   * descubría recién al apretar "Confirmar venta": el servidor lo rechazaba y
+   * la pantalla mostraba un error rojo con el botón todavía invitando a
+   * apretar de nuevo.
+   */
+  const [pedidoFacturado, setPedidoFacturado] = useState<{ venta_id: string | null; numero: string | null } | null>(null);
 
   // ── Condiciones de la venta ───────────────────────────────────────────────
   // Instancia dedicada: siempre Guaraníes.
@@ -504,6 +514,12 @@ export default function NuevaVentaPage() {
           ? (p.brief_data as Record<string, unknown>) : {};
         const meta = (p.metadata && typeof p.metadata === "object" && !Array.isArray(p.metadata))
           ? (p.metadata as Record<string, unknown>) : {};
+        if (meta.facturacion_estado === "facturado") {
+          setPedidoFacturado({
+            venta_id: typeof meta.venta_id === "string" ? meta.venta_id : null,
+            numero: typeof meta.venta_numero === "string" ? meta.venta_numero : null,
+          });
+        }
         setPedidoNumero(
           (typeof brief.numero_control === "string" && brief.numero_control) ||
           (typeof brief.numero_presupuesto === "string" && brief.numero_presupuesto) ||
@@ -1045,7 +1061,28 @@ export default function NuevaVentaPage() {
         </div>
       </div>
 
-      {pedidoId && (
+      {pedidoId && pedidoFacturado && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span className="font-semibold">Esta cuenta ya se cobró</span>
+          {pedidoFacturado.numero ? ` con la venta ${pedidoFacturado.numero}` : ""}. No se puede
+          cobrar dos veces.{" "}
+          {pedidoFacturado.venta_id && (
+            <a
+              href={`/api/ventas/${pedidoFacturado.venta_id}/ticket`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold underline"
+            >
+              Ver el ticket
+            </a>
+          )}{" "}
+          <Link href="/ventas" className="font-semibold underline">
+            Volver a Caja
+          </Link>
+        </div>
+      )}
+
+      {pedidoId && !pedidoFacturado && (
         <div className="rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] px-4 py-3 text-sm text-slate-700">
           <span className="font-semibold text-[#3F8E91]">Estás facturando un pedido{pedidoNumero ? ` (${pedidoNumero})` : ""}.</span>{" "}
           La venta se generará al confirmar y el pedido quedará marcado como facturado. Podés ajustar items, precios y método de pago.
@@ -1670,11 +1707,11 @@ export default function NuevaVentaPage() {
             </button>
             <button
               type="submit"
-              disabled={!ventaValida || guardando}
+              disabled={!ventaValida || guardando || pedidoFacturado !== null}
               aria-busy={guardando}
               className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 min-h-[48px] w-full sm:w-auto"
             >
-              {guardando ? "Guardando…" : "Confirmar venta"}
+              {guardando ? "Guardando…" : pedidoFacturado ? "Ya cobrada" : "Confirmar venta"}
             </button>
           </div>
 
