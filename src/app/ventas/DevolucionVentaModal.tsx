@@ -90,8 +90,25 @@ export default function DevolucionVentaModal({ ventaId, numeroControl, onClose, 
   const monto = seleccion.reduce((a, x) => a + x.cantidad * x.linea.precio_venta, 0);
   const hayAlgoQueDevolver = lineas.some((l) => l.devolvible > 0);
 
+  /** Llena cada línea con todo lo que queda por devolver. */
+  function devolverTodo() {
+    const todo: Record<string, string> = {};
+    for (const l of lineas) if (l.devolvible > 0) todo[l.producto_id] = String(l.devolvible);
+    setCantidades(todo);
+    setError(null);
+  }
+
   async function confirmar() {
-    if (seleccion.length === 0 || guardando) return;
+    if (guardando) return;
+    /**
+     * Antes el botón se desactivaba cuando no había nada elegido. Desde el otro
+     * lado de la pantalla eso se ve igual que un botón roto: se aprieta, no
+     * pasa nada, y no hay forma de saber que falta poner una cantidad.
+     */
+    if (seleccion.length === 0) {
+      setError("Poné cuántos vuelven: escribí la cantidad en al menos un producto, o usá “Devolver todo”.");
+      return;
+    }
     setGuardando(true);
     setError(null);
     try {
@@ -117,7 +134,16 @@ export default function DevolucionVentaModal({ ventaId, numeroControl, onClose, 
         );
         return;
       }
-      onDevuelta();
+      const cuantos = (j.data?.devueltos ?? []).reduce(
+        (a: number, d: { cantidad?: number }) => a + (Number(d.cantidad) || 0),
+        0
+      );
+      setAviso(
+        `Listo: volvieron ${cuantos} ${cuantos === 1 ? "unidad" : "unidades"} al stock por ` +
+          `${fmtGs(j.data?.monto ?? monto)}.` +
+          (j.data?.caja === "registrada" ? " La plata salió de la caja como egreso." : "")
+      );
+      return;
     } catch {
       setError("Error de red.");
     } finally {
@@ -171,10 +197,19 @@ export default function DevolucionVentaModal({ ventaId, numeroControl, onClose, 
             </p>
           ) : (
             <>
-              <p className="mb-3 text-xs text-slate-500">
-                Poné cuántos vuelven de cada producto. El stock vuelve y se devuelve lo que el
-                cliente pagó por eso. La venta no se anula.
-              </p>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">
+                  Poné cuántos vuelven de cada producto. El stock vuelve y se devuelve lo que el
+                  cliente pagó por eso. La venta no se anula.
+                </p>
+                <button
+                  type="button"
+                  onClick={devolverTodo}
+                  className="shrink-0 rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                >
+                  Devolver todo
+                </button>
+              </div>
               <ul className="divide-y divide-slate-100">
                 {lineas.map((l) => (
                   <li key={l.producto_id} className="flex items-center gap-3 py-2.5">
@@ -196,7 +231,14 @@ export default function DevolucionVentaModal({ ventaId, numeroControl, onClose, 
                           placeholder="0"
                           className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-right text-sm tabular-nums outline-none focus:border-[#4FAEB2]"
                         />
-                        <span className="w-14 text-xs text-slate-400">de {l.devolvible}</span>
+                        <button
+                          type="button"
+                          onClick={() => cambiar(l.producto_id, String(l.devolvible), l.devolvible)}
+                          title="Devolver todo lo que queda de este producto"
+                          className="w-14 text-left text-xs text-slate-400 hover:text-amber-700 hover:underline"
+                        >
+                          de {l.devolvible}
+                        </button>
                       </div>
                     ) : (
                       <span className="w-[8.5rem] text-right text-xs text-slate-400">
@@ -245,7 +287,7 @@ export default function DevolucionVentaModal({ ventaId, numeroControl, onClose, 
               <button
                 type="button"
                 onClick={confirmar}
-                disabled={guardando || seleccion.length === 0}
+                disabled={guardando}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
               >
                 {guardando ? "Devolviendo…" : "Devolver"}
