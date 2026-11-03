@@ -78,7 +78,8 @@
     "test:firma-usuario": "tsx scripts/test-firma-usuario.ts",
     "test:acceso-salon": "tsx scripts/test-acceso-salon.ts",
     "test:devolucion": "tsx scripts/test-devolucion-venta.ts",
-    "test:devoluciones": "tsx scripts/test-devoluciones-listado.ts"
+    "test:devoluciones": "tsx scripts/test-devoluciones-listado.ts",
+    "test:salon": "tsx scripts/test-salon.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
