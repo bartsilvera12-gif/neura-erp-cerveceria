@@ -3,6 +3,8 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { exigirSucursales, respuestaSucursalNoAsignada } from "@/lib/sucursales/filtro";
+import { esMovimientoDeDevolucion } from "@/lib/ventas/devolucion-domain";
+import { asuncionRangeBoundsUtc } from "@/lib/fechas/asuncion-bounds";
 import {
   agruparDevoluciones,
   totalesDevoluciones,
@@ -34,19 +36,34 @@ export async function GET(request: NextRequest) {
     desdeDefault.setUTCDate(desdeDefault.getUTCDate() - 30);
     const desde = ymd(sp.get("desde")) ?? desdeDefault.toISOString().slice(0, 10);
 
+    /**
+     * Trae los dos orígenes posibles y descarta después lo que no es una
+     * devolución.
+     *
+     * `anulacion_venta` es el plan B con el que se guarda una devolución
+     * cuando la base no conoce el origen nuevo: filtrando sólo por
+     * `devolucion_venta`, esas devoluciones existían en el stock y en la caja
+     * pero no aparecían en ninguna lista.
+     *
+     * Las fechas se acotan por el DÍA de Asunción: una devolución de las 22 h
+     * cae en el día siguiente si se compara en UTC, y desaparecía del filtro.
+     */
+    const { start, end } = asuncionRangeBoundsUtc(desde, hasta);
     const movsQ = await sb
       .from("movimientos_inventario")
-      .select("id, venta_id, producto_id, producto_nombre, producto_sku, cantidad, fecha, referencia, usuario_nombre")
+      .select("id, venta_id, producto_id, producto_nombre, producto_sku, cantidad, fecha, origen, referencia, usuario_nombre")
       .eq("empresa_id", empresaId)
       .in("sucursal_id", sucursales)
-      .eq("origen", "devolucion_venta")
-      .gte("fecha", `${desde}T00:00:00`)
-      .lte("fecha", `${hasta}T23:59:59.999`)
+      .in("origen", ["devolucion_venta", "anulacion_venta"])
+      .gte("fecha", start)
+      .lte("fecha", end)
       .order("fecha", { ascending: false })
-      .limit(500);
+      .limit(1000);
     if (movsQ.error) return NextResponse.json(errorResponse(movsQ.error.message), { status: 400 });
 
-    const movs = ((movsQ.data ?? []) as Array<Record<string, unknown>>).map(
+    const movs = ((movsQ.data ?? []) as Array<Record<string, unknown>>)
+      .filter((m) => esMovimientoDeDevolucion(m.origen, m.referencia))
+      .map(
       (m): MovimientoDevolucion => ({
         id: String(m.id),
         venta_id: m.venta_id == null ? null : String(m.venta_id),

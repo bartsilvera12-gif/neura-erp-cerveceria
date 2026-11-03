@@ -8,6 +8,7 @@
  * Correr con: npm run test:devolucion
  */
 import {
+  esMovimientoDeDevolucion,
   devueltaEntera,
   lineasDevolvibles,
   totalDevuelto,
@@ -98,6 +99,19 @@ console.log("\nTotal devuelto");
 {
   ok("suma lo devuelto", totalDevuelto(lineasDevolvibles(venta, { chop: 2, ham: 1 })) === 50000 + 45000);
   ok("sin devoluciones, cero", totalDevuelto(lineasDevolvibles(venta, {})) === 0);
+}
+
+console.log("\nReconocer una devolución en el kardex");
+{
+  // El origen nuevo es siempre una devolución.
+  ok("origen devolucion_venta", esMovimientoDeDevolucion("devolucion_venta", "Devolución FAC-1"));
+  ok("sin referencia tambien", esMovimientoDeDevolucion("devolucion_venta", null));
+  // El plan B comparte origen con las anulaciones: las distingue la referencia.
+  ok("plan B con referencia de devolucion", esMovimientoDeDevolucion("anulacion_venta", "Devolución FAC-1 · se picó"));
+  ok("una anulacion de verdad NO entra", !esMovimientoDeDevolucion("anulacion_venta", "Anulación FAC-1"));
+  ok("anulacion sin referencia tampoco", !esMovimientoDeDevolucion("anulacion_venta", null));
+  ok("otro origen no entra", !esMovimientoDeDevolucion("venta", "Devolución FAC-1"));
+  ok("acepta mayusculas distintas", esMovimientoDeDevolucion("anulacion_venta", "DEVOLUCIÓN FAC-1"));
 }
 
 console.log(`\n${corridas - fallos}/${corridas} comprobaciones pasaron.`);

@@ -150,3 +150,38 @@ export function totalDevuelto(devolvibles: LineaDevolvible[]): number {
 export function devueltaEntera(devolvibles: LineaDevolvible[]): boolean {
   return devolvibles.length > 0 && devolvibles.every((l) => l.devolvible <= 0);
 }
+
+/**
+ * El origen con el que se guarda una devolución en el kardex.
+ *
+ * `anulacion_venta` es el PLAN B: si la base de una instancia no conoce todavía
+ * `devolucion_venta`, el movimiento entra igual con el origen viejo antes que
+ * perder la devolución. El costo es que después hay que poder reconocerlo, y
+ * para eso está la referencia: una devolución siempre arranca con "Devolución",
+ * una anulación con "Anulación".
+ */
+export const ORIGEN_DEVOLUCION = "devolucion_venta";
+export const ORIGEN_DEVOLUCION_ALTERNATIVO = "anulacion_venta";
+
+/** Prefijo con el que se escribe la referencia de toda devolución. */
+export const REFERENCIA_DEVOLUCION = "Devolución";
+
+/**
+ * ¿Este movimiento de entrada es una devolución?
+ *
+ * Mira el origen y, cuando es el del plan B, la referencia: sin eso, las
+ * anulaciones aparecerían en el listado de devoluciones como si el cliente
+ * hubiera traído cosas de vuelta, y lo devuelto de una venta se contaría mal.
+ */
+export function esMovimientoDeDevolucion(
+  origen: unknown,
+  referencia: unknown
+): boolean {
+  const o = String(origen ?? "");
+  if (o === ORIGEN_DEVOLUCION) return true;
+  if (o !== ORIGEN_DEVOLUCION_ALTERNATIVO) return false;
+  return String(referencia ?? "")
+    .trim()
+    .toLowerCase()
+    .startsWith(REFERENCIA_DEVOLUCION.toLowerCase());
+}

@@ -1,6 +1,7 @@
 import "server-only";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
 import {
+  esMovimientoDeDevolucion,
   lineasDevolvibles,
   validarDevolucion,
   type ItemADevolver,
@@ -90,7 +91,7 @@ export async function leerVentaParaDevolver(
 
   const movsQ = await sb
     .from("movimientos_inventario")
-    .select("producto_id, cantidad, origen, tipo")
+    .select("producto_id, cantidad, origen, tipo, referencia")
     .eq("empresa_id", empresaId)
     .eq("venta_id", ventaId)
     .eq("tipo", "ENTRADA");
@@ -100,8 +101,10 @@ export async function leerVentaParaDevolver(
   for (const r of movsQ.data ?? []) {
     const o = r as Record<string, unknown>;
     // Las entradas de una anulación no cuentan como devolución: ahí volvió
-    // todo porque la venta dejó de existir.
-    if (String(o.origen ?? "") !== ORIGEN) continue;
+    // todo porque la venta dejó de existir. La regla es compartida con el
+    // listado: si cada pantalla contara distinto, una diría que quedan 2 por
+    // devolver y la otra que no queda ninguno.
+    if (!esMovimientoDeDevolucion(o.origen, o.referencia)) continue;
     const pid = String(o.producto_id ?? "");
     devueltos[pid] = (devueltos[pid] ?? 0) + num(o.cantidad);
   }
@@ -201,6 +204,12 @@ export async function devolverItemsDeVenta(args: {
         .select("id")
         .single();
       if (ins.error && esOrigenDesconocido(ins.error.message)) {
+        // Sin este aviso nadie se entera de que la base no acepta el origen
+        // nuevo y las devoluciones quedan guardadas con el viejo.
+        console.warn(
+          "[devolverItemsDeVenta] la base rechazó el origen 'devolucion_venta'; se guarda como 'anulacion_venta':",
+          ins.error.message
+        );
         ins = await sb
           .from("movimientos_inventario")
           .insert({ ...fila, origen: ORIGEN_ALTERNATIVO })
