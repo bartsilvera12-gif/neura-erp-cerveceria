@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { AlertTriangle, RotateCw, X, ChevronDown, Banknote } from "lucide-react";
 import CajaModule from "@/components/caja/CajaModule";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
@@ -186,12 +186,41 @@ export default function VentasPage() {
   const [regenerandoId, setRegenerandoId] = useState<string | null>(null);
   const [errorRegenerar, setErrorRegenerar] = useState<string | null>(null);
   const [expandidas, setExpandidas] = useState<Set<string>>(() => new Set());
+  /**
+   * Lo que se devolvió de cada venta, por producto.
+   *
+   * Se pide al abrir el detalle y no al cargar la lista: son cien ventas por
+   * pantalla y casi ninguna tiene devoluciones. La fuente es la misma que usa
+   * el modal de devolver, así que las dos pantallas no pueden decir cosas
+   * distintas.
+   */
+  const [devueltoPorVenta, setDevueltoPorVenta] = useState<Record<string, Record<string, number>>>({});
+
+  const cargarDevueltos = useCallback(async (ventaId: string) => {
+    try {
+      const res = await fetchWithSupabaseSession(`/api/ventas/${ventaId}/devolucion`, { cache: "no-store" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j?.success) return;
+      const porProducto: Record<string, number> = {};
+      for (const l of (j.data?.lineas ?? []) as Array<{ producto_id?: string; devuelto?: number }>) {
+        const pid = String(l.producto_id ?? "");
+        const d = Number(l.devuelto) || 0;
+        if (pid && d > 0) porProducto[pid] = (porProducto[pid] ?? 0) + d;
+      }
+      setDevueltoPorVenta((prev) => ({ ...prev, [ventaId]: porProducto }));
+    } catch {
+      /* Sin este dato el detalle igual sirve: no se rompe la pantalla por eso. */
+    }
+  }, []);
 
   const toggleExpandida = (id: string) => {
     setExpandidas((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
-      else next.add(id);
+      else {
+        next.add(id);
+        void cargarDevueltos(id);
+      }
       return next;
     });
   };
@@ -712,6 +741,11 @@ export default function VentasPage() {
                             <div className="mb-2 flex items-baseline justify-between">
                               <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 Detalle de la venta {v.numero_control}
+                                {Object.keys(devueltoPorVenta[v.id] ?? {}).length > 0 && (
+                                  <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                    Con devoluciones
+                                  </span>
+                                )}
                               </h4>
                               <span className="text-xs text-slate-500">
                                 {v.items.length} ítem{v.items.length === 1 ? "" : "s"} · {cantTotal} unidad{cantTotal === 1 ? "" : "es"}
@@ -724,6 +758,7 @@ export default function VentasPage() {
                                     <th className="py-2 pr-3 font-medium">SKU</th>
                                     <th className="py-2 pr-3 font-medium">Producto</th>
                                     <th className="py-2 pr-3 font-medium text-right">Cant.</th>
+                                    <th className="py-2 pr-3 font-medium text-right">Devuelto</th>
                                     <th className="py-2 pr-3 font-medium text-right">Precio unit.</th>
                                     <th className="py-2 pr-3 font-medium">IVA</th>
                                     <th className="py-2 font-medium text-right">Subtotal</th>
@@ -744,6 +779,24 @@ export default function VentasPage() {
                                         )}
                                       </td>
                                       <td className="py-2 pr-3 text-right tabular-nums text-slate-700">{it.cantidad}</td>
+                                      {/* Lo que el cliente trajo de vuelta de ESTA línea. */}
+                                      <td className="py-2 pr-3 text-right tabular-nums">
+                                        {(() => {
+                                          const dev = (devueltoPorVenta[v.id] ?? {})[it.producto_id ?? ""] ?? 0;
+                                          if (dev <= 0) return <span className="text-slate-300">—</span>;
+                                          const entero = dev >= it.cantidad;
+                                          return (
+                                            <span
+                                              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                                entero ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"
+                                              }`}
+                                              title={entero ? "Volvió todo lo que se vendió de este producto" : "Volvió una parte"}
+                                            >
+                                              {dev}
+                                            </span>
+                                          );
+                                        })()}
+                                      </td>
                                       <td className="py-2 pr-3 text-right tabular-nums text-slate-700">{formatGs(it.precio_venta)}</td>
                                       <td className="py-2 pr-3">
                                         <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
@@ -758,7 +811,7 @@ export default function VentasPage() {
                                 </tbody>
                                 <tfoot>
                                   <tr className="border-t border-slate-200 text-sm">
-                                    <td colSpan={5} className="py-2 pr-3 text-right font-medium text-slate-600">
+                                    <td colSpan={6} className="py-2 pr-3 text-right font-medium text-slate-600">
                                       Total
                                     </td>
                                     <td className="py-2 text-right tabular-nums font-bold text-slate-900">
