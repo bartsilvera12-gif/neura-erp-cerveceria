@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { AlertTriangle, ArrowLeft, ArrowRight, Factory, Loader2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowLeftRight, ArrowRight, Factory, Loader2, X } from "lucide-react";
 import { useRolErp } from "@/lib/auth/use-rol-erp";
 import { puedeEditarRecetas } from "@/lib/roles/erp-role-access";
 import { ETAPA_LABEL, siguienteEtapa } from "@/lib/produccion/lotes-pg";
@@ -19,6 +19,7 @@ type Lote = {
   estado: string;
   receta_id: string | null;
   receta_nombre: string | null;
+  fermentador_id: string | null;
   fermentador_codigo: string | null;
   fermentador_capacidad: number | null;
   producto_granel_nombre: string | null;
@@ -92,6 +93,21 @@ export default function LoteDetallePage() {
   const [envProductoId, setEnvProductoId] = useState("");
   const [envCantidad, setEnvCantidad] = useState<number>(1);
 
+  /**
+   * Trasvase: mover el lote a otro tanque.
+   *
+   * La cerveza no se queda en el mismo fermentador de principio a fin — se
+   * rota para limpiar, para separar la levadura o porque hace falta el tanque
+   * grande. Antes el fermentador se elegía al crear el lote y después no había
+   * forma de cambiarlo.
+   */
+  const [fermentadores, setFermentadores] = useState<
+    Array<{ id: string; codigo: string; nombre: string | null; activo: boolean; lote_activo_id: string | null; lote_activo_codigo: string | null }>
+  >([]);
+  const [trasvaseAbierto, setTrasvaseAbierto] = useState(false);
+  const [trasvaseDestino, setTrasvaseDestino] = useState("");
+  const [trasvaseMotivo, setTrasvaseMotivo] = useState("");
+
   // Mediciones de fermentación. Lo que el cervecero mide todos los días.
   const [mediciones, setMediciones] = useState<Medicion[]>([]);
   const [medDensidad, setMedDensidad] = useState("");
@@ -118,6 +134,12 @@ export default function LoteDetallePage() {
     const bodyMed = await resMed.json().catch(() => ({}));
     // Sin la tabla (script 23 sin correr) el resto de la pantalla funciona igual.
     setMediciones(resMed.ok && bodyMed?.success ? ((bodyMed.data?.mediciones ?? []) as Medicion[]) : []);
+
+    const resFerm = await fetchWithSupabaseSession("/api/produccion/fermentadores", { cache: "no-store" });
+    const bodyFerm = await resFerm.json().catch(() => ({}));
+    if (resFerm.ok && bodyFerm?.success) {
+      setFermentadores((bodyFerm.data?.fermentadores ?? []) as typeof fermentadores);
+    }
     if (!volumenKnockout) {
       setVolumenKnockout(l.volumen_obtenido ?? l.volumen_planificado ?? 0);
     }
@@ -135,6 +157,24 @@ export default function LoteDetallePage() {
     // refresh cambia con volumenKnockout, que no debe disparar recargas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  /** Mover el lote a otro tanque, dejando el rastro en su historia. */
+  async function trasvasar() {
+    if (!trasvaseDestino) {
+      setError("Elegí a qué fermentador va el lote.");
+      return;
+    }
+    const ok = await accion(
+      `/api/produccion/lotes/${id}/fermentador`,
+      { fermentador_id: trasvaseDestino, motivo: trasvaseMotivo.trim() || undefined },
+      "No se pudo cambiar el fermentador."
+    );
+    if (ok) {
+      setTrasvaseAbierto(false);
+      setTrasvaseDestino("");
+      setTrasvaseMotivo("");
+    }
+  }
 
   async function accion(url: string, payload: unknown, msgError: string) {
     if (busy) return false;
@@ -274,6 +314,16 @@ export default function LoteDetallePage() {
             <button
               type="button"
               disabled={busy}
+              onClick={() => setTrasvaseAbierto((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#4FAEB2]/50 bg-white px-3 py-1.5 text-sm font-medium text-[#2F6F72] hover:bg-[#4FAEB2]/10 disabled:opacity-50"
+            >
+              <ArrowLeftRight className="h-4 w-4" aria-hidden /> Cambiar de fermentador
+            </button>
+          )}
+          {puedeEditar && !terminado && (
+            <button
+              type="button"
+              disabled={busy}
               onClick={() => void cancelarLote()}
               className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
@@ -287,6 +337,76 @@ export default function LoteDetallePage() {
         <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           {error}
+        </div>
+      )}
+
+      {trasvaseAbierto && puedeEditar && !terminado && (
+        <div className="rounded-md border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.06] p-4">
+          <h2 className="text-sm font-semibold text-slate-800">Cambiar de fermentador</h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            El lote pasa al tanque que elijas. Queda anotado en la historia del lote: de dónde
+            salió, a dónde fue y por qué.
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-600">Va a</span>
+              <select
+                value={trasvaseDestino}
+                onChange={(e) => setTrasvaseDestino(e.target.value)}
+                className="min-w-[14rem] rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4FAEB2]"
+              >
+                <option value="">— Elegir fermentador —</option>
+                {fermentadores
+                  .filter((f) => f.id !== lote.fermentador_id)
+                  .map((f) => {
+                    const ocupado = f.lote_activo_id !== null && f.lote_activo_id !== lote.id;
+                    return (
+                      <option key={f.id} value={f.id} disabled={ocupado || f.activo === false}>
+                        {f.codigo}
+                        {f.nombre ? ` · ${f.nombre}` : ""}
+                        {f.activo === false
+                          ? " (fuera de servicio)"
+                          : ocupado
+                            ? ` (ocupado por ${f.lote_activo_codigo})`
+                            : ""}
+                      </option>
+                    );
+                  })}
+              </select>
+            </label>
+            <label className="flex min-w-[14rem] flex-1 flex-col gap-1">
+              <span className="text-xs font-medium text-slate-600">Por qué (opcional)</span>
+              <input
+                type="text"
+                value={trasvaseMotivo}
+                onChange={(e) => setTrasvaseMotivo(e.target.value)}
+                placeholder="Ej: limpieza del tanque, sacar la levadura"
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4FAEB2]"
+              />
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={busy || !trasvaseDestino}
+                onClick={() => void trasvasar()}
+                className="rounded-md bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3F8E91] disabled:opacity-50"
+              >
+                {busy ? "Moviendo…" : "Mover el lote"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTrasvaseAbierto(false)}
+                className="text-sm text-slate-500 hover:underline"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+          {fermentadores.filter((f) => f.id !== lote.fermentador_id && f.lote_activo_id === null && f.activo !== false).length === 0 && (
+            <p className="mt-2 text-xs text-amber-700">
+              No hay otro fermentador libre: todos están ocupados o fuera de servicio.
+            </p>
+          )}
         </div>
       )}
 
