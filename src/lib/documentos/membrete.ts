@@ -9,12 +9,22 @@
 
 export const EMPRESA_DOC = {
   nombre: "Coven BrewingPY",
-  actividad: [
-    "Comercio al por menor de otros productos en comercios no especializados",
-    "Venta de plantas, bancos, jardinería, otros",
-  ],
-  telefono: "(0971) 861 676",
-  direccion: ["200 mts. en Sur Club Costa Ñu", "Ruta Pyca - Caacupé", "Cordillera - Paraguay"],
+  /**
+   * ACTIVIDAD, TELEFONO Y DIRECCION VAN VACIOS A PROPOSITO.
+   *
+   * Esta instancia se clonó de otra, y lo que había acá escrito a mano era la
+   * dirección, el teléfono y la actividad de ESE otro negocio (Caacupé). Un
+   * ticket con la dirección equivocada es peor que un ticket sin dirección: el
+   * cliente que quiere volver, o reclamar, va a un lugar que no existe.
+   *
+   * Lo que de verdad corresponde se carga por sucursal, en las columnas
+   * `doc_direccion` y `doc_telefono` de `sucursales` (ver `marca-sucursal.ts`),
+   * porque la cervecería y el bar no están en la misma esquina. Mientras una
+   * sucursal no tenga el dato cargado, el documento sale sin esa línea.
+   */
+  actividad: [] as string[],
+  telefono: "",
+  direccion: [] as string[],
   /** Logo del cliente (alta calidad, fondo transparente). Servido desde /public. */
   logoUrl: "/brand/coven-doc-logo.png",
   /**
@@ -81,8 +91,8 @@ export function membreteA4(marca?: MembreteMarca): string {
     <div style="flex:1;min-width:0;text-align:right;font-size:11px;color:#374151;line-height:1.55;">
       <div style="font-size:14px;font-weight:800;color:#1f2937;">${esc(e.nombre)}</div>
       ${e.actividad.map((a) => `<div style="color:#6b7280;">${esc(a)}</div>`).join("")}
-      <div style="margin-top:4px;"><strong>Tel:</strong> ${esc(e.telefono)}</div>
-      <div>${e.direccion.map(esc).join(" · ")}</div>
+      ${e.telefono ? `<div style="margin-top:4px;"><strong>Tel:</strong> ${esc(e.telefono)}</div>` : ""}
+      ${e.direccion.length ? `<div>${e.direccion.map(esc).join(" · ")}</div>` : ""}
     </div>
   </div>`;
 }
@@ -98,8 +108,7 @@ export function membreteTicket(marca?: MembreteMarca): string {
   <div style="text-align:center;padding-bottom:6px;margin-bottom:6px;border-bottom:1px dashed #000;">
     <img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:140px;max-height:96px;width:auto;height:auto;object-fit:contain;display:inline-block;margin:0 auto 4px;" />
     <div style="font-weight:700;font-size:12px;">${esc(e.nombre)}</div>
-    <div style="font-size:10px;">Tel: ${esc(e.telefono)}</div>
-    <div style="font-size:10px;">${esc(e.direccion[0])}</div>
-    <div style="font-size:10px;">${esc(e.direccion.slice(1).join(" · "))}</div>
+    ${e.telefono ? `<div style="font-size:10px;">Tel: ${esc(e.telefono)}</div>` : ""}
+    ${e.direccion.map((d) => `<div style="font-size:10px;">${esc(d)}</div>`).join("")}
   </div>`;
 }

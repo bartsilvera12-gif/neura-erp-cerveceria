@@ -516,8 +516,13 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
         <img src="${esc(marcaLogo)}" alt="${esc(EMPRESA_DOC.nombre)}" />
         <div class="emisor">
           <div class="nom">${esc(EMPRESA_DOC.nombre)}</div>
-          <div class="act">${EMPRESA_DOC.actividad.map(esc).join(" · ")}</div>
-          <div class="lin"><b>Tel.:</b> ${esc(marcaTel)} &nbsp;·&nbsp; ${marcaDir.map(esc).join(" · ")}</div>
+          ${EMPRESA_DOC.actividad.length ? `<div class="act">${EMPRESA_DOC.actividad.map(esc).join(" · ")}</div>` : ""}
+          ${marcaTel || marcaDir.length
+            ? `<div class="lin">${[
+                marcaTel ? `<b>Tel.:</b> ${esc(marcaTel)}` : "",
+                marcaDir.map(esc).join(" · "),
+              ].filter(Boolean).join(" &nbsp;·&nbsp; ")}</div>`
+            : ""}
         </div>
       </div>
       <div class="cab-der">
