@@ -46,10 +46,14 @@ function fechaLarga(iso: unknown, ciudad = "Caacupé"): string {
 }
 
 /**
- * Datos que en el talonario preimpreso van fijos en la cabecera.
- * Coinciden con empresa_sifen_config (RUC 80131562-0, punto 001-001).
+ * EL RUC NO VA ESCRITO A MANO.
+ *
+ * Acá había un RUC fijo heredado del negocio del que se clonó esta instancia.
+ * Un recibo con el RUC de otro no es un detalle de presentación: es un
+ * documento mal emitido. Ahora sale de `empresas.ruc`, y si no está cargado el
+ * recibo se imprime sin la línea del RUC. Un hueco se ve y se corrige; un RUC
+ * ajeno pasa desapercibido hasta que lo mira la DNIT.
  */
-const RUC_EMPRESA = "80131562-0";
 /** Punto por defecto si el recibo no tiene sucursal resoluble. */
 const PUNTO_FALLBACK = "001 - 001";
 
@@ -99,6 +103,19 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       }
     }
   } catch { /* usa defaults */ }
+
+  // El RUC del emisor, del registro de la empresa. Vacío si no está cargado:
+  // mejor un recibo sin RUC que con el de otro.
+  let rucEmpresa = "";
+  try {
+    const eq = await ctx.supabase
+      .from("empresas")
+      .select("ruc")
+      .eq("id", ctx.auth.empresa_id)
+      .maybeSingle();
+    const ruc = (eq.data as { ruc?: string | null } | null)?.ruc;
+    if (ruc && String(ruc).trim()) rucEmpresa = String(ruc).trim();
+  } catch { /* recibo sin la línea del RUC */ }
 
   // El punto de expedición sale de la SUCURSAL que emitió el recibo, no de una
   // constante: cada sucursal lleva su propia serie desde 000001 y se distinguen
@@ -527,7 +544,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       </div>
       <div class="cab-der">
         <div class="tit">Recibo de dinero</div>
-        <div class="fiscal">R.U.C. ${esc(RUC_EMPRESA)}</div>
+        ${rucEmpresa ? `<div class="fiscal">R.U.C. ${esc(rucEmpresa)}</div>` : ""}
         <div class="nro"><small>N&ordm;</small><b>${esc(puntoRecibo)} - ${esc(numeroCorto(r.numero_recibo))}</b></div>
       </div>
     </div>
